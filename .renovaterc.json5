@@ -12,7 +12,14 @@
   dependencyDashboard: true,
   dependencyDashboardTitle: "Renovate Dashboard :robot:",
   schedule: ["every weekend"],
-  ignorePaths: ["**/*.sops.*"],
+  ignorePaths: [
+    "**/*.sops.*",
+    "templates/**
+  ],
+  suppressNotifications: [
+    "prEditedNotification",
+    "prIgnoreNotification",
+  ],
   flux: {
     managerFilePatterns: ["/(^|/)kubernetes/.+\\.ya?ml(?:\\.j2)?$/"],
   },
@@ -51,7 +58,7 @@
       automerge: true,
       automergeType: "branch",
       matchUpdateTypes: ["minor", "patch", "digest"],
-      minimumReleaseAge: "3 days",
+      minimumReleaseAge: "14 days",
       ignoreTests: true,
     },
     {
