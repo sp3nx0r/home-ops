@@ -2,10 +2,19 @@ machine:
   sysctls:
     fs.inotify.max_user_watches: "1048576"     # Watchdog
     fs.inotify.max_user_instances: "8192"      # Watchdog
-    net.core.rmem_max: "7500000"               # Cloudflared | QUIC
-    net.core.wmem_max: "7500000"               # Cloudflared | QUIC
+    net.core.default_qdisc: fq                 # Fair queuing — pairs with BBR
+    net.core.rmem_max: "67108864"              # 64 MB socket receive buffer for 10G
+    net.core.wmem_max: "67108864"              # 64 MB socket send buffer for 10G
     net.ipv4.neigh.default.gc_thresh1: "4096"  # Prevent ARP cache overflows
     net.ipv4.neigh.default.gc_thresh2: "8192"  # Prevent ARP cache overflows
     net.ipv4.neigh.default.gc_thresh3: "16384" # Prevent ARP cache overflows
+    net.ipv4.tcp_congestion_control: bbr       # Google BBR — better throughput on 10G
+    net.ipv4.tcp_fastopen: "3"                 # TCP Fast Open for client + server
+    net.ipv4.tcp_mtu_probing: "1"              # Discover path MTU (needed for jumbo frames)
+    net.ipv4.tcp_rmem: 4096 87380 33554432     # TCP receive buffer min/default/max
+    net.ipv4.ping_group_range: 0 2147483647     # Allow unprivileged ping from containers
     net.ipv4.tcp_slow_start_after_idle: "0"    # Preserve congestion window after idle
+    net.ipv4.tcp_wmem: 4096 65536 33554432     # TCP send buffer min/default/max
+    sunrpc.tcp_max_slot_table_entries: "128"    # NFS max concurrent RPCs
+    sunrpc.tcp_slot_table_entries: "128"        # NFS concurrent RPCs per connection
     user.max_user_namespaces: "11255"          # User Namespaces
