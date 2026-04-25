@@ -134,6 +134,11 @@ patches:
 #% endif %#
   - "@./patches/global/#{ file | basename }#"
 #% endfor %#
+  - |-
+    apiVersion: v1alpha1
+    kind: WatchdogTimerConfig
+    device: /dev/watchdog0
+    timeout: 5m
 
 #% for file in talos_patches('controller') %#
 #% if loop.index == 1 %#

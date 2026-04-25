@@ -29,16 +29,15 @@ nodes:
     networkInterfaces:
       - deviceSelector:
           hardwareAddr: "38:05:25:36:34:a1"
-        vlans:
-          - vlanId: 5
-            addresses:
-              - "192.168.5.50/24"
-            mtu: 1500
-            routes:
-              - gateway: "192.168.5.1"
-                network: 0.0.0.0/0
-            vip:
-              ip: "192.168.5.254"
+        dhcp: false
+        addresses:
+          - "192.168.5.50/24"
+        routes:
+          - gateway: "192.168.5.1"
+            network: 0.0.0.0/0
+        mtu: 1500
+        vip:
+          ip: "192.168.5.254"
     patches:
       - # Encrypt system disk with TPM
         |-
@@ -64,16 +63,15 @@ nodes:
     networkInterfaces:
       - deviceSelector:
           hardwareAddr: "38:05:25:36:34:39"
-        vlans:
-          - vlanId: 5
-            addresses:
-              - "192.168.5.51/24"
-            mtu: 1500
-            routes:
-              - gateway: "192.168.5.1"
-                network: 0.0.0.0/0
-            vip:
-              ip: "192.168.5.254"
+        dhcp: false
+        addresses:
+          - "192.168.5.51/24"
+        routes:
+          - gateway: "192.168.5.1"
+            network: 0.0.0.0/0
+        mtu: 1500
+        vip:
+          ip: "192.168.5.254"
     patches:
       - # Encrypt system disk with TPM
         |-
@@ -99,16 +97,15 @@ nodes:
     networkInterfaces:
       - deviceSelector:
           hardwareAddr: "38:05:25:36:28:b1"
-        vlans:
-          - vlanId: 5
-            addresses:
-              - "192.168.5.52/24"
-            mtu: 1500
-            routes:
-              - gateway: "192.168.5.1"
-                network: 0.0.0.0/0
-            vip:
-              ip: "192.168.5.254"
+        dhcp: false
+        addresses:
+          - "192.168.5.52/24"
+        routes:
+          - gateway: "192.168.5.1"
+            network: 0.0.0.0/0
+        mtu: 1500
+        vip:
+          ip: "192.168.5.254"
     patches:
       - # Encrypt system disk with TPM
         |-
@@ -133,7 +130,11 @@ patches:
   - "@./patches/global/machine-network.yaml"
   - "@./patches/global/machine-sysctls.yaml"
   - "@./patches/global/machine-time.yaml"
-  - "@./patches/global/watchdog-timer.yaml"
+  - |-
+    apiVersion: v1alpha1
+    kind: WatchdogTimerConfig
+    device: /dev/watchdog0
+    timeout: 5m
 
 # Controller patches
 controlPlane:
