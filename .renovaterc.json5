@@ -14,7 +14,7 @@
   schedule: ["every weekend"],
   ignorePaths: [
     "**/*.sops.*",
-    "templates/**
+    "templates/**",
   ],
   suppressNotifications: [
     "prEditedNotification",
