@@ -1,0 +1,142 @@
+---
+clusterName: kubernetes
+
+talosVersion: "${talosVersion}"
+kubernetesVersion: "${kubernetesVersion}"
+
+endpoint: https://192.168.5.254:6443
+additionalApiServerCertSans: &sans
+  - "127.0.0.1"
+  - "192.168.5.254"
+  - "cluster.securimancy.com"
+additionalMachineCertSans: *sans
+
+clusterPodNets: ["10.42.0.0/16"]
+clusterSvcNets: ["10.43.0.0/16"]
+
+# Disable built-in CNI to use Cilium
+cniConfig:
+  name: none
+
+nodes:
+  - hostname: "miirym"
+    ipAddress: "192.168.5.50"
+    installDisk: "/dev/nvme0n1"
+    machineSpec:
+      secureboot: true
+    talosImageURL: factory.talos.dev/installer-secureboot/43a5d0618bd5110ce5b6b54999d01b68ea4a51dfca8fe6e117d00239f9a58a93
+    controlPlane: true
+    networkInterfaces:
+      - deviceSelector:
+          hardwareAddr: "38:05:25:36:34:a1"
+        vlans:
+          - vlanId: 5
+            addresses:
+              - "192.168.5.50/24"
+            mtu: 1500
+            routes:
+              - gateway: "192.168.5.1"
+                network: 0.0.0.0/0
+            vip:
+              ip: "192.168.5.254"
+    patches:
+      - # Encrypt system disk with TPM
+        |-
+        machine:
+          systemDiskEncryption:
+            state:
+              provider: luks2
+              keys:
+                - slot: 0
+                  tpm: {}
+            ephemeral:
+              provider: luks2
+              keys:
+                - slot: 0
+                  tpm: {}
+  - hostname: "palarandusk"
+    ipAddress: "192.168.5.51"
+    installDisk: "/dev/nvme0n1"
+    machineSpec:
+      secureboot: true
+    talosImageURL: factory.talos.dev/installer-secureboot/43a5d0618bd5110ce5b6b54999d01b68ea4a51dfca8fe6e117d00239f9a58a93
+    controlPlane: true
+    networkInterfaces:
+      - deviceSelector:
+          hardwareAddr: "38:05:25:36:34:39"
+        vlans:
+          - vlanId: 5
+            addresses:
+              - "192.168.5.51/24"
+            mtu: 1500
+            routes:
+              - gateway: "192.168.5.1"
+                network: 0.0.0.0/0
+            vip:
+              ip: "192.168.5.254"
+    patches:
+      - # Encrypt system disk with TPM
+        |-
+        machine:
+          systemDiskEncryption:
+            state:
+              provider: luks2
+              keys:
+                - slot: 0
+                  tpm: {}
+            ephemeral:
+              provider: luks2
+              keys:
+                - slot: 0
+                  tpm: {}
+  - hostname: "aurinax"
+    ipAddress: "192.168.5.52"
+    installDisk: "/dev/nvme0n1"
+    machineSpec:
+      secureboot: true
+    talosImageURL: factory.talos.dev/installer-secureboot/43a5d0618bd5110ce5b6b54999d01b68ea4a51dfca8fe6e117d00239f9a58a93
+    controlPlane: true
+    networkInterfaces:
+      - deviceSelector:
+          hardwareAddr: "38:05:25:36:28:b1"
+        vlans:
+          - vlanId: 5
+            addresses:
+              - "192.168.5.52/24"
+            mtu: 1500
+            routes:
+              - gateway: "192.168.5.1"
+                network: 0.0.0.0/0
+            vip:
+              ip: "192.168.5.254"
+    patches:
+      - # Encrypt system disk with TPM
+        |-
+        machine:
+          systemDiskEncryption:
+            state:
+              provider: luks2
+              keys:
+                - slot: 0
+                  tpm: {}
+            ephemeral:
+              provider: luks2
+              keys:
+                - slot: 0
+                  tpm: {}
+
+# Global patches
+patches:
+  - "@./patches/global/machine-features.yaml"
+  - "@./patches/global/machine-files.yaml"
+  - "@./patches/global/machine-kubelet.yaml"
+  - "@./patches/global/machine-network.yaml"
+  - "@./patches/global/machine-sysctls.yaml"
+  - "@./patches/global/machine-time.yaml"
+  - "@./patches/global/watchdog-timer.yaml"
+
+# Controller patches
+controlPlane:
+  patches:
+    - "@./patches/controller/cluster.yaml"
+
