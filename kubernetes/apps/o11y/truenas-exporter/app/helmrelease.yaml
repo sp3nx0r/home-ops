@@ -1,0 +1,68 @@
+---
+# yaml-language-server: $schema=https://kubernetes-schemas.pages.dev/helm.toolkit.fluxcd.io/helmrelease_v2.json
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: truenas-exporter
+spec:
+  chartRef:
+    kind: OCIRepository
+    name: truenas-exporter
+  interval: 1h
+  values:
+    controllers:
+      truenas-exporter:
+        containers:
+          app:
+            image:
+              repository: ghcr.io/unknowlars/truenas-scale-api-prometheus-exporter
+              tag: latest
+            env:
+              TZ: America/Chicago
+              TRUENAS_WS_URL: wss://192.168.5.40/api/current
+              TRUENAS_VERIFY_TLS: "false"
+              EXPORTER_PORT: "9108"
+              SCRAPE_INTERVAL_SECONDS: "30"
+              ENABLE_DATASET_METRICS: "true"
+              ENABLE_TASK_METRICS: "true"
+            envFrom:
+              - secretRef:
+                  name: truenas-exporter-secret
+            probes:
+              liveness: &probes
+                enabled: true
+                custom: true
+                spec:
+                  httpGet:
+                    path: /healthz
+                    port: &port 9108
+                  initialDelaySeconds: 10
+                  periodSeconds: 30
+                  timeoutSeconds: 5
+                  failureThreshold: 3
+              readiness: *probes
+            securityContext:
+              allowPrivilegeEscalation: false
+              readOnlyRootFilesystem: true
+              capabilities: { drop: ["ALL"] }
+            resources:
+              requests:
+                cpu: 10m
+              limits:
+                memory: 256Mi
+    defaultPodOptions:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+    service:
+      app:
+        ports:
+          http:
+            port: *port
+    serviceMonitor:
+      app:
+        endpoints:
+          - port: http
+            interval: 30s
+            scrapeTimeout: 15s

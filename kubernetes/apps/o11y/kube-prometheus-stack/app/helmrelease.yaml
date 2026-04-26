@@ -1,0 +1,72 @@
+---
+# yaml-language-server: $schema=https://kubernetes-schemas.pages.dev/helm.toolkit.fluxcd.io/helmrelease_v2.json
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: kube-prometheus-stack
+spec:
+  chartRef:
+    kind: OCIRepository
+    name: kube-prometheus-stack
+  interval: 1h
+  values:
+    cleanPrometheusOperatorObjectNames: true
+
+    alertmanager:
+      route:
+        main:
+          enabled: true
+          hostnames:
+            - alertmanager.securimancy.com
+          parentRefs:
+            - name: envoy-internal
+              namespace: network
+
+    kubeEtcd:
+      service:
+        selector:
+          component: kube-apiserver
+    kubeProxy:
+      enabled: false
+
+    prometheus:
+      route:
+        main:
+          enabled: true
+          hostnames:
+            - prometheus.securimancy.com
+          parentRefs:
+            - name: envoy-internal
+              namespace: network
+      prometheusSpec:
+        ruleSelectorNilUsesHelmValues: false
+        serviceMonitorSelectorNilUsesHelmValues: false
+        podMonitorSelectorNilUsesHelmValues: false
+        probeSelectorNilUsesHelmValues: false
+        scrapeConfigSelectorNilUsesHelmValues: false
+        enableAdminAPI: true
+        walCompression: true
+        enableFeatures:
+          - memory-snapshot-on-shutdown
+        retention: 14d
+        retentionSize: 10GB
+        resources:
+          requests:
+            cpu: 100m
+          limits:
+            memory: 2Gi
+
+    prometheus-node-exporter:
+      fullnameOverride: node-exporter
+
+    kube-state-metrics:
+      fullnameOverride: kube-state-metrics
+      metricLabelsAllowlist:
+        - pods=[*]
+        - nodes=[*]
+        - deployments=[*]
+        - persistentvolumeclaims=[*]
+
+    grafana:
+      enabled: false
+      forceDeployDashboards: true
