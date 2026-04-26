@@ -19,6 +19,7 @@ spec:
               tag: latest
             env:
               TZ: America/Chicago
+              PYTHONDONTWRITEBYTECODE: "1"
               TRUENAS_WS_URL: wss://192.168.5.40/api/current
               TRUENAS_VERIFY_TLS: "false"
               EXPORTER_PORT: "9108"
@@ -53,8 +54,13 @@ spec:
     defaultPodOptions:
       securityContext:
         runAsNonRoot: true
-        runAsUser: 1000
-        runAsGroup: 1000
+        runAsUser: 999
+        runAsGroup: 999
+    persistence:
+      tmp:
+        type: emptyDir
+        globalMounts:
+          - path: /tmp
     service:
       app:
         ports:
