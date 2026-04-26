@@ -92,6 +92,41 @@ spec:
           gnetId: 20842
           revision: 3
           datasource: Prometheus
+        spegel:
+          # renovate: depName="Spegel Monitoring Dashboard"
+          gnetId: 22104
+          revision: 1
+          datasource: Prometheus
+        external-dns:
+          # renovate: depName="External-dns"
+          gnetId: 15038
+          revision: 3
+          datasource: Prometheus
+        alertmanager-overview:
+          # renovate: depName="Alertmanager / Overview"
+          gnetId: 9578
+          revision: 4
+          datasource: Prometheus
+        envoy-proxy:
+          # renovate: depName="Envoy Proxy"
+          gnetId: 11022
+          revision: 1
+          datasource: Prometheus
+        cilium-agent:
+          # renovate: depName="Cilium v1.12 Agent Metrics"
+          gnetId: 16611
+          revision: 2
+          datasource: Prometheus
+        cilium-operator:
+          # renovate: depName="Cilium v1.12 Operator Metrics"
+          gnetId: 16612
+          revision: 2
+          datasource: Prometheus
+        cloudflare-tunnels:
+          # renovate: depName="Cloudflare Tunnels"
+          gnetId: 17457
+          revision: 6
+          datasource: Prometheus
       kubernetes:
         kubernetes-api-server:
           # renovate: depName="Kubernetes / System / API Server"
