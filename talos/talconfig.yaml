@@ -130,6 +130,7 @@ patches:
   - "@./patches/global/machine-network.yaml"
   - "@./patches/global/machine-sysctls.yaml"
   - "@./patches/global/machine-time.yaml"
+  - "@./patches/global/nut-client.sops.yaml"
   - |-
     apiVersion: v1alpha1
     kind: WatchdogTimerConfig

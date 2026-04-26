@@ -1,0 +1,22 @@
+apiVersion: ENC[AES256_GCM,data:waUqtsbpj7o=,iv:nvLbtdQf3q1wnn9qk/Agd/AlGNUO6qrhRQIz+WWNuL8=,tag:Nnze5Bmdq5lSfWteTKrOMg==,type:str]
+kind: ENC[AES256_GCM,data:5vtyQnVSfytdrreC+/RLHxOHDftKqw==,iv:oKfUbAIw1+U8rdeWjii89IXhpFGHASYO9nM4qmKeXIY=,tag:8yOPMWe90MPcU6um+A3YKw==,type:str]
+name: ENC[AES256_GCM,data:inWnfNp3COPIEA==,iv:7r8b3Lho/Fqm2DBxPXTsGsFeMLz0Zt0ih8hZ7XqaN/I=,tag:ROIfpczHv0SkDJ28Wil5bQ==,type:str]
+configFiles:
+  - content: ENC[AES256_GCM,data:KKYdYLtcQc1KU6el4nQnN7Gv3weAjDTFLXWzNKqAx9rvEHsYTHpgKGmMBz0l5ch9uIFauYaLZ+XmCCBeH/V5p7Xe4wb1qSNHxckcqpLXFhqYtosc+o90/nZ36E+sAhnMbTs11j71PJXMO7UkAqQAFiKeLc9bPdCFzKkgLwZMYKTv13oKxHVEZviMp9a2KFs0I/+F+MEFyH+Ax4AWIlrkDvWQBqWb5/7lp5K2YWu8kVFDQeuEtvZo5PTCvJMCbamp9ysPISTXgBm2HYNFjQP6wNghKu39UQhRQWzRl9ZQJFdtZpLZLz9WjUcfVwY7w2M8P7m/gPjVV7iqISQ6L32pSMu0RcefSrqkCgNO1hviJP4=,iv:MFanEs+EdBf5+7HdOspQ9DKgEVa2e2Hong0rjjFdlNs=,tag:zrAhkoFH9YGsWXmzX76S3Q==,type:str]
+    mountPath: ENC[AES256_GCM,data:hD3m2Xgr8Z2pFfeSysCHu86Nt90VOT9ykRffvoY0,iv:q8npkXJ0B2T0Lzqt9QJhPHGw5rCQhIhVJHg0oq/6Qgc=,tag:W9xlRlBrlrmCLHTq63RTnA==,type:str]
+sops:
+  age:
+    - recipient: age1j8auc0sy76etmugnrnqv7j0v9de5l9ffswnqj7ndrzqndh5rdpjq5atgj8
+      enc: |
+        -----BEGIN AGE ENCRYPTED FILE-----
+        YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBlV040L3ZkYUF6RUY4T0Z3
+        SWNBbW9qM1g2VG9teFlvaS9ZZ1FIL0JickNNCmtYQ0VBOGMxd0NMYjVPOUtTRWtG
+        dXBsRkpaZFhPSmswTmJpRHRhVGUzcU0KLS0tIGNML2VjdmNFdnMzeVlQWkdSZHNq
+        elIxTUo5UmJwTjhHV24wdENvQkIyVU0KSzAdBD9iMq+1m/FEVIQA93E7jMVXfTvP
+        i9kVF9fk1hJOej3k1pJ8jMemZNGrXDo9WzXHyxRWl71xAUapMa3oPA==
+        -----END AGE ENCRYPTED FILE-----
+  lastmodified: "2026-04-26T21:11:57Z"
+  mac: ENC[AES256_GCM,data:35ENzXEq0FhKYx4Wd9aZHpqkLGOTRpum6WcBvAUBj13zUc0sCCtoAWnZHlQoguIzL8ztRoA5OWw9etbVcPKTaK1t5/rqHaDQIP2hVaaMY/EwFY0Eplyaz2TSjnrPmGwx2h2+XL/IiOSedSB3tJ27VTlB/zEudKTc169ZEIhwKR0=,iv:WuHqNdgnFLAhhrIfa8dMGth9OfU9ajnfpXX7md37K6E=,tag:ftVG9+h82+OHTg1nK3+3og==,type:str]
+  unencrypted_suffix: _unencrypted
+  mac_only_encrypted: true
+  version: 3.12.2
