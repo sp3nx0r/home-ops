@@ -33,12 +33,20 @@ and direct `midclt` API calls for features the collection doesn't cover.
    - Ansible manages this user afterward
 5. **Plug UPS USB cable** — CyberPower CP1500PFCLCD USB into the HL8
 6. **Create Prometheus API key** — After Ansible adds the `prometheus` user to
-   the `truenas_readonly_administrators` group, create the key via UI and
-   save the secret to `kubernetes/apps/o11y/truenas-exporter/app/secret.sops.yaml`.
+   the `truenas_readonly_administrators` group, create the key via SSH:
+   ```bash
+   ssh truenas_admin@192.168.5.40 \
+     "sudo midclt call api_key.create '{\"name\": \"prometheus-exporter\", \"username\": \"prometheus\"}'"
+   ```
+   Save the returned `key` value into the SOPS-encrypted Kubernetes
+   secret at `kubernetes/apps/o11y/truenas-exporter/app/secret.sops.yaml`.
+7. **Enable 2FA for the web UI** — Per-user TOTP setup, then global enforcement:
+   - Credentials → Users → `truenas_admin` → Edit → Two Factor Authentication → enable, scan QR code, confirm
+   - Credentials → 2FA → Enable Two Factor Authentication
+   - Leave SSH 2FA disabled (SSH uses key-based auth)
 
 ## TODO
 
-- [ ] Configure SendGrid SMTP for email alerts (`midclt call mail.update`)
 - [ ] Configure syslog forwarding to Loki (`system.advanced.update` syslogservers)
 
 ## Prerequisites

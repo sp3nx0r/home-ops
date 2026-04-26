@@ -9,15 +9,19 @@
 #   5. Plug CyberPower UPS USB cable into the HL8
 #   6. Create Prometheus API key (after first run adds user to readonly group):
 #      midclt call api_key.create '{"name":"prometheus-exporter","username":"prometheus"}'
+#   7. Enable 2FA for web UI (Credentials → Users → truenas_admin → 2FA, then
+#      Credentials → 2FA → Enable globally)
 #
 # Usage:
 #   task ansible:init       # one-time setup
 #   task ansible:configure  # full run
 #   task ansible:lint       # lint check
+#   task ansible:unlock     # unlock encrypted datasets after reboot
 #
 # TODO:
-#   - [ ] Configure SendGrid SMTP for email alerts (midclt call mail.update)
 #   - [ ] Configure syslog forwarding to Loki (system.advanced.update syslogservers)
+#   - [ ] Configure Cloudflare HTTPS
+#   - [ ] Configure BackBlaze B2 backups
 #
 - name: Configure TrueNAS HL8 NAS
   hosts: hl8
@@ -305,6 +309,17 @@
       changed_when: false
       tags: [datasets]
 
+    - name: Set dataset ownership
+      ansible.builtin.file:
+        path: "/mnt/{{ item.name }}"
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: "0755"
+      loop: "{{ truenas_datasets_common }}"
+      loop_control:
+        label: "{{ item.name }}"
+      tags: [datasets]
+
     - name: Set ZFS dataset properties (common)
       ansible.builtin.command:
         cmd: >-
@@ -334,6 +349,63 @@
         label: "{{ item.name }}"
       changed_when: false
       when: truenas_phase == "phase2"
+      tags: [datasets]
+
+    # ----- Dataset Encryption ------------------------------------------------
+    # Top-level datasets get their own passphrase (not inherited from pool).
+    # Child datasets inherit from their parent automatically.
+
+    - name: Identify top-level datasets
+      ansible.builtin.set_fact:
+        _toplevel_datasets: >-
+          {{ truenas_datasets_common | map(attribute='name')
+             | select('match', '^[^/]+/[^/]+$') | list }}
+      tags: [datasets]
+
+    - name: Query dataset encryption status
+      ansible.builtin.command:
+        cmd: >-
+          midclt call pool.dataset.query
+          '[["name", "=", "{{ item }}"]]'
+          '{"select": ["name", "key_format"]}'
+      register: _ds_encryption
+      loop: "{{ _toplevel_datasets }}"
+      loop_control:
+        label: "{{ item }}"
+      changed_when: false
+      check_mode: false
+      tags: [datasets]
+
+    - name: Check if any datasets need passphrase encryption
+      ansible.builtin.set_fact:
+        _needs_passphrase: >-
+          {{ _ds_encryption.results
+             | map(attribute='stdout') | map('from_json') | map('first')
+             | selectattr('key_format.value', 'ne', 'PASSPHRASE')
+             | list | length > 0 }}
+      tags: [datasets]
+
+    - name: Prompt for dataset encryption passphrase
+      ansible.builtin.pause:
+        prompt: "Enter encryption passphrase for datasets (empty to skip)"
+        echo: false
+      register: _passphrase_prompt
+      when: _needs_passphrase | bool
+      tags: [datasets]
+
+    - name: Set dataset encryption to passphrase
+      ansible.builtin.command:
+        cmd: >-
+          midclt call pool.dataset.change_key {{ item.item }}
+          '{"passphrase": "{{ _passphrase_prompt.user_input }}"}'
+      loop: "{{ _ds_encryption.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+      when:
+        - _needs_passphrase | bool
+        - _passphrase_prompt.user_input | default('') | length > 0
+        - (item.stdout | from_json)[0].key_format.value != 'PASSPHRASE'
+      changed_when: true
       tags: [datasets]
 
     # ----- NFS Shares -------------------------------------------------------

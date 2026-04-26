@@ -40,3 +40,8 @@ tasks:
     cmd: '{{.ANSIBLE_VENV}}/bin/ansible-playbook playbooks/truenas-configure.yml --check --diff {{.CLI_ARGS}}'
     preconditions:
       - test -f {{.ANSIBLE_VENV}}/bin/ansible-playbook
+
+  unlock:
+    desc: Unlock encrypted datasets after reboot
+    interactive: true
+    cmd: '{{.ROOT_DIR}}/.taskfiles/ansible/scripts/unlock-datasets.sh'
