@@ -10,5 +10,5 @@ components:
 resources:
   - ./namespace.yaml
   - ./headlamp/ks.yaml
-  - ./truenas-exporter/ks.yaml
-  - ./unpoller/ks.yaml
+  # - ./truenas-exporter/ks.yaml
+  # - ./unpoller/ks.yaml
