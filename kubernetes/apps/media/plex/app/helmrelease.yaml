@@ -1,0 +1,102 @@
+---
+# yaml-language-server: $schema=https://raw.githubusercontent.com/bjw-s-labs/helm-charts/main/charts/other/app-template/schemas/helmrelease-helm-v2.schema.json
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: plex
+spec:
+  chartRef:
+    kind: OCIRepository
+    name: plex
+  interval: 1h
+  values:
+    controllers:
+      plex:
+        annotations:
+          reloader.stakater.com/auto: "true"
+        containers:
+          app:
+            image:
+              repository: ghcr.io/home-operations/plex
+              tag: 1.43.1.10611@sha256:a9c3723cb31cc9621df27cf5801184c290293adf1df2bfaea4b8b6fc01dbfd96
+            env:
+              TZ: America/Chicago
+              PLEX_ADVERTISE_URL: https://plex.${SECRET_DOMAIN}:443,http://192.168.5.21:32400,http://plex.default.svc.cluster.local:32400
+              PLEX_NO_AUTH_NETWORKS: 192.168.1.0/24
+            probes:
+              liveness:
+                enabled: true
+                spec:
+                  periodSeconds: 30
+                  timeoutSeconds: 5
+                  failureThreshold: 5
+              readiness:
+                enabled: true
+                custom: true
+                spec:
+                  httpGet:
+                    path: /identity
+                    port: &port 32400
+                  periodSeconds: 10
+                  timeoutSeconds: 5
+                  failureThreshold: 5
+              startup:
+                enabled: true
+                spec:
+                  failureThreshold: 30
+                  periodSeconds: 10
+            securityContext:
+              allowPrivilegeEscalation: false
+              readOnlyRootFilesystem: true
+              capabilities: {drop: ["ALL"]}
+            resources:
+              requests:
+                cpu: 100m
+                memory: 2Gi
+              limits:
+                memory: 8Gi
+    defaultPodOptions:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
+    service:
+      app:
+        type: LoadBalancer
+        annotations:
+          lbipam.cilium.io/ips: "192.168.5.21"
+        externalTrafficPolicy: Local
+        ports:
+          http:
+            port: *port
+    route:
+      app:
+        hostnames:
+          - "plex.${SECRET_DOMAIN}"
+        parentRefs:
+          - name: envoy-external
+            namespace: network
+        rules:
+          - backendRefs:
+              - identifier: app
+                port: *port
+    persistence:
+      config:
+        type: nfs
+        server: 192.168.5.40
+        path: /mnt/tank/homelab/k8s-exports/media-plex-config
+        globalMounts:
+          - path: /config
+      media:
+        type: nfs
+        server: 192.168.5.40
+        path: /mnt/tank/media
+        globalMounts:
+          - path: /media
+            readOnly: true
+      tmp:
+        type: emptyDir
+      transcode:
+        type: emptyDir
