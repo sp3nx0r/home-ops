@@ -18,11 +18,6 @@
 #   task ansible:lint       # lint check
 #   task ansible:unlock     # unlock encrypted datasets after reboot
 #
-# TODO:
-#   - [ ] Configure syslog forwarding to Loki (system.advanced.update syslogservers)
-#   - [ ] Configure Cloudflare HTTPS
-#   - [ ] Configure BackBlaze B2 backups
-#
 - name: Configure TrueNAS HL8 NAS
   hosts: hl8
   become: true

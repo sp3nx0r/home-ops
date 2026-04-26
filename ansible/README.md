@@ -48,6 +48,8 @@ and direct `midclt` API calls for features the collection doesn't cover.
 ## TODO
 
 - [ ] Configure syslog forwarding to Loki (`system.advanced.update` syslogservers)
+- [ ] Configure cert for HTTPS
+- [ ] Configure BackBlaze B2 backups
 
 ## Prerequisites
 
