@@ -1,0 +1,42 @@
+---
+version: '3'
+
+vars:
+  ANSIBLE_DIR: '{{.ROOT_DIR}}/ansible'
+  ANSIBLE_VENV: '{{.ANSIBLE_DIR}}/.venv'
+
+tasks:
+
+  init:
+    desc: Create venv and install Ansible + collections
+    dir: '{{.ANSIBLE_DIR}}'
+    cmds:
+      - uv venv --allow-existing {{.ANSIBLE_VENV}}
+      - uv pip install --python {{.ANSIBLE_VENV}}/bin/python ansible-core ansible-lint
+      - '{{.ANSIBLE_VENV}}/bin/ansible-galaxy collection install -r requirements.yml --force'
+      # Patch arensb.truenas 1.14.4 — remove broken filesystem action plugin
+      - rm -f ~/.ansible/collections/ansible_collections/arensb/truenas/plugins/action/filesystem.py
+    preconditions:
+      - test -f {{.ANSIBLE_DIR}}/requirements.yml
+      - which uv
+
+  lint:
+    desc: Lint Ansible playbooks and roles
+    dir: '{{.ANSIBLE_DIR}}'
+    cmd: '{{.ANSIBLE_VENV}}/bin/ansible-lint'
+    preconditions:
+      - test -f {{.ANSIBLE_VENV}}/bin/ansible-lint
+
+  configure:
+    desc: Run TrueNAS configuration playbook
+    dir: '{{.ANSIBLE_DIR}}'
+    cmd: '{{.ANSIBLE_VENV}}/bin/ansible-playbook playbooks/truenas-configure.yml {{.CLI_ARGS}}'
+    preconditions:
+      - test -f {{.ANSIBLE_VENV}}/bin/ansible-playbook
+
+  configure:dry-run:
+    desc: Dry run TrueNAS configuration playbook
+    dir: '{{.ANSIBLE_DIR}}'
+    cmd: '{{.ANSIBLE_VENV}}/bin/ansible-playbook playbooks/truenas-configure.yml --check --diff {{.CLI_ARGS}}'
+    preconditions:
+      - test -f {{.ANSIBLE_VENV}}/bin/ansible-playbook

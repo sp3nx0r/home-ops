@@ -13,6 +13,8 @@
 # Kubernetes
 kubeconfig
 talosconfig
+# Ansible
+ansible/.vault-password
 # Misc.
 .private/
 .task/

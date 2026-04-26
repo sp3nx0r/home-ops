@@ -1,0 +1,265 @@
+---
+ansible_user: truenas_admin
+ansible_become: true
+ansible_become_method: sudo
+ansible_python_interpreter: /usr/bin/python3
+
+truenas_middleware_method: client
+
+# -- Pool -------------------------------------------------------------------
+truenas_pool: tank
+
+# -- System -----------------------------------------------------------------
+truenas_hostname: themberchaud
+truenas_domain: "{{ vault_truenas_domain }}"
+truenas_timezone: America/Chicago
+truenas_ntp_servers:
+  - address: 162.159.200.1
+    prefer: true
+  - address: 162.159.200.123
+
+# -- Sysctl Tunables --------------------------------------------------------
+truenas_sysctls:
+  # -- Security hardening --
+  - var: net.ipv4.conf.all.rp_filter
+    value: "1"
+    comment: Strict reverse path filtering (anti-spoofing)
+  - var: net.ipv4.conf.default.rp_filter
+    value: "1"
+    comment: Strict reverse path filtering (default)
+  - var: net.ipv4.conf.all.accept_redirects
+    value: "0"
+    comment: Ignore ICMP redirects
+  - var: net.ipv4.conf.default.accept_redirects
+    value: "0"
+    comment: Ignore ICMP redirects (default)
+  - var: net.ipv6.conf.all.accept_redirects
+    value: "0"
+    comment: Ignore IPv6 ICMP redirects
+  - var: net.ipv6.conf.default.accept_redirects
+    value: "0"
+    comment: Ignore IPv6 ICMP redirects (default)
+  - var: net.ipv4.conf.all.send_redirects
+    value: "0"
+    comment: Do not send ICMP redirects
+  - var: net.ipv4.conf.default.send_redirects
+    value: "0"
+    comment: Do not send ICMP redirects (default)
+  - var: net.ipv4.conf.all.accept_source_route
+    value: "0"
+    comment: Reject source-routed packets
+  - var: net.ipv4.conf.default.accept_source_route
+    value: "0"
+    comment: Reject source-routed packets (default)
+  - var: net.ipv4.conf.all.log_martians
+    value: "1"
+    comment: Log packets with impossible source addresses
+  - var: net.ipv4.icmp_echo_ignore_broadcasts
+    value: "1"
+    comment: Ignore broadcast ICMP echo (smurf attack mitigation)
+  - var: net.ipv4.icmp_ignore_bogus_error_responses
+    value: "1"
+    comment: Ignore bogus ICMP error responses
+  - var: net.ipv4.tcp_syncookies
+    value: "1"
+    comment: SYN flood protection
+  # -- 10G NFS performance --
+  - var: net.core.rmem_max
+    value: "67108864"
+    comment: 64 MB socket receive buffer for 10G
+  - var: net.core.wmem_max
+    value: "67108864"
+    comment: 64 MB socket send buffer for 10G
+  - var: net.ipv4.tcp_rmem
+    value: "4096 87380 33554432"
+    comment: TCP receive buffer min/default/max
+  - var: net.ipv4.tcp_wmem
+    value: "4096 65536 33554432"
+    comment: TCP send buffer min/default/max
+  - var: net.core.default_qdisc
+    value: fq
+    comment: Fair queuing — pairs with BBR
+  - var: net.ipv4.tcp_congestion_control
+    value: bbr
+    comment: Google BBR — better throughput on 10G
+  - var: net.ipv4.tcp_slow_start_after_idle
+    value: "0"
+    comment: Preserve congestion window after idle
+  - var: sunrpc.tcp_max_slot_table_entries
+    value: "128"
+    comment: NFS max concurrent RPCs
+  - var: sunrpc.tcp_slot_table_entries
+    value: "128"
+    comment: NFS concurrent RPCs per connection
+
+# -- Network ----------------------------------------------------------------
+truenas_network: 192.168.5.0/24
+
+# -- Users ------------------------------------------------------------------
+truenas_users:
+  - name: truenas_admin
+    comment: "Ansible/admin service account"
+    email: "{{ vault_truenas_admin_email }}"
+    password: "{{ vault_truenas_admin_password }}"
+    password_disabled: false
+    shell: /usr/bin/zsh
+    home: /home/truenas_admin
+    smb: false
+    create_group: true
+    sudo_commands_nopasswd:
+      - ALL
+    ssh_authorized_keys:
+      - "{{ lookup('file', '~/.ssh/personal.pub') }}"
+
+  # After Ansible adds this user to truenas_readonly_administrators,
+  # create an API key via midclt:
+  #   midclt call api_key.create '{"name":"prometheus-exporter","username":"prometheus"}'
+  - name: prometheus
+    comment: "Prometheus exporter read-only service account"
+    password_disabled: true
+    shell: /usr/sbin/nologin
+    home: /var/empty
+    smb: false
+    create_group: true
+    groups:
+      - truenas_readonly_administrators
+
+# -- Phase toggle -----------------------------------------------------------
+# Set to "phase2" after migrating to 8x18TB drives
+truenas_phase: phase1
+
+# -- Datasets ---------------------------------------------------------------
+# Phase 1 (temporary 5x4TB RAIDZ1) and Phase 2 (permanent 8x18TB 2xRAIDZ2)
+# share the same dataset structure. Phase 2 adds extra datasets.
+truenas_datasets_common:
+  - name: "{{ truenas_pool }}/backups"
+    compression: zstd
+    recordsize: 1M
+    atime: "off"
+
+  - name: "{{ truenas_pool }}/media"
+    compression: lz4
+    recordsize: 1M
+    atime: "off"
+
+  - name: "{{ truenas_pool }}/homelab"
+    compression: zstd
+    atime: "off"
+
+  - name: "{{ truenas_pool }}/homelab/k8s-exports"
+    compression: zstd
+    recordsize: 128K
+    atime: "off"
+
+  - name: "{{ truenas_pool }}/scratch"
+    compression: lz4
+    recordsize: 128K
+    atime: "off"
+    sync: disabled
+
+truenas_datasets_phase2:
+  - name: "{{ truenas_pool }}/backups/ceph"
+    compression: zstd
+    recordsize: 1M
+    atime: "off"
+
+  - name: "{{ truenas_pool }}/backups/clients"
+    compression: zstd-5
+    recordsize: 1M
+    atime: "off"
+
+  - name: "{{ truenas_pool }}/homelab/vm-images"
+    compression: zstd
+    recordsize: 64K
+    atime: "off"
+
+# -- NFS exports ------------------------------------------------------------
+truenas_nfs_shares:
+  - name: k8s-exports
+    path: "/mnt/{{ truenas_pool }}/homelab/k8s-exports"
+    networks:
+      - "{{ truenas_network }}"
+    maproot_user: root
+    maproot_group: wheel
+
+  - name: media
+    path: "/mnt/{{ truenas_pool }}/media"
+    networks:
+      - "{{ truenas_network }}"
+    maproot_user: root
+    maproot_group: wheel
+
+  - name: backups
+    path: "/mnt/{{ truenas_pool }}/backups"
+    networks:
+      - "{{ truenas_network }}"
+    maproot_user: root
+    maproot_group: wheel
+
+# -- Snapshot tasks ---------------------------------------------------------
+truenas_snapshot_tasks:
+  - dataset: "{{ truenas_pool }}/backups"
+    name_format: "hourly-%Y-%m-%d_%H:%M"
+    recursive: true
+    lifetime_value: 24
+    lifetime_unit: hours
+    minute: "0"
+    hour: "*"
+
+  - dataset: "{{ truenas_pool }}/homelab/k8s-exports"
+    name_format: "hourly-%Y-%m-%d_%H:%M"
+    recursive: true
+    lifetime_value: 24
+    lifetime_unit: hours
+    minute: "0"
+    hour: "*"
+
+  - dataset: "{{ truenas_pool }}/homelab/k8s-exports"
+    name_format: "daily-%Y-%m-%d_%H:%M"
+    recursive: true
+    lifetime_value: 14
+    lifetime_unit: days
+    minute: "0"
+    hour: "2"
+
+  - dataset: "{{ truenas_pool }}/media"
+    name_format: "daily-%Y-%m-%d_%H:%M"
+    recursive: true
+    lifetime_value: 7
+    lifetime_unit: days
+    minute: "0"
+    hour: "3"
+
+# -- SMART ------------------------------------------------------------------
+truenas_smart_tests:
+  - name: "Short weekly"
+    disks: ALL
+    test: short
+    hour: "4"
+    weekday: "sun"
+
+  - name: "Long monthly"
+    disks: ALL
+    test: long
+    hour: "2"
+    day: "1"
+    month: "*"
+
+# -- UPS / NUT --------------------------------------------------------------
+truenas_ups:
+  mode: MASTER
+  identifier: cyberpower
+  driver: "usbhid-ups$CP1500EPFCLCD"
+  port: auto
+  monuser: upsmon
+  monpwd: "{{ vault_truenas_ups_monpwd }}"
+  shutdown: LOWBATT
+  powerdown: true
+  rmonitor: true
+  remoteport: 3493
+  hostsync: 15
+  shutdowntimer: 30
+  nocommwarntime: 300
+
+# -- Scrub ------------------------------------------------------------------
+truenas_scrub_threshold: 35

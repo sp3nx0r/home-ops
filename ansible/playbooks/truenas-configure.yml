@@ -1,0 +1,464 @@
+---
+# TrueNAS HL8 NAS Configuration (TrueNAS SCALE 25.10)
+#
+# Prerequisites (manual, one-time):
+#   1. Install TrueNAS SCALE on the HL8
+#   2. Create pool "tank" in the TrueNAS UI (Phase 1: RAIDZ1, Phase 2: 2×RAIDZ2)
+#   3. Enable SSH service in the TrueNAS UI (System → Services → SSH)
+#   4. Create truenas_admin user with SSH key + passwordless sudo (ALL)
+#   5. Plug CyberPower UPS USB cable into the HL8
+#   6. Create Prometheus API key (after first run adds user to readonly group):
+#      midclt call api_key.create '{"name":"prometheus-exporter","username":"prometheus"}'
+#
+# Usage:
+#   task ansible:init       # one-time setup
+#   task ansible:configure  # full run
+#   task ansible:lint       # lint check
+#
+# TODO:
+#   - [ ] Configure SendGrid SMTP for email alerts (midclt call mail.update)
+#   - [ ] Configure syslog forwarding to Loki (system.advanced.update syslogservers)
+#
+- name: Configure TrueNAS HL8 NAS
+  hosts: hl8
+  become: true
+  environment:
+    middleware_method: "{{ truenas_middleware_method }}"
+
+  tasks:
+    # ----- System -----------------------------------------------------------
+
+    - name: Set hostname
+      arensb.truenas.hostname:
+        name: "{{ truenas_hostname }}"
+      tags: [system]
+
+    - name: Get current network config
+      ansible.builtin.command:
+        cmd: midclt call network.configuration.config
+      register: _network_config
+      changed_when: false
+      check_mode: false
+      tags: [system]
+
+    - name: Set domain # noqa: literal-compare
+      ansible.builtin.command:
+        cmd: "midclt call network.configuration.update '{\"domain\": \"{{ truenas_domain }}\"}'"
+      when: (_network_config.stdout | from_json).domain != truenas_domain
+      changed_when: true
+      tags: [system]
+
+    - name: Get current system general config
+      ansible.builtin.command:
+        cmd: midclt call system.general.config
+      register: _system_general
+      changed_when: false
+      check_mode: false
+      tags: [system]
+
+    - name: Set timezone # noqa: literal-compare
+      ansible.builtin.command:
+        cmd: "midclt call system.general.update '{\"timezone\": \"{{ truenas_timezone }}\"}'"
+      when: (_system_general.stdout | from_json).timezone != truenas_timezone
+      changed_when: true
+      tags: [system]
+
+    - name: Enable console messages
+      ansible.builtin.command:
+        cmd: "midclt call system.general.update '{\"ui_consolemsg\": true}'"
+      when: not (_system_general.stdout | from_json).ui_consolemsg | default(false)
+      changed_when: true
+      tags: [system]
+
+    - name: Disable usage collection
+      ansible.builtin.command:
+        cmd: "midclt call system.general.update '{\"usage_collection\": false}'"
+      when: (_system_general.stdout | from_json).usage_collection | default(true)
+      changed_when: true
+      tags: [system]
+
+    - name: Get current system advanced config
+      ansible.builtin.command:
+        cmd: midclt call system.advanced.config
+      register: _system_advanced
+      changed_when: false
+      check_mode: false
+      tags: [system]
+
+    - name: Require password on text console
+      ansible.builtin.command:
+        cmd: "midclt call system.advanced.update '{\"consolemenu\": false}'"
+      when: (_system_advanced.stdout | from_json).consolemenu | default(true)
+      changed_when: true
+      tags: [system]
+
+    # ----- NTP ---------------------------------------------------------------
+
+    - name: Query existing NTP servers
+      ansible.builtin.command:
+        cmd: midclt call system.ntpserver.query
+      register: _ntp_servers
+      changed_when: false
+      check_mode: false
+      tags: [ntp]
+
+    - name: Remove existing NTP servers
+      ansible.builtin.command:
+        cmd: "midclt call system.ntpserver.delete {{ item.id }}"
+      loop: "{{ _ntp_servers.stdout | from_json }}"
+      loop_control:
+        label: "{{ item.address }}"
+      when: item.address not in (truenas_ntp_servers | map(attribute='address') | list)
+      changed_when: true
+      tags: [ntp]
+
+    - name: Add NTP servers
+      ansible.builtin.command:
+        cmd: >-
+          midclt call system.ntpserver.create
+          '{"address": "{{ item.address }}", "prefer": {{ item.prefer | default(false) | lower }}, "iburst": true, "force": true}'
+      loop: "{{ truenas_ntp_servers }}"
+      loop_control:
+        label: "{{ item.address }}"
+      when: item.address not in (_ntp_servers.stdout | from_json | map(attribute='address') | list)
+      changed_when: true
+      tags: [ntp]
+
+    # ----- Sysctl Tunables ---------------------------------------------------
+
+    - name: Query existing tunables
+      ansible.builtin.command:
+        cmd: midclt call tunable.query
+      register: _tunables
+      changed_when: false
+      check_mode: false
+      tags: [sysctl]
+
+    - name: Create sysctl tunables
+      ansible.builtin.command:
+        cmd: >-
+          midclt call tunable.create
+          '{"var": "{{ item.var }}", "value": "{{ item.value }}", "type": "SYSCTL", "comment": "{{ item.comment | default('') }}", "enabled": true}'
+      loop: "{{ truenas_sysctls }}"
+      loop_control:
+        label: "{{ item.var }}"
+      when: item.var not in (_tunables.stdout | from_json | map(attribute='var') | list)
+      changed_when: true
+      tags: [sysctl]
+
+    - name: Update changed sysctl tunables
+      ansible.builtin.command:
+        cmd: >-
+          midclt call tunable.update {{ _existing.id }}
+          '{"value": "{{ item.value }}", "comment": "{{ item.comment | default('') }}", "enabled": true}'
+      vars:
+        _existing: "{{ (_tunables.stdout | from_json | selectattr('var', 'equalto', item.var) | first) }}"
+      loop: "{{ truenas_sysctls }}"
+      loop_control:
+        label: "{{ item.var }}"
+      when:
+        - item.var in (_tunables.stdout | from_json | map(attribute='var') | list)
+        - _existing.value != item.value
+      changed_when: true
+      tags: [sysctl]
+
+    # ----- Users ------------------------------------------------------------
+    # The arensb.truenas.user module sends password='' on update, which
+    # TrueNAS 25.x rejects. Use midclt directly instead.
+
+    - name: Query existing users
+      ansible.builtin.command:
+        cmd: midclt call user.query
+      register: _users
+      changed_when: false
+      check_mode: false
+      tags: [users]
+
+    - name: Create users
+      ansible.builtin.command:
+        cmd: >-
+          midclt call user.create '{{ _payload | to_json }}'
+      vars:
+        _payload: >-
+          {{
+            {
+              "username": item.name,
+              "full_name": item.comment | default(""),
+              "email": item.email | default(None),
+              "password": item.password | default(omit),
+              "password_disabled": item.password_disabled | default(false),
+              "shell": item.shell | default("/usr/sbin/nologin"),
+              "home": item.home | default("/var/empty"),
+              "smb": item.smb | default(false),
+              "group_create": item.create_group | default(false),
+              "sudo_commands_nopasswd": item.sudo_commands_nopasswd | default([]),
+              "sshpubkey": item.ssh_authorized_keys | default([]) | join("\n"),
+            }
+          }}
+      loop: "{{ truenas_users }}"
+      loop_control:
+        label: "{{ item.name }}"
+      when: item.name not in (_users.stdout | from_json | map(attribute='username') | list)
+      changed_when: true
+      tags: [users]
+
+    - name: Update existing users
+      ansible.builtin.command:
+        cmd: >-
+          midclt call user.update {{ _uid }} '{{ _payload | to_json }}'
+      vars:
+        _existing: "{{ (_users.stdout | from_json | selectattr('username', 'equalto', item.name) | first) }}"
+        _uid: "{{ _existing.id }}"
+        _payload: >-
+          {{
+            {
+              "full_name": item.comment | default(""),
+              "email": item.email | default(None),
+              "password_disabled": item.password_disabled | default(false),
+              "shell": item.shell | default("/usr/sbin/nologin"),
+              "smb": item.smb | default(false),
+              "sudo_commands_nopasswd": item.sudo_commands_nopasswd | default([]),
+              "sshpubkey": item.ssh_authorized_keys | default([]) | join("\n"),
+            }
+          }}
+      loop: "{{ truenas_users }}"
+      loop_control:
+        label: "{{ item.name }}"
+      when: item.name in (_users.stdout | from_json | map(attribute='username') | list)
+      changed_when: true
+      tags: [users]
+
+    - name: Resolve auxiliary group IDs for users
+      ansible.builtin.command:
+        cmd: "midclt call group.query '[[\"group\", \"=\", \"{{ item.1 }}\"]]'"
+      register: _aux_groups
+      loop: "{{ truenas_users | subelements('groups', skip_missing=True) }}"
+      loop_control:
+        label: "{{ item.0.name }} → {{ item.1 }}"
+      changed_when: false
+      check_mode: false
+      tags: [users]
+
+    - name: Add users to auxiliary groups
+      ansible.builtin.command:
+        cmd: >-
+          midclt call user.update {{ _uid }}
+          '{"groups": {{ _group_ids | to_json }}}'
+      vars:
+        _existing: "{{ (_users.stdout | from_json | selectattr('username', 'equalto', item.name) | first) }}"
+        _uid: "{{ _existing.id }}"
+        _matched: "{{ _aux_groups.results | selectattr('item.0.name', 'equalto', item.name) }}"
+        _wanted_groups: "{{ _matched | map(attribute='stdout') | map('from_json') | map('first') | map(attribute='id') | list }}"
+        _current_groups: "{{ _existing.groups | default([]) }}"
+        _group_ids: "{{ (_current_groups + _wanted_groups) | unique }}"
+      loop: "{{ truenas_users | selectattr('groups', 'defined') | list }}"
+      loop_control:
+        label: "{{ item.name }}"
+      when: _wanted_groups | difference(_current_groups) | length > 0
+      changed_when: true
+      tags: [users]
+
+    # ----- Services ---------------------------------------------------------
+
+    - name: Enable and start NFS service
+      arensb.truenas.service:
+        name: nfs
+        enabled: true
+        state: started
+      tags: [services]
+
+    - name: Enable and start SSH service
+      arensb.truenas.service:
+        name: ssh
+        enabled: true
+        state: started
+      tags: [services]
+
+    # ----- Datasets ---------------------------------------------------------
+
+    - name: Create common datasets
+      arensb.truenas.filesystem:
+        name: "{{ item.name }}"
+        state: present
+        create_ancestors: true
+      loop: "{{ truenas_datasets_common }}"
+      loop_control:
+        label: "{{ item.name }}"
+      tags: [datasets]
+
+    - name: Create Phase 2 datasets
+      arensb.truenas.filesystem:
+        name: "{{ item.name }}"
+        state: present
+        create_ancestors: true
+      loop: "{{ truenas_datasets_phase2 }}"
+      loop_control:
+        label: "{{ item.name }}"
+      when: truenas_phase == "phase2"
+      tags: [datasets]
+
+    # The filesystem module doesn't support all ZFS properties.
+    # Set compression, recordsize, atime, sync via zfs set commands.
+    - name: Set ZFS root dataset properties
+      ansible.builtin.command:
+        cmd: "zfs set xattr=sa acltype=posixacl {{ truenas_pool }}"
+      changed_when: false
+      tags: [datasets]
+
+    - name: Set ZFS dataset properties (common)
+      ansible.builtin.command:
+        cmd: >-
+          zfs set
+          compression={{ item.compression }}
+          {% if item.recordsize is defined %}recordsize={{ item.recordsize }}{% endif %}
+          atime={{ item.atime }}
+          {% if item.sync is defined %}sync={{ item.sync }}{% endif %}
+          {{ item.name }}
+      loop: "{{ truenas_datasets_common }}"
+      loop_control:
+        label: "{{ item.name }}"
+      changed_when: false
+      tags: [datasets]
+
+    - name: Set ZFS dataset properties (Phase 2)
+      ansible.builtin.command:
+        cmd: >-
+          zfs set
+          compression={{ item.compression }}
+          {% if item.recordsize is defined %}recordsize={{ item.recordsize }}{% endif %}
+          atime={{ item.atime }}
+          {% if item.sync is defined %}sync={{ item.sync }}{% endif %}
+          {{ item.name }}
+      loop: "{{ truenas_datasets_phase2 }}"
+      loop_control:
+        label: "{{ item.name }}"
+      changed_when: false
+      when: truenas_phase == "phase2"
+      tags: [datasets]
+
+    # ----- NFS Shares -------------------------------------------------------
+
+    - name: Configure NFS exports
+      arensb.truenas.sharing_nfs:
+        name: "{{ item.name }}"
+        path: "{{ item.path }}"
+        networks: "{{ item.networks }}"
+        maproot_user: "{{ item.maproot_user }}"
+        maproot_group: "{{ item.maproot_group }}"
+        state: present
+      loop: "{{ truenas_nfs_shares }}"
+      loop_control:
+        label: "{{ item.name }}"
+      tags: [nfs]
+
+    # ----- Snapshot Tasks ---------------------------------------------------
+
+    - name: Configure periodic snapshot tasks
+      arensb.truenas.pool_snapshot_task:
+        match:
+          dataset: "{{ item.dataset }}"
+          name_format: "^{{ item.name_format.split('%')[0] }}"
+        dataset: "{{ item.dataset }}"
+        name_format: "{{ item.name_format }}"
+        recursive: "{{ item.recursive | default(false) }}"
+        lifetime_value: "{{ item.lifetime_value }}"
+        lifetime_unit: "{{ item.lifetime_unit }}"
+        minute: "{{ item.minute | default('0') }}"
+        hour: "{{ item.hour | default('*') }}"
+        day: "{{ item.day | default('*') }}"
+        month: "{{ item.month | default('*') }}"
+        state: present
+      loop: "{{ truenas_snapshot_tasks }}"
+      loop_control:
+        label: "{{ item.dataset }} ({{ item.name_format }})"
+      tags: [snapshots]
+
+    # ----- SMART Tests ------------------------------------------------------
+    # TrueNAS 25.10 removed the smart.test API; SMART tests are now cron jobs.
+
+    - name: Query existing cron jobs
+      ansible.builtin.command:
+        cmd: midclt call cronjob.query
+      register: _cronjobs
+      changed_when: false
+      check_mode: false
+      tags: [smart]
+
+    - name: Create SMART test cron jobs
+      ansible.builtin.command:
+        cmd: >-
+          midclt call cronjob.create '{
+            "user": "root",
+            "command": "midclt call disk.smart_test {{ item.test | upper }} [\"*\"]",
+            "description": "{{ item.name }}",
+            "enabled": true,
+            "schedule": {
+              "minute": "0",
+              "hour": "{{ item.hour | default('0') }}",
+              "dom": "{{ item.day | default('*') }}",
+              "month": "{{ item.month | default('*') }}",
+              "dow": "{{ item.weekday | default('*') }}"
+            }
+          }'
+      loop: "{{ truenas_smart_tests }}"
+      loop_control:
+        label: "{{ item.name }}"
+      when: item.name not in (_cronjobs.stdout | from_json | map(attribute='description') | list)
+      changed_when: true
+      tags: [smart]
+
+    # ----- Scrub Task -------------------------------------------------------
+
+    - name: Configure pool scrub task
+      arensb.truenas.pool_scrub_task:
+        pool: "{{ truenas_pool }}"
+        threshold: "{{ truenas_scrub_threshold }}"
+        enabled: true
+        state: present
+      tags: [scrub]
+
+    # ----- UPS / NUT --------------------------------------------------------
+
+    - name: Get current UPS config
+      ansible.builtin.command:
+        cmd: midclt call ups.config
+      register: _ups_config
+      changed_when: false
+      check_mode: false
+      tags: [ups]
+
+    - name: Build UPS config payload
+      ansible.builtin.set_fact:
+        _ups_payload:
+          mode: "{{ truenas_ups.mode }}"
+          identifier: "{{ truenas_ups.identifier }}"
+          driver: "{{ truenas_ups.driver }}"
+          port: "{{ truenas_ups.port }}"
+          monuser: "{{ truenas_ups.monuser }}"
+          monpwd: "{{ truenas_ups.monpwd }}"
+          shutdown: "{{ truenas_ups.shutdown }}"
+          powerdown: "{{ truenas_ups.powerdown }}"
+          rmonitor: "{{ truenas_ups.rmonitor }}"
+          remoteport: "{{ truenas_ups.remoteport }}"
+          hostsync: "{{ truenas_ups.hostsync }}"
+          shutdowntimer: "{{ truenas_ups.shutdowntimer }}"
+          nocommwarntime: "{{ truenas_ups.nocommwarntime }}"
+      tags: [ups]
+
+    - name: Configure UPS service (NUT server) # noqa: literal-compare
+      ansible.builtin.command:
+        cmd: "midclt call ups.update '{{ _ups_payload | to_json }}'"
+      when: >-
+        (_ups_config.stdout | from_json).driver != truenas_ups.driver or
+        (_ups_config.stdout | from_json).mode != truenas_ups.mode or
+        (_ups_config.stdout | from_json).identifier != truenas_ups.identifier or
+        (_ups_config.stdout | from_json).rmonitor != truenas_ups.rmonitor
+      changed_when: true
+      tags: [ups]
+
+    - name: Enable and start UPS service
+      arensb.truenas.service:
+        name: ups
+        enabled: true
+        state: started
+      tags: [ups]

@@ -7,6 +7,9 @@ creation_rules:
     encrypted_regex: "^(data|stringData)$"
     mac_only_encrypted: true
     age: "age1j8auc0sy76etmugnrnqv7j0v9de5l9ffswnqj7ndrzqndh5rdpjq5atgj8"
+  - path_regex: ansible/.*\.sops\.ya?ml
+    mac_only_encrypted: true
+    age: "age1j8auc0sy76etmugnrnqv7j0v9de5l9ffswnqj7ndrzqndh5rdpjq5atgj8"
 stores:
   yaml:
     indent: 2
