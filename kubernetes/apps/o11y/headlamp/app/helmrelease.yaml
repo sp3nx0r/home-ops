@@ -38,6 +38,16 @@ spec:
       readOnlyRootFilesystem: true
       capabilities:
         drop: ["ALL"]
+    volumeMounts:
+      - name: tmp
+        mountPath: /tmp
+      - name: config
+        mountPath: /home/headlamp/.config
+    volumes:
+      - name: tmp
+        emptyDir: {}
+      - name: config
+        emptyDir: {}
     resources:
       requests:
         cpu: 10m
