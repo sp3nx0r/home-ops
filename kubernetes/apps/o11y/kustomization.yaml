@@ -13,5 +13,5 @@ resources:
   - ./headlamp/ks.yaml
   - ./kube-prometheus-stack/ks.yaml
   - ./prometheus-adapter/ks.yaml
-  # - ./truenas-exporter/ks.yaml
-  # - ./unpoller/ks.yaml
+  - ./truenas-exporter/ks.yaml
+  - ./unpoller/ks.yaml
