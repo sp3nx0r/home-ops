@@ -39,13 +39,23 @@ spec:
               - webhook_url: ${DISCORD_WEBHOOK_URL}
                 send_resolved: true
                 title: >-
-                  [{{ .Status | toUpper }}{{ if eq .Status "firing" }}:{{ .Alerts.Firing | len }}{{ end }}] {{ .CommonLabels.alertname }}
+                  {{ if eq .Status "firing" }}🔥{{ else }}✅{{ end }} [{{ .Status | toUpper }}{{ if eq .Status "firing" }}:{{ .Alerts.Firing | len }}{{ end }}] {{ .CommonLabels.alertname }}
                 message: >-
                   {{- range .Alerts }}
 
-                  **{{ .Labels.alertname }}** {{ if .Labels.severity }}({{ .Labels.severity }}){{ end }}
+                  {{ if eq .Labels.severity "critical" }}🚨{{ else if eq .Labels.severity "warning" }}⚠️{{ else }}ℹ️{{ end }} **{{ .Labels.alertname }}** {{ if .Labels.severity }}(`{{ .Labels.severity }}`){{ end }}
 
-                  {{ if .Annotations.summary }}{{ .Annotations.summary }}{{ else if .Annotations.description }}{{ .Annotations.description }}{{ else if .Annotations.message }}{{ .Annotations.message }}{{ end }}
+                  {{ if .Annotations.summary }}> {{ .Annotations.summary }}{{ end }}
+
+                  {{ if .Annotations.description }}> {{ .Annotations.description }}{{ end }}
+
+                  {{ if .Labels.namespace }}**Namespace:** `{{ .Labels.namespace }}`{{ end }}{{ if .Labels.pod }} | **Pod:** `{{ .Labels.pod }}`{{ end }}{{ if .Labels.job }} | **Job:** `{{ .Labels.job }}`{{ end }}
+
+                  {{ if .Labels.node }}**Node:** `{{ .Labels.node }}`{{ end }}{{ if .Labels.service }} | **Service:** `{{ .Labels.service }}`{{ end }}
+
+                  **Since:** {{ .StartsAt.Format "Jan 02 15:04 MST" }}{{ if .Annotations.runbook_url }} | **Runbook:** [link]({{ .Annotations.runbook_url }}){{ end }}
+
+                  ---
 
                   {{- end }}
         route:
