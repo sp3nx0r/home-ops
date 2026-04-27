@@ -25,7 +25,9 @@ spec:
     # NOTE: devices might need to be set if you have more than one active NIC on your hosts
     # devices: eno+ eth+
     dashboards:
-      enabled: false
+      enabled: true
+      annotations:
+        grafana_folder: Network
     endpointRoutes:
       enabled: true
     envoy:
@@ -50,7 +52,9 @@ spec:
       enabled: true
     operator:
       dashboards:
-        enabled: false
+        enabled: true
+        annotations:
+          grafana_folder: Network
       prometheus:
         enabled: true
         serviceMonitor:
