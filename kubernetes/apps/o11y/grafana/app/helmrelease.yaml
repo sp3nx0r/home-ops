@@ -24,6 +24,8 @@ spec:
         parentRefs:
           - name: envoy-internal
             namespace: network
+    plugins:
+      - grafana-clock-panel
     grafana.ini:
       server:
         root_url: https://grafana.securimancy.com
