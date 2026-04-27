@@ -49,6 +49,7 @@ spec:
       dashboards:
         enabled: true
         searchNamespace: ALL
+        folderAnnotation: grafana_folder
       datasources:
         enabled: true
         searchNamespace: ALL
