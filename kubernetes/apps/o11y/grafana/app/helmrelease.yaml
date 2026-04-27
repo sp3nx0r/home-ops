@@ -150,14 +150,10 @@ spec:
           datasource: Prometheus
       network:
         cilium-agent:
-          # renovate: depName="Cilium v1.12 Agent Metrics"
-          gnetId: 16611
-          revision: 2
+          url: https://raw.githubusercontent.com/cilium/cilium/v1.19.3/install/kubernetes/cilium/files/cilium-agent/dashboards/cilium-dashboard.json
           datasource: Prometheus
         cilium-operator:
-          # renovate: depName="Cilium v1.12 Operator Metrics"
-          gnetId: 16612
-          revision: 2
+          url: https://raw.githubusercontent.com/cilium/cilium/v1.19.3/install/kubernetes/cilium/files/cilium-operator/dashboards/cilium-operator-dashboard.json
           datasource: Prometheus
         cloudflare-tunnels:
           # renovate: depName="Cloudflare Tunnels"
