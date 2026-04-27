@@ -1,0 +1,58 @@
+---
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: AlertmanagerConfig
+metadata:
+  name: alertmanager
+spec:
+  inhibitRules:
+    - equal:
+        - alertname
+        - namespace
+      sourceMatch:
+        - name: severity
+          matchType: "="
+          value: critical
+      targetMatch:
+        - name: severity
+          matchType: "="
+          value: warning
+  receivers:
+    - name: blackhole
+    - name: discord
+      discordConfigs:
+        - webhookURL:
+            name: alertmanager-secret
+            key: DISCORD_WEBHOOK_URL
+          sendResolved: true
+          title: >-
+            [{{ .Status | toUpper }}{{ if eq .Status "firing" }}:{{ .Alerts.Firing | len }}{{ end }}] {{ .CommonLabels.alertname }}
+          message: >-
+            {{- range .Alerts }}
+            **{{ .Labels.alertname }}** {{ if .Labels.severity }}({{ .Labels.severity }}){{ end }}
+            {{ if .Annotations.summary }}{{ .Annotations.summary }}{{ else if .Annotations.description }}{{ .Annotations.description }}{{ else if .Annotations.message }}{{ .Annotations.message }}{{ end }}
+            {{- end }}
+  route:
+    receiver: discord
+    groupBy:
+      - alertname
+      - namespace
+    groupWait: 1m
+    groupInterval: 5m
+    repeatInterval: 12h
+    routes:
+      - receiver: blackhole
+        matchers:
+          - name: alertname
+            matchType: "="
+            value: InfoInhibitor
+      - receiver: blackhole
+        matchers:
+          - name: alertname
+            matchType: "="
+            value: Watchdog
+      - receiver: discord
+        matchers:
+          - name: severity
+            matchType: "="
+            value: critical
+        groupWait: 30s
