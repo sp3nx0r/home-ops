@@ -10,7 +10,7 @@ spec:
     name: unifi-dns
   interval: 1h
   values:
-    fullnameOverride: *app
+    fullnameOverride: unifi-external-dns
     provider:
       name: webhook
       webhook:
