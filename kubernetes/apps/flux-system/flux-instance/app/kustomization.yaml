@@ -8,4 +8,5 @@ resources:
   - ./secret.sops.yaml
   - ./sops-age.sops.yaml
   - ./httproute.yaml
+  - ./podmonitor.yaml
   - ./receiver.yaml
