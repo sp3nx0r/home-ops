@@ -22,10 +22,55 @@ spec:
             - name: envoy-internal
               namespace: network
       alertmanagerSpec:
-        alertmanagerConfiguration:
-          name: alertmanager
-          global:
-            resolveTimeout: 5m
+        secrets:
+          - alertmanager-secret
+      config:
+        global:
+          resolve_timeout: 5m
+        inhibit_rules:
+          - source_matchers:
+              - severity = critical
+            target_matchers:
+              - severity = warning
+            equal:
+              - alertname
+              - namespace
+        receivers:
+          - name: blackhole
+          - name: discord
+            discord_configs:
+              - webhook_url_file: /etc/alertmanager/secrets/alertmanager-secret/DISCORD_WEBHOOK_URL
+                send_resolved: true
+                title: >-
+                  [{{ .Status | toUpper }}{{ if eq .Status "firing" }}:{{ .Alerts.Firing | len }}{{ end }}] {{ .CommonLabels.alertname }}
+                message: >-
+                  {{- range .Alerts }}
+
+                  **{{ .Labels.alertname }}** {{ if .Labels.severity }}({{ .Labels.severity }}){{ end }}
+
+                  {{ if .Annotations.summary }}{{ .Annotations.summary }}{{ else if .Annotations.description }}{{ .Annotations.description }}{{ else if .Annotations.message }}{{ .Annotations.message }}{{ end }}
+
+                  {{- end }}
+        route:
+          receiver: discord
+          group_by:
+            - alertname
+            - namespace
+          group_wait: 1m
+          group_interval: 5m
+          repeat_interval: 12h
+          routes:
+            - receiver: blackhole
+              matchers:
+                - alertname = InfoInhibitor
+            - receiver: discord
+              matchers:
+                - alertname = Watchdog
+              repeat_interval: 5m
+            - receiver: discord
+              matchers:
+                - severity = critical
+              group_wait: 30s
 
     kubeEtcd:
       service:
