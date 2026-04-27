@@ -60,10 +60,9 @@ spec:
             - receiver: blackhole
               matchers:
                 - alertname = InfoInhibitor
-            - receiver: discord
+            - receiver: blackhole
               matchers:
                 - alertname = Watchdog
-              repeat_interval: 5m
             - receiver: discord
               matchers:
                 - severity = critical
