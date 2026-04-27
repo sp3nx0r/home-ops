@@ -56,22 +56,6 @@ spec:
       dashboardproviders.yaml:
         apiVersion: 1
         providers:
-          - name: default
-            orgId: 1
-            folder: ""
-            type: file
-            disableDeletion: false
-            editable: true
-            options:
-              path: /var/lib/grafana/dashboards/default
-          - name: kubernetes
-            orgId: 1
-            folder: Kubernetes
-            type: file
-            disableDeletion: false
-            editable: true
-            options:
-              path: /var/lib/grafana/dashboards/kubernetes
           - name: flux
             orgId: 1
             folder: Flux
@@ -80,52 +64,53 @@ spec:
             editable: true
             options:
               path: /var/lib/grafana/dashboards/flux
+          - name: kubernetes
+            orgId: 1
+            folder: Kubernetes
+            type: file
+            disableDeletion: false
+            editable: true
+            options:
+              path: /var/lib/grafana/dashboards/kubernetes
+          - name: network
+            orgId: 1
+            folder: Network
+            type: file
+            disableDeletion: false
+            editable: true
+            options:
+              path: /var/lib/grafana/dashboards/network
+          - name: observability
+            orgId: 1
+            folder: Observability
+            type: file
+            disableDeletion: false
+            editable: true
+            options:
+              path: /var/lib/grafana/dashboards/observability
+          - name: system
+            orgId: 1
+            folder: System
+            type: file
+            disableDeletion: false
+            editable: true
+            options:
+              path: /var/lib/grafana/dashboards/system
+          - name: unifi
+            orgId: 1
+            folder: UniFi
+            type: file
+            disableDeletion: false
+            editable: true
+            options:
+              path: /var/lib/grafana/dashboards/unifi
     dashboards:
-      default:
-        node-exporter-full:
-          # renovate: depName="Node Exporter Full"
-          gnetId: 1860
-          revision: 37
+      flux:
+        flux-cluster:
+          url: https://raw.githubusercontent.com/fluxcd/flux2-monitoring-example/main/monitoring/configs/dashboards/cluster.json
           datasource: Prometheus
-        cert-manager:
-          # renovate: depName="Cert Manager"
-          gnetId: 20842
-          revision: 3
-          datasource: Prometheus
-        spegel:
-          # renovate: depName="Spegel Monitoring Dashboard"
-          gnetId: 22104
-          revision: 1
-          datasource: Prometheus
-        external-dns:
-          # renovate: depName="External-dns"
-          gnetId: 15038
-          revision: 3
-          datasource: Prometheus
-        alertmanager-overview:
-          # renovate: depName="Alertmanager / Overview"
-          gnetId: 9578
-          revision: 4
-          datasource: Prometheus
-        envoy-proxy:
-          # renovate: depName="Envoy Proxy"
-          gnetId: 11022
-          revision: 1
-          datasource: Prometheus
-        cilium-agent:
-          # renovate: depName="Cilium v1.12 Agent Metrics"
-          gnetId: 16611
-          revision: 2
-          datasource: Prometheus
-        cilium-operator:
-          # renovate: depName="Cilium v1.12 Operator Metrics"
-          gnetId: 16612
-          revision: 2
-          datasource: Prometheus
-        cloudflare-tunnels:
-          # renovate: depName="Cloudflare Tunnels"
-          gnetId: 17457
-          revision: 6
+        flux-control-plane:
+          url: https://raw.githubusercontent.com/fluxcd/flux2-monitoring-example/main/monitoring/configs/dashboards/control-plane.json
           datasource: Prometheus
       kubernetes:
         kubernetes-api-server:
@@ -163,12 +148,79 @@ spec:
           gnetId: 11454
           revision: 14
           datasource: Prometheus
-      flux:
-        flux-cluster:
-          url: https://raw.githubusercontent.com/fluxcd/flux2-monitoring-example/main/monitoring/configs/dashboards/cluster.json
+      network:
+        cilium-agent:
+          # renovate: depName="Cilium v1.12 Agent Metrics"
+          gnetId: 16611
+          revision: 2
           datasource: Prometheus
-        flux-control-plane:
-          url: https://raw.githubusercontent.com/fluxcd/flux2-monitoring-example/main/monitoring/configs/dashboards/control-plane.json
+        cilium-operator:
+          # renovate: depName="Cilium v1.12 Operator Metrics"
+          gnetId: 16612
+          revision: 2
+          datasource: Prometheus
+        cloudflare-tunnels:
+          # renovate: depName="Cloudflare Tunnels"
+          gnetId: 17457
+          revision: 6
+          datasource: Prometheus
+        envoy-proxy:
+          # renovate: depName="Envoy Proxy"
+          gnetId: 11022
+          revision: 1
+          datasource: Prometheus
+        external-dns:
+          # renovate: depName="External-dns"
+          gnetId: 15038
+          revision: 3
+          datasource: Prometheus
+      observability:
+        alertmanager-overview:
+          # renovate: depName="Alertmanager / Overview"
+          gnetId: 9578
+          revision: 4
+          datasource: Prometheus
+        spegel:
+          # renovate: depName="Spegel Monitoring Dashboard"
+          gnetId: 22104
+          revision: 1
+          datasource: Prometheus
+      system:
+        node-exporter-full:
+          # renovate: depName="Node Exporter Full"
+          gnetId: 1860
+          revision: 37
+          datasource: Prometheus
+        cert-manager:
+          # renovate: depName="Cert Manager"
+          gnetId: 20842
+          revision: 3
+          datasource: Prometheus
+      unifi:
+        unifi-pdu:
+          # renovate: depName="UniFi-Poller: USW PDU Insight"
+          gnetId: 23027
+          revision: 1
+          datasource: Prometheus
+        unifi-client-insights:
+          # renovate: depName="UniFi-Poller: Client Insights"
+          gnetId: 11315
+          revision: 9
+          datasource: Prometheus
+        unifi-network-sites:
+          # renovate: depName="UniFi-Poller: Network Sites"
+          gnetId: 11311
+          revision: 5
+          datasource: Prometheus
+        unifi-uap:
+          # renovate: depName="UniFi-Poller: UAP Insights"
+          gnetId: 11314
+          revision: 10
+          datasource: Prometheus
+        unifi-usw:
+          # renovate: depName="UniFi-Poller: USW Insights"
+          gnetId: 11312
+          revision: 9
           datasource: Prometheus
     serviceMonitor:
       enabled: true
