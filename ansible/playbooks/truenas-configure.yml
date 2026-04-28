@@ -76,6 +76,22 @@
       changed_when: true
       tags: [system]
 
+    - name: Enable HTTP to HTTPS redirect
+      ansible.builtin.command:
+        cmd: "midclt call system.general.update '{\"ui_httpsredirect\": true}'"
+      when: not (_system_general.stdout | from_json).ui_httpsredirect | default(false)
+      changed_when: true
+      notify: restart web ui
+      tags: [system]
+
+    - name: Restrict TLS to 1.3 only
+      ansible.builtin.command:
+        cmd: "midclt call system.general.update '{\"ui_httpsprotocols\": [\"TLSv1.3\"]}'"
+      when: (_system_general.stdout | from_json).ui_httpsprotocols != ["TLSv1.3"]
+      changed_when: true
+      notify: restart web ui
+      tags: [system]
+
     - name: Get current system advanced config
       ansible.builtin.command:
         cmd: midclt call system.advanced.config
@@ -484,6 +500,161 @@
         state: present
       tags: [scrub]
 
+    # ----- ACME TLS Certificate -----------------------------------------------
+
+    - name: Query existing ACME DNS authenticators
+      ansible.builtin.command:
+        cmd: midclt call acme.dns.authenticator.query
+      register: _acme_auths
+      changed_when: false
+      check_mode: false
+      tags: [cert]
+
+    - name: Create Cloudflare ACME DNS authenticator
+      ansible.builtin.command:
+        cmd: >-
+          midclt call acme.dns.authenticator.create
+          '{"name": "{{ truenas_cert_acme_authenticator_name }}",
+            "attributes": {
+              "authenticator": "{{ truenas_cert_acme_authenticator_schema }}",
+              "api_token": "{{ truenas_cert_cf_api_token }}"}}'
+      register: _acme_auth_create
+      when: truenas_cert_acme_authenticator_name not in (_acme_auths.stdout | from_json | map(attribute='name') | list)
+      changed_when: true
+      tags: [cert]
+
+    - name: Resolve ACME DNS authenticator ID
+      ansible.builtin.set_fact:
+        _acme_auth_id: >-
+          {{ (_acme_auth_create.stdout | default('') | from_json).id
+             if _acme_auth_create is changed
+             else (_acme_auths.stdout | from_json
+                   | selectattr('name', 'equalto', truenas_cert_acme_authenticator_name)
+                   | first).id }}
+      tags: [cert]
+
+    - name: Query existing certificates
+      ansible.builtin.command:
+        cmd: midclt call certificate.query
+      register: _certs_initial
+      changed_when: false
+      check_mode: false
+      tags: [cert]
+
+    - name: Create CSR for ACME certificate
+      ansible.builtin.command:
+        cmd: >-
+          midclt call certificate.create
+          '{"name": "{{ truenas_cert_name }}-csr",
+            "create_type": "CERTIFICATE_CREATE_CSR",
+            "key_type": "EC",
+            "ec_curve": "SECP384R1",
+            "common": "{{ truenas_cert_common_name }}",
+            "san": {{ truenas_cert_san | to_json }}}'
+      register: _csr_create
+      when: >-
+        (truenas_cert_name + "-csr") not in
+        (_certs_initial.stdout | from_json | map(attribute='name') | list)
+      changed_when: true
+      tags: [cert]
+
+    - name: Wait for CSR job to complete
+      ansible.builtin.command:
+        cmd: >-
+          midclt call core.get_jobs '[["id", "=", {{ _csr_create.stdout | from_json }}]]'
+      register: _csr_job
+      until: (_csr_job.stdout | from_json | first).state not in ['RUNNING', 'WAITING']
+      retries: 30
+      delay: 2
+      when: _csr_create is changed
+      changed_when: false
+      tags: [cert]
+
+    - name: Refresh certificate list
+      ansible.builtin.command:
+        cmd: midclt call certificate.query
+      register: _certs
+      changed_when: false
+      check_mode: false
+      tags: [cert]
+
+    - name: Resolve CSR ID
+      ansible.builtin.set_fact:
+        _csr_id: >-
+          {{ (_certs.stdout | from_json
+              | selectattr('name', 'equalto', truenas_cert_name + '-csr')
+              | first).id }}
+      tags: [cert]
+
+    - name: Build DNS mapping for ACME certificate
+      ansible.builtin.set_fact:
+        _dns_mapping: >-
+          {{ dict(truenas_cert_san | zip_longest([], fillvalue=_acme_auth_id | int)) }}
+      tags: [cert]
+
+    - name: Create ACME certificate
+      ansible.builtin.command:
+        cmd: >-
+          midclt call certificate.create
+          '{"name": "{{ truenas_cert_name }}",
+            "create_type": "CERTIFICATE_CREATE_ACME",
+            "csr_id": {{ _csr_id }},
+            "acme_directory_uri": "{{ truenas_cert_acme_directory }}",
+            "tos": true,
+            "renew_days": 10,
+            "dns_mapping": {{ _dns_mapping | to_json }}}'
+      register: _acme_cert_create
+      when: >-
+        truenas_cert_name not in
+        (_certs.stdout | from_json | map(attribute='name') | list)
+      changed_when: true
+      tags: [cert]
+
+    - name: Wait for ACME certificate job to complete
+      ansible.builtin.command:
+        cmd: >-
+          midclt call core.get_jobs '[["id", "=", {{ _acme_cert_create.stdout | from_json }}]]'
+      register: _acme_job
+      until: (_acme_job.stdout | from_json | first).state not in ['RUNNING', 'WAITING']
+      retries: 60
+      delay: 5
+      when: _acme_cert_create is changed
+      changed_when: false
+      failed_when:
+        - _acme_job is not skipped
+        - (_acme_job.stdout | from_json | first).state != 'SUCCESS'
+      tags: [cert]
+
+    - name: Refresh certificate list for UI assignment
+      ansible.builtin.command:
+        cmd: >-
+          midclt call certificate.query '[["name", "=", "{{ truenas_cert_name }}"]]'
+      register: _cert_final
+      changed_when: false
+      check_mode: false
+      tags: [cert]
+
+    - name: Resolve ACME certificate ID
+      ansible.builtin.set_fact:
+        _cert_id: "{{ (_cert_final.stdout | from_json | first).id }}"
+      tags: [cert]
+
+    - name: Get current UI certificate
+      ansible.builtin.command:
+        cmd: midclt call system.general.config
+      register: _sys_general_cert
+      changed_when: false
+      check_mode: false
+      tags: [cert]
+
+    - name: Set ACME certificate as active UI certificate
+      ansible.builtin.command:
+        cmd: "midclt call system.general.update '{\"ui_certificate\": {{ _cert_id }}}'"
+      when: (_sys_general_cert.stdout | from_json).ui_certificate.id | default(0) != _cert_id | int
+      changed_when: true
+      notify: restart web ui
+      tags: [cert]
+
     # ----- UPS / NUT --------------------------------------------------------
 
     - name: Get current UPS config
@@ -529,3 +700,9 @@
         enabled: true
         state: started
       tags: [ups]
+
+  handlers:
+    - name: restart web ui
+      ansible.builtin.command:
+        cmd: midclt call system.general.ui_restart 0
+      changed_when: true

@@ -261,5 +261,15 @@ truenas_ups:
   shutdowntimer: 30
   nocommwarntime: 300
 
+# -- ACME / TLS Certificate -------------------------------------------------
+truenas_cert_name: nas-securimancy-com
+truenas_cert_common_name: nas.securimancy.com
+truenas_cert_san:
+  - nas.securimancy.com
+truenas_cert_acme_directory: "https://acme-v02.api.letsencrypt.org/directory"
+truenas_cert_acme_authenticator_name: cloudflare-dns
+truenas_cert_acme_authenticator_schema: cloudflare
+truenas_cert_cf_api_token: "{{ vault_truenas_cf_api_token }}"
+
 # -- Scrub ------------------------------------------------------------------
 truenas_scrub_threshold: 35
