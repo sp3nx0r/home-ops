@@ -1,0 +1,24 @@
+---
+# yaml-language-server: $schema=https://kubernetes-schemas.pages.dev/monitoring.coreos.com/prometheusrule_v1.json
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: flux-system
+  namespace: flux-system
+spec:
+  groups:
+    - name: flux
+      rules:
+        - alert: FluxReconciliationFailure
+          expr: |
+            max by (exported_namespace, name, customresource_kind) (
+              gotk_resource_info{ready!="True", suspended!="true"}
+            ) == 1
+          for: 15m
+          labels:
+            severity: critical
+          annotations:
+            summary: >-
+              {{ $labels.customresource_kind }}/{{ $labels.exported_namespace }}/{{ $labels.name }} reconciliation has been failing for more than 15 minutes.
+            description: >-
+              Flux {{ $labels.customresource_kind }} {{ $labels.name }} in namespace {{ $labels.exported_namespace }} is not ready.
