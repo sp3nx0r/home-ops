@@ -27,3 +27,14 @@ spec:
       name: "*"
     - kind: HelmRelease
       name: "*"
+  exclusionList:
+    - "error.*lookup github\\.com"
+    - "error.*lookup raw\\.githubusercontent\\.com"
+    - "dial.*tcp.*timeout"
+    - "waiting.*socket"
+    - "TLS.*handshake.*timeout"
+    - "failed calling webhook.*kyverno.*failed to call webhook"
+    - "dry-run failed.*failed calling webhook.*context deadline exceeded"
+    - "administrators are performing scheduled maintenance"
+    - "connection reset by peer"
+    - "timed out waiting for the condition"
