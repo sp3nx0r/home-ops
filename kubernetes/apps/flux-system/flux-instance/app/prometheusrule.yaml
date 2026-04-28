@@ -12,7 +12,7 @@ spec:
         - alert: FluxReconciliationFailure
           expr: |
             max by (exported_namespace, name, customresource_kind) (
-              gotk_resource_info{ready!="True", suspended!="true"}
+              gotk_resource_info{ready!="True", ready!="", suspended!="true"}
             ) == 1
           for: 15m
           labels:
