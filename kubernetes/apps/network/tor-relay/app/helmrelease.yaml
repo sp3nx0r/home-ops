@@ -37,8 +37,8 @@ spec:
                 echo "Using external IP: $OBFS4V_Address"
                 exec /usr/local/bin/start-tor.sh
             env:
-              OR_PORT: &or_port "30932"
-              PT_PORT: &pt_port "30913"
+              OR_PORT: "30932"
+              PT_PORT: "30913"
               EMAIL:
                 valueFrom:
                   secretKeyRef:
@@ -54,7 +54,7 @@ spec:
                 custom: true
                 spec:
                   tcpSocket:
-                    port: *or_port
+                    port: 30932
                   periodSeconds: 30
                   timeoutSeconds: 5
                   failureThreshold: 5
@@ -63,7 +63,7 @@ spec:
                 custom: true
                 spec:
                   tcpSocket:
-                    port: *or_port
+                    port: 30932
                   failureThreshold: 30
                   periodSeconds: 10
             resources:
