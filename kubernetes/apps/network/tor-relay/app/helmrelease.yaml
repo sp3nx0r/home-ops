@@ -107,12 +107,20 @@ spec:
         type: nfs
         server: 192.168.5.40
         path: /mnt/tank/homelab/k8s-exports/network-tor-relay-data
-        globalMounts:
-          - path: /var/lib/tor
+        advancedMounts:
+          tor-relay:
+            fix-perms:
+              - path: /var/lib/tor
+            app:
+              - path: /var/lib/tor
       shared:
         type: emptyDir
-        globalMounts:
-          - path: /shared
+        advancedMounts:
+          tor-relay:
+            resolve-ip:
+              - path: /shared
+            app:
+              - path: /shared
       tor-config:
         type: emptyDir
         advancedMounts:
