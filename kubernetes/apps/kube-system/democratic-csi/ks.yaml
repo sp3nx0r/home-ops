@@ -7,10 +7,6 @@ metadata:
 spec:
   interval: 1h
   path: ./kubernetes/apps/kube-system/democratic-csi/app
-  postBuild:
-    substituteFrom:
-      - name: democratic-csi-secret
-        kind: Secret
   prune: true
   sourceRef:
     kind: GitRepository

@@ -30,37 +30,6 @@ spec:
       - name: iscsi
         deletionPolicy: Delete
     driver:
+      existingConfigSecret: democratic-csi-driver-config
       config:
         driver: freenas-api-iscsi
-        instance_id: ""
-        httpConnection:
-          protocol: https
-          host: 192.168.5.40
-          port: 443
-          apiKey: "${TRUENAS_API_KEY}"
-          allowInsecure: true
-          apiVersion: 2
-        zfs:
-          datasetParentName: tank/homelab/k8s-iscsi
-          detachedSnapshotsDatasetParentName: tank/homelab/k8s-iscsi-snaps
-          zvolCompression: lz4
-          zvolDedup: ""
-          zvolEnableReservation: false
-          zvolBlocksize: 16K
-        iscsi:
-          targetPortal: "192.168.5.40:3260"
-          targetPortals: []
-          interface: ""
-          namePrefix: csi-
-          nameSuffix: ""
-          targetGroups:
-            - targetGroupPortalGroup: 1
-              targetGroupInitiatorGroup: 1
-              targetGroupAuthType: None
-              targetGroupAuthGroup:
-          extentInsecureTpc: true
-          extentXenCompat: false
-          extentDisablePhysicalBlocksize: true
-          extentBlocksize: 4096
-          extentRpm: SSD
-          extentAvailThreshold: 0
