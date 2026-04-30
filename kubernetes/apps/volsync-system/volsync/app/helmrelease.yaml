@@ -5,9 +5,13 @@ kind: HelmRelease
 metadata:
   name: volsync
 spec:
-  chartRef:
-    kind: OCIRepository
-    name: volsync
+  chart:
+    spec:
+      chart: volsync
+      version: 0.15.0
+      sourceRef:
+        kind: HelmRepository
+        name: volsync
   interval: 1h
   values:
     manageCRDs: true
