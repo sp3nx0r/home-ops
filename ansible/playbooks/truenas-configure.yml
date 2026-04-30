@@ -351,6 +351,8 @@
       tags: [iscsi]
 
     # ----- CSI Service Account ------------------------------------------------
+    # NOTE: TrueNAS SCALE 25.10.x only authorizes API keys for users in the
+    # builtin_administrators group. Custom privileges DO NOT gate API access.
 
     - name: Query existing groups
       ansible.builtin.command:
@@ -370,7 +372,7 @@
       changed_when: true
       tags: [iscsi]
 
-    - name: Re-query CSI group to get ID
+    - name: Re-query CSI group to get GID
       ansible.builtin.command:
         cmd: "midclt call group.query '[[\"group\", \"=\", \"{{ truenas_csi_group }}\"]]'"
       register: _csi_group_final
@@ -381,11 +383,6 @@
     - name: Resolve CSI group GID
       ansible.builtin.set_fact:
         _csi_group_gid: "{{ (_csi_group_final.stdout | from_json | first).gid | int }}"
-      tags: [iscsi]
-
-    - name: Debug CSI group
-      ansible.builtin.debug:
-        msg: "CSI group: id={{ (_csi_group_final.stdout | from_json | first).id }}, gid={{ _csi_group_gid }}"
       tags: [iscsi]
 
     - name: Check if CSI user exists
@@ -411,34 +408,20 @@
       changed_when: true
       tags: [iscsi]
 
-    - name: Query existing privileges
+    - name: Resolve builtin_administrators group ID
       ansible.builtin.command:
-        cmd: "midclt call privilege.query '[[\"name\", \"=\", \"{{ truenas_csi_privilege }}\"]]'"
-      register: _csi_priv_query
+        cmd: "midclt call group.query '[[\"group\", \"=\", \"builtin_administrators\"]]'"
+      register: _admin_group_query
       changed_when: false
       check_mode: false
       tags: [iscsi]
 
-    - name: Create CSI privilege with least-privilege roles
+    - name: Add CSI user to builtin_administrators (required for API key auth)
       ansible.builtin.command:
         cmd: >-
-          midclt call privilege.create
-          '{"name": "{{ truenas_csi_privilege }}",
-            "local_groups": [{{ _csi_group_gid }}],
-            "ds_groups": [],
-            "roles": {{ truenas_csi_roles | to_json }},
-            "web_shell": false}'
-      when: (_csi_priv_query.stdout | from_json | length) == 0
-      changed_when: true
-      tags: [iscsi]
-
-    - name: Update CSI privilege roles (idempotent)
-      ansible.builtin.command:
-        cmd: >-
-          midclt call privilege.update {{ (_csi_priv_query.stdout | from_json | first).id }}
-          '{"roles": {{ truenas_csi_roles | to_json }},
-            "local_groups": [{{ _csi_group_gid }}]}'
-      when: (_csi_priv_query.stdout | from_json | length) > 0
+          midclt call user.update {{ (_csi_user_query.stdout | from_json | first).id }}
+          '{"groups": [{{ (_admin_group_query.stdout | from_json | first).id }}]}'
+      when: (_csi_user_query.stdout | from_json | length) > 0
       changed_when: false
       tags: [iscsi]
 

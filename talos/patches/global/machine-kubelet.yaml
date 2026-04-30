@@ -4,6 +4,23 @@ machine:
     disableManifestsDirectory: true
     extraConfig:
       serializeImagePulls: false
+    extraMounts:
+      - destination: /etc/iscsi
+        type: bind
+        source: /etc/iscsi
+        options:
+          - bind
+          - rshared
+      - destination: /var/lib/iscsi
+        type: bind
+        source: /var/lib/iscsi
+        options:
+          - bind
+          - rshared
     nodeIP:
       validSubnets:
         - 192.168.5.0/24
+  kernel:
+    modules:
+      - name: iscsi_tcp
+      - name: libiscsi
