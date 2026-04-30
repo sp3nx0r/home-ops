@@ -289,6 +289,183 @@
         state: started
       tags: [services]
 
+    - name: Enable and start iSCSI service
+      arensb.truenas.service:
+        name: iscsitarget
+        enabled: true
+        state: started
+      tags: [services, iscsi]
+
+    # ----- iSCSI Configuration ------------------------------------------------
+
+    - name: Query existing iSCSI portals
+      ansible.builtin.command:
+        cmd: midclt call iscsi.portal.query
+      register: _iscsi_portals
+      changed_when: false
+      check_mode: false
+      tags: [iscsi]
+
+    - name: Create iSCSI portal
+      ansible.builtin.command:
+        cmd: >-
+          midclt call iscsi.portal.create
+          '{"listen": [{"ip": "{{ truenas_iscsi_portal_listen }}"}]}'
+      register: _iscsi_portal_create
+      when: (_iscsi_portals.stdout | from_json | length) == 0
+      changed_when: true
+      tags: [iscsi]
+
+    - name: Resolve iSCSI portal ID
+      ansible.builtin.set_fact:
+        _iscsi_portal_id: >-
+          {{ (_iscsi_portal_create.stdout | from_json).id
+             if _iscsi_portal_create is changed
+             else (_iscsi_portals.stdout | from_json | first).id }}
+      tags: [iscsi]
+
+    - name: Query existing iSCSI initiator groups
+      ansible.builtin.command:
+        cmd: midclt call iscsi.initiator.query
+      register: _iscsi_initiators
+      changed_when: false
+      check_mode: false
+      tags: [iscsi]
+
+    - name: Create iSCSI initiator group (allow all)
+      ansible.builtin.command:
+        cmd: >-
+          midclt call iscsi.initiator.create
+          '{"comment": "k8s-cluster", "initiators": []}'
+      register: _iscsi_initiator_create
+      when: (_iscsi_initiators.stdout | from_json | length) == 0
+      changed_when: true
+      tags: [iscsi]
+
+    - name: Resolve iSCSI initiator group ID
+      ansible.builtin.set_fact:
+        _iscsi_initiator_id: >-
+          {{ (_iscsi_initiator_create.stdout | from_json).id
+             if _iscsi_initiator_create is changed
+             else (_iscsi_initiators.stdout | from_json | first).id }}
+      tags: [iscsi]
+
+    # ----- CSI Service Account ------------------------------------------------
+
+    - name: Query existing groups
+      ansible.builtin.command:
+        cmd: "midclt call group.query '[[\"group\", \"=\", \"{{ truenas_csi_group }}\"]]'"
+      register: _csi_group_query
+      changed_when: false
+      check_mode: false
+      tags: [iscsi]
+
+    - name: Create CSI group
+      ansible.builtin.command:
+        cmd: >-
+          midclt call group.create
+          '{"name": "{{ truenas_csi_group }}", "smb": false}'
+      register: _csi_group_create
+      when: (_csi_group_query.stdout | from_json | length) == 0
+      changed_when: true
+      tags: [iscsi]
+
+    - name: Re-query CSI group to get ID
+      ansible.builtin.command:
+        cmd: "midclt call group.query '[[\"group\", \"=\", \"{{ truenas_csi_group }}\"]]'"
+      register: _csi_group_final
+      changed_when: false
+      check_mode: false
+      tags: [iscsi]
+
+    - name: Resolve CSI group GID
+      ansible.builtin.set_fact:
+        _csi_group_gid: "{{ (_csi_group_final.stdout | from_json | first).gid | int }}"
+      tags: [iscsi]
+
+    - name: Debug CSI group
+      ansible.builtin.debug:
+        msg: "CSI group: id={{ (_csi_group_final.stdout | from_json | first).id }}, gid={{ _csi_group_gid }}"
+      tags: [iscsi]
+
+    - name: Check if CSI user exists
+      ansible.builtin.command:
+        cmd: "midclt call user.query '[[\"username\", \"=\", \"{{ truenas_csi_user }}\"]]'"
+      register: _csi_user_query
+      changed_when: false
+      check_mode: false
+      tags: [iscsi]
+
+    - name: Create CSI user
+      ansible.builtin.command:
+        cmd: >-
+          midclt call user.create
+          '{"username": "{{ truenas_csi_user }}",
+            "full_name": "democratic-csi service account",
+            "group": {{ _csi_group_gid }},
+            "password_disabled": true,
+            "shell": "/usr/sbin/nologin",
+            "home": "/var/empty",
+            "smb": false}'
+      when: (_csi_user_query.stdout | from_json | length) == 0
+      changed_when: true
+      tags: [iscsi]
+
+    - name: Query existing privileges
+      ansible.builtin.command:
+        cmd: "midclt call privilege.query '[[\"name\", \"=\", \"{{ truenas_csi_privilege }}\"]]'"
+      register: _csi_priv_query
+      changed_when: false
+      check_mode: false
+      tags: [iscsi]
+
+    - name: Create CSI privilege with least-privilege roles
+      ansible.builtin.command:
+        cmd: >-
+          midclt call privilege.create
+          '{"name": "{{ truenas_csi_privilege }}",
+            "local_groups": [{{ _csi_group_gid }}],
+            "ds_groups": [],
+            "roles": {{ truenas_csi_roles | to_json }},
+            "web_shell": false}'
+      when: (_csi_priv_query.stdout | from_json | length) == 0
+      changed_when: true
+      tags: [iscsi]
+
+    - name: Update CSI privilege roles (idempotent)
+      ansible.builtin.command:
+        cmd: >-
+          midclt call privilege.update {{ (_csi_priv_query.stdout | from_json | first).id }}
+          '{"roles": {{ truenas_csi_roles | to_json }},
+            "local_groups": [{{ _csi_group_gid }}]}'
+      when: (_csi_priv_query.stdout | from_json | length) > 0
+      changed_when: false
+      tags: [iscsi]
+
+    - name: Query existing API keys for CSI user
+      ansible.builtin.command:
+        cmd: "midclt call api_key.query '[[\"name\", \"=\", \"democratic-csi\"]]'"
+      register: _csi_apikey_query
+      changed_when: false
+      check_mode: false
+      tags: [iscsi]
+
+    - name: Create API key for CSI user
+      ansible.builtin.command:
+        cmd: >-
+          midclt call api_key.create
+          '{"name": "democratic-csi", "username": "{{ truenas_csi_user }}"}'
+      register: _csi_apikey_create
+      when: (_csi_apikey_query.stdout | from_json | length) == 0
+      changed_when: true
+      tags: [iscsi]
+
+    - name: Display CSI API key (save this!)
+      ansible.builtin.debug:
+        msg: "CSI API Key: {{ (_csi_apikey_create.stdout | from_json).key }}"
+      when: _csi_apikey_create is changed
+      tags: [iscsi]
+
     # ----- Datasets ---------------------------------------------------------
 
     - name: Create common datasets

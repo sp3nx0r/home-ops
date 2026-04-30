@@ -151,6 +151,16 @@ truenas_datasets_common:
     recordsize: 128K
     atime: "off"
 
+  - name: "{{ truenas_pool }}/homelab/k8s-iscsi"
+    compression: lz4
+    recordsize: 16K
+    atime: "off"
+
+  - name: "{{ truenas_pool }}/homelab/k8s-iscsi-snaps"
+    compression: lz4
+    recordsize: 16K
+    atime: "off"
+
   - name: "{{ truenas_pool }}/scratch"
     compression: lz4
     recordsize: 128K
@@ -270,6 +280,43 @@ truenas_cert_acme_directory: "https://acme-v02.api.letsencrypt.org/directory"
 truenas_cert_acme_authenticator_name: cloudflare-dns
 truenas_cert_acme_authenticator_schema: cloudflare
 truenas_cert_cf_api_token: "{{ vault_truenas_cf_api_token }}"
+
+# -- iSCSI / democratic-csi ------------------------------------------------
+truenas_iscsi_pool: "{{ truenas_pool }}"
+truenas_iscsi_dataset: "{{ truenas_pool }}/homelab/k8s-iscsi"
+truenas_iscsi_dataset_snaps: "{{ truenas_pool }}/homelab/k8s-iscsi-snaps"
+truenas_iscsi_portal_listen: "0.0.0.0"
+truenas_iscsi_base_name: "iqn.2005-10.org.freenas.ctl"
+truenas_csi_user: csi
+truenas_csi_group: csi
+truenas_csi_privilege: csi-iscsi
+truenas_csi_roles:
+  - API_KEY_READ
+  - SHARING_ISCSI_READ
+  - SHARING_ISCSI_WRITE
+  - SHARING_ISCSI_AUTH_READ
+  - SHARING_ISCSI_AUTH_WRITE
+  - SHARING_ISCSI_EXTENT_READ
+  - SHARING_ISCSI_EXTENT_WRITE
+  - SHARING_ISCSI_GLOBAL_READ
+  - SHARING_ISCSI_GLOBAL_WRITE
+  - SHARING_ISCSI_HOST_READ
+  - SHARING_ISCSI_HOST_WRITE
+  - SHARING_ISCSI_INITIATOR_READ
+  - SHARING_ISCSI_INITIATOR_WRITE
+  - SHARING_ISCSI_PORTAL_READ
+  - SHARING_ISCSI_PORTAL_WRITE
+  - SHARING_ISCSI_TARGET_READ
+  - SHARING_ISCSI_TARGET_WRITE
+  - SHARING_ISCSI_TARGETEXTENT_READ
+  - SHARING_ISCSI_TARGETEXTENT_WRITE
+  - DATASET_READ
+  - DATASET_WRITE
+  - DATASET_DELETE
+  - SNAPSHOT_READ
+  - SNAPSHOT_WRITE
+  - SNAPSHOT_DELETE
+  - SERVICE_READ
 
 # -- Scrub ------------------------------------------------------------------
 truenas_scrub_threshold: 35
