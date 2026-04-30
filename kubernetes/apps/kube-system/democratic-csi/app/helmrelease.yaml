@@ -12,7 +12,6 @@ spec:
       sourceRef:
         kind: HelmRepository
         name: democratic-csi
-        namespace: flux-system
   interval: 1h
   values:
     csiDriver:
