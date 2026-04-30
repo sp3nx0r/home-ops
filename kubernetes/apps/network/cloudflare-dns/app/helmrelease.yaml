@@ -37,9 +37,9 @@ spec:
     extraVolumes:
       - name: host-ca-certs
         hostPath:
-          path: /etc/ssl/certs/ca-certificates.crt
-          type: File
+          path: /etc/ssl/certs
+          type: Directory
     extraVolumeMounts:
       - name: host-ca-certs
-        mountPath: /etc/ssl/certs/ca-certificates.crt
+        mountPath: /etc/ssl/certs
         readOnly: true
