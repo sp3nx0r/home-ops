@@ -12,7 +12,8 @@ resources:
   - ./cilium/ks.yaml
   - ./cluster-rbac/ks.yaml
   - ./coredns/ks.yaml
+  - ./democratic-csi/ks.yaml
+  - ./descheduler/ks.yaml
   - ./metrics-server/ks.yaml
   - ./reloader/ks.yaml
   - ./spegel/ks.yaml
-  - ./descheduler/ks.yaml
