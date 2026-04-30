@@ -28,6 +28,16 @@ spec:
     volumeSnapshotClasses:
       - name: iscsi
         deletionPolicy: Delete
+    node:
+      hostPID: true
+      driver:
+        extraEnv:
+          - name: ISCSIADM_HOST_STRATEGY
+            value: nsenter
+          - name: ISCSIADM_HOST_PATH
+            value: /usr/local/sbin/iscsiadm
+        iscsiDirHostPath: /usr/local/etc/iscsi
+        iscsiDirHostPathType: DirectoryOrCreate
     driver:
       existingConfigSecret: democratic-csi-driver-config
       config:
