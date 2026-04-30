@@ -25,7 +25,9 @@ spec:
         parameters:
           fsType: ext4
         mountOptions: []
-    volumeSnapshotClasses: []
+    volumeSnapshotClasses:
+      - name: iscsi
+        deletionPolicy: Delete
     driver:
       existingConfigSecret: democratic-csi-driver-config
       config:
