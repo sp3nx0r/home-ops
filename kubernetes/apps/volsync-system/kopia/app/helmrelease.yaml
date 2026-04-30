@@ -12,6 +12,22 @@ spec:
   values:
     controllers:
       kopia:
+        initContainers:
+          init-repo:
+            image:
+              repository: ghcr.io/home-operations/kopia
+              tag: 0.22.3
+            command: ["/bin/sh", "-c"]
+            args:
+              - |
+                if [ ! -f /repository/kopia.repository.f ]; then
+                  kopia repository create filesystem --path /repository --override-hostname volsync.volsync-system.svc.cluster.local --override-username volsync
+                else
+                  echo "Repository already exists, skipping init"
+                fi
+            envFrom:
+              - secretRef:
+                  name: volsync-maintenance-secret
         containers:
           app:
             image:
@@ -21,6 +37,9 @@ spec:
               KOPIA_WEB_ENABLED: "true"
               KOPIA_WEB_PORT: &port 80
               TZ: America/Chicago
+            envFrom:
+              - secretRef:
+                  name: volsync-maintenance-secret
             args:
               - --refresh-interval=5m
               - --without-password
@@ -90,19 +109,28 @@ spec:
       config-file:
         type: configMap
         identifier: config
-        globalMounts:
-          - path: /config/repository.config
-            subPath: repository.config
+        advancedMounts:
+          kopia:
+            app:
+              - path: /config/repository.config
+                subPath: repository.config
       repository:
         type: nfs
         server: 192.168.5.40
         path: /mnt/tank/homelab/kopia
-        globalMounts:
-          - path: /repository
+        advancedMounts:
+          kopia:
+            init-repo:
+              - path: /repository
+            app:
+              - path: /repository
       tmpfs:
         type: emptyDir
         advancedMounts:
           kopia:
+            init-repo:
+              - path: /tmp
+                subPath: init-tmp
             app:
               - path: /config/cache
                 subPath: cache
