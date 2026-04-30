@@ -18,6 +18,8 @@ spec:
           secretKeyRef:
             name: &secret cloudflare-dns-secret
             key: api-token
+      - name: SSL_CERT_FILE
+        value: /etc/ssl/certs/ca-certificates.crt
     extraArgs:
       - --cloudflare-dns-records-per-page=1000
       - --cloudflare-proxied
