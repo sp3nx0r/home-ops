@@ -1,0 +1,25 @@
+# https://pre-commit.com
+# Install: pre-commit install
+# Run manually: pre-commit run --all-files
+#
+# Requires on PATH: pre-commit, sops, python3, trufflehog
+
+default_install_hook_types: [pre-commit]
+
+repos:
+  - repo: local
+    hooks:
+      - id: check-sops-encrypted
+        name: SOPS files must be encrypted
+        entry: scripts/pre-commit-check-sops.sh
+        language: script
+        files: \.(sops\.ya?ml)$
+        # Root `.sops.yaml` is SOPS configuration (plaintext), not an encrypted resource.
+        exclude: ^\.sops\.yaml$
+        pass_filenames: true
+
+      - id: trufflehog
+        name: TruffleHog (secrets)
+        entry: bash -c 'export TRUFFLEHOG_PRE_COMMIT=1; exec trufflehog git file://.'
+        language: system
+        pass_filenames: false

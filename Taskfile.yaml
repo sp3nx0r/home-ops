@@ -21,6 +21,7 @@ env:
 includes:
   ansible: .taskfiles/ansible
   bootstrap: .taskfiles/bootstrap
+  pre-commit: .taskfiles/pre-commit
   talos: .taskfiles/talos
 
 tasks:

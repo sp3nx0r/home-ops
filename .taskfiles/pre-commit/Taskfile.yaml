@@ -1,0 +1,17 @@
+---
+version: '3'
+
+tasks:
+  install:
+    desc: Install git hooks from .pre-commit-config.yaml
+    cmds:
+      - pre-commit install
+    preconditions:
+      - which pre-commit
+
+  test:
+    desc: Run all pre-commit hooks on the entire repository (--all-files)
+    cmds:
+      - pre-commit run --all-files
+    preconditions:
+      - which pre-commit
