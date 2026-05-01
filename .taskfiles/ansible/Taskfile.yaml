@@ -12,7 +12,7 @@ tasks:
     dir: '{{.ANSIBLE_DIR}}'
     cmds:
       - uv venv --allow-existing {{.ANSIBLE_VENV}}
-      - uv pip install --python {{.ANSIBLE_VENV}}/bin/python ansible-core ansible-lint
+      - uv pip install --python {{.ANSIBLE_VENV}}/bin/python ansible-core ansible-lint boto3 botocore
       - '{{.ANSIBLE_VENV}}/bin/ansible-galaxy collection install -r requirements.yml --force'
       # Patch arensb.truenas 1.14.4 — remove broken filesystem action plugin
       - rm -f ~/.ansible/collections/ansible_collections/arensb/truenas/plugins/action/filesystem.py
@@ -38,6 +38,20 @@ tasks:
     desc: Dry run TrueNAS configuration playbook
     dir: '{{.ANSIBLE_DIR}}'
     cmd: '{{.ANSIBLE_VENV}}/bin/ansible-playbook playbooks/truenas-configure.yml --check --diff {{.CLI_ARGS}}'
+    preconditions:
+      - test -f {{.ANSIBLE_VENV}}/bin/ansible-playbook
+
+  backblaze:
+    desc: Configure Backblaze B2 bucket (versioning + lifecycle)
+    dir: '{{.ANSIBLE_DIR}}'
+    cmd: '{{.ANSIBLE_VENV}}/bin/ansible-playbook playbooks/backblaze-configure.yml {{.CLI_ARGS}}'
+    preconditions:
+      - test -f {{.ANSIBLE_VENV}}/bin/ansible-playbook
+
+  backblaze:dry-run:
+    desc: Dry run Backblaze B2 configuration
+    dir: '{{.ANSIBLE_DIR}}'
+    cmd: '{{.ANSIBLE_VENV}}/bin/ansible-playbook playbooks/backblaze-configure.yml --check --diff {{.CLI_ARGS}}'
     preconditions:
       - test -f {{.ANSIBLE_VENV}}/bin/ansible-playbook
 

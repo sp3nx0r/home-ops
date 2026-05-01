@@ -1,4 +1,61 @@
-# Ansible — TrueNAS HL8 NAS Configuration
+# Ansible — Infrastructure Configuration
+
+Declarative configuration for infrastructure that lives outside
+the Kubernetes cluster.
+
+## Playbooks
+
+| Playbook | Target | Description |
+|----------|--------|-------------|
+| `truenas-configure.yml` | HL8 NAS (TrueNAS SCALE 25.10) | Full NAS config via [arensb.truenas](https://github.com/arensb/ansible-truenas) + `midclt` |
+| `backblaze-configure.yml` | Backblaze B2 (S3 API) | Bucket versioning + lifecycle rules for offsite backups |
+
+---
+
+## Backblaze B2
+
+Manages the `sp3nx0r-truenas` B2 bucket used by TrueNAS Cloud Sync for offsite
+backups. Runs locally against B2's S3-compatible API.
+
+### What it configures
+
+| Setting | Value |
+|---------|-------|
+| Versioning | Enabled (required for lifecycle rules) |
+| Noncurrent version expiration | 30 days (protects against ransomware/accidental deletion propagation) |
+| Abort incomplete multipart uploads | 7 days |
+
+### Secrets
+
+B2 application key credentials are stored in
+`inventory/group_vars/backblaze/secrets.sops.yml`:
+
+| Variable | Purpose |
+|----------|---------|
+| `b2_access_key_id` | B2 application key ID |
+| `b2_secret_access_key` | B2 application key secret |
+
+Generate a B2 application key scoped to the bucket:
+1. Log into Backblaze → App Keys → Add a New Application Key
+2. Restrict to bucket: `sp3nx0r-truenas`
+3. Allow: `listBuckets`, `readBuckets`, `writeBuckets`, `listFiles`, `readFiles`, `writeFiles`
+4. Decrypt and update the secrets file:
+   ```bash
+   sops ansible/inventory/group_vars/backblaze/secrets.sops.yml
+   ```
+
+### Usage
+
+```bash
+task ansible:backblaze              # apply
+task ansible:backblaze:dry-run      # check mode
+task ansible:backblaze -- --tags versioning   # just versioning
+task ansible:backblaze -- --tags lifecycle    # just lifecycle rules
+```
+
+---
+
+## TrueNAS HL8 NAS
 
 Declarative configuration for the HL8 NAS running TrueNAS SCALE 25.10 using the
 [arensb.truenas](https://github.com/arensb/ansible-truenas) Ansible collection
@@ -48,8 +105,6 @@ and direct `midclt` API calls for features the collection doesn't cover.
 ## TODO
 
 - [ ] Configure syslog forwarding to Loki (`system.advanced.update` syslogservers)
-- [ ] Configure cert for HTTPS
-- [ ] Configure BackBlaze B2 backups
 
 ## Prerequisites
 
@@ -160,14 +215,19 @@ ansible/
 ├── .ansible-lint                        # Lint config (excludes secrets.sops.yml)
 ├── .venv/                               # Python virtualenv (git-ignored)
 ├── ansible.cfg                          # Ansible settings + SOPS integration
-├── requirements.yml                     # Collection deps (arensb.truenas, community.sops)
+├── requirements.yml                     # Collection deps
 ├── inventory/
-│   ├── hosts.yml                        # Inventory (hl8 @ 192.168.5.40)
-│   └── host_vars/
-│       └── hl8/
-│           ├── vars.yml                 # All NAS configuration variables
-│           └── secrets.sops.yml         # Encrypted secrets (age/SOPS)
+│   ├── hosts.yml                        # Inventory (hl8 + backblaze localhost)
+│   ├── host_vars/
+│   │   └── hl8/
+│   │       ├── vars.yml                 # TrueNAS configuration variables
+│   │       └── secrets.sops.yml         # Encrypted TrueNAS secrets (age/SOPS)
+│   └── group_vars/
+│       └── backblaze/
+│           ├── vars.yml                 # B2 bucket config (name, lifecycle, etc.)
+│           └── secrets.sops.yml         # Encrypted B2 credentials (age/SOPS)
 ├── playbooks/
-│   └── truenas-configure.yml            # Main playbook
+│   ├── truenas-configure.yml            # TrueNAS playbook
+│   └── backblaze-configure.yml          # Backblaze B2 playbook
 └── README.md
 ```

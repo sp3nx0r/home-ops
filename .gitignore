@@ -1,7 +1,10 @@
 # Secrets
 *.pub
 *.key
+# SOPS extension/editor plaintext scratch files (e.g. `.decrypted~secrets.sops.yml`)
 *.decrypted~*.yaml
+*.decrypted~*.yml
+.decrypted~*
 /age.key
 /cloudflare-tunnel.json
 /github-deploy.key

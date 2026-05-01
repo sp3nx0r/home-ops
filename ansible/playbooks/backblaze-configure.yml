@@ -1,0 +1,107 @@
+---
+# Backblaze B2 Bucket Configuration
+#
+# Ensures the TrueNAS backup bucket has versioning enabled and lifecycle
+# rules configured for noncurrent version retention.
+#
+# The lifecycle task uses purge_rules to remove any rules not managed here,
+# preventing drift from manual console changes.
+#
+# Usage:
+#   task ansible:backblaze
+#   task ansible:backblaze:dry-run
+#
+- name: Configure Backblaze B2 bucket
+  hosts: backblaze
+  gather_facts: false
+
+  vars:
+    b2_common_args: &b2_common
+      endpoint_url: "{{ b2_endpoint }}"
+      region: "{{ b2_region }}"
+      aws_access_key: "{{ b2_access_key_id }}"
+      aws_secret_key: "{{ b2_secret_access_key }}"
+
+  tasks:
+    - name: Ensure bucket versioning is enabled
+      amazon.aws.s3_bucket:
+        name: "{{ b2_bucket_name }}"
+        state: present
+        versioning: "{{ b2_versioning }}"
+        <<: *b2_common
+      tags: [versioning]
+
+    - name: Fetch current lifecycle rules
+      no_log: true
+      ansible.builtin.command:
+        argv:
+          - "{{ ansible_playbook_python }}"
+          - "-c"
+          - |
+            import boto3, json
+            s3 = boto3.client('s3',
+              endpoint_url='{{ b2_endpoint }}',
+              region_name='{{ b2_region }}',
+              aws_access_key_id='{{ b2_access_key_id }}',
+              aws_secret_access_key='{{ b2_secret_access_key }}')
+            try:
+              rules = s3.get_bucket_lifecycle_configuration(Bucket='{{ b2_bucket_name }}')['Rules']
+            except s3.exceptions.ClientError:
+              rules = []
+            print(json.dumps(rules))
+      register: _b2_lifecycle_rules
+      changed_when: false
+      check_mode: false
+      tags: [lifecycle]
+
+    - name: Remove unmanaged lifecycle rules
+      no_log: true
+      ansible.builtin.command:
+        argv:
+          - "{{ ansible_playbook_python }}"
+          - "-c"
+          - |
+            import boto3
+            s3 = boto3.client('s3',
+              endpoint_url='{{ b2_endpoint }}',
+              region_name='{{ b2_region }}',
+              aws_access_key_id='{{ b2_access_key_id }}',
+              aws_secret_access_key='{{ b2_secret_access_key }}')
+            rules = s3.get_bucket_lifecycle_configuration(Bucket='{{ b2_bucket_name }}')['Rules']
+            managed = {'noncurrent-version-cleanup', 'abort-incomplete-multipart'}
+            kept = [r for r in rules if r['ID'] in managed]
+            if len(kept) < len(rules):
+              if kept:
+                s3.put_bucket_lifecycle_configuration(Bucket='{{ b2_bucket_name }}',
+                  LifecycleConfiguration={'Rules': kept})
+              else:
+                s3.delete_bucket_lifecycle(Bucket='{{ b2_bucket_name }}')
+              print('purged')
+            else:
+              print('clean')
+      register: _b2_purge
+      changed_when: "'purged' in _b2_purge.stdout"
+      when: (_b2_lifecycle_rules.stdout | from_json | map(attribute='ID') | reject('in', ['noncurrent-version-cleanup', 'abort-incomplete-multipart']) | list | length) > 0
+      tags: [lifecycle]
+
+    - name: Configure noncurrent version lifecycle rule
+      community.aws.s3_lifecycle:
+        name: "{{ b2_bucket_name }}"
+        rule_id: noncurrent-version-cleanup
+        noncurrent_version_expiration_days: "{{ b2_noncurrent_version_expiration_days }}"
+        prefix: ""
+        status: enabled
+        state: present
+        <<: *b2_common
+      tags: [lifecycle]
+
+    - name: Configure multipart upload abort rule
+      community.aws.s3_lifecycle:
+        name: "{{ b2_bucket_name }}"
+        rule_id: abort-incomplete-multipart
+        abort_incomplete_multipart_upload_days: "{{ b2_abort_multipart_days }}"
+        prefix: ""
+        status: enabled
+        state: present
+        <<: *b2_common
+      tags: [lifecycle]

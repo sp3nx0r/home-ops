@@ -1,0 +1,15 @@
+---
+# Backblaze B2 bucket configuration
+b2_endpoint: https://s3.us-west-000.backblazeb2.com
+b2_region: us-west-000
+
+b2_bucket_name: sp3nx0r-truenas
+
+# Versioning is required for lifecycle rules on B2
+b2_versioning: true
+
+# Lifecycle rules for noncurrent version retention
+b2_noncurrent_version_expiration_days: 30
+
+# Abort incomplete multipart uploads after 7 days
+b2_abort_multipart_days: 7
