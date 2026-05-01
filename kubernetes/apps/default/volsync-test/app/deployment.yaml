@@ -1,0 +1,43 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: volsync-test
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: volsync-test
+  template:
+    metadata:
+      labels:
+        app: volsync-test
+    spec:
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+        - name: app
+          image: busybox:latest
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              while true; do
+                echo "$(date -Iseconds) - volsync test heartbeat" >> /data/heartbeat.log
+                tail -5 /data/heartbeat.log
+                sleep 300
+              done
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          resources:
+            requests:
+              cpu: 5m
+              memory: 16Mi
+            limits:
+              memory: 32Mi
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: volsync-test

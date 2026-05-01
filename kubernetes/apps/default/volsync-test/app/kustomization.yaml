@@ -2,13 +2,9 @@
 # yaml-language-server: $schema=https://json.schemastore.org/kustomization
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-namespace: default
-
 components:
-  - ../../components/sops
-
+  - ../../../../components/volsync
 resources:
-  - ./namespace.yaml
-  - ./it-tools/ks.yaml
-  - ./searxng/ks.yaml
-  - ./volsync-test/ks.yaml
+  - ./deployment.yaml
+  - ./pvc.yaml
+  - ./secret.sops.yaml
