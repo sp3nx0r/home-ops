@@ -815,6 +815,103 @@
       notify: restart web ui
       tags: [cert]
 
+    # ----- Cloud Sync (Backblaze B2) -----------------------------------------
+
+    - name: Resolve B2 credential ID
+      ansible.builtin.command:
+        cmd: "midclt call cloudsync.credentials.query '[[\"name\", \"=\", \"{{ truenas_cloudsync_credential_name }}\"]]'"
+      register: _b2_creds
+      changed_when: false
+      check_mode: false
+      tags: [cloudsync]
+
+    - name: Set B2 credential ID fact
+      ansible.builtin.set_fact:
+        _b2_cred_id: "{{ (_b2_creds.stdout | from_json | first).id }}"
+      tags: [cloudsync]
+
+    - name: Query existing cloud sync tasks
+      ansible.builtin.command:
+        cmd: midclt call cloudsync.query
+      register: _cloudsync_tasks
+      changed_when: false
+      check_mode: false
+      tags: [cloudsync]
+
+    - name: Create cloud sync tasks
+      ansible.builtin.command:
+        cmd: >-
+          midclt call cloudsync.create '{{ _payload | to_json }}'
+      vars:
+        _payload:
+          description: "{{ item.description }}"
+          path: "{{ item.path }}"
+          credentials: "{{ _b2_cred_id | int }}"
+          attributes:
+            bucket: "{{ truenas_cloudsync_bucket }}"
+            folder: "{{ item.folder }}"
+          schedule:
+            minute: "{{ item.minute }}"
+            hour: "{{ item.hour }}"
+            dom: "*"
+            month: "*"
+            dow: "*"
+          snapshot: true
+          enabled: true
+          direction: PUSH
+          transfer_mode: SYNC
+          encryption: true
+          filename_encryption: false
+          encryption_password: "{{ truenas_cloudsync_encryption_password }}"
+          encryption_salt: "{{ truenas_cloudsync_encryption_salt }}"
+          transfers: 4
+          follow_symlinks: true
+          create_empty_src_dirs: false
+      loop: "{{ truenas_cloudsync_tasks }}"
+      loop_control:
+        label: "{{ item.description }}"
+      when: item.description not in (_cloudsync_tasks.stdout | from_json | map(attribute='description') | list)
+      changed_when: true
+      tags: [cloudsync]
+
+    # ----- Config Backup Cron -------------------------------------------------
+
+    - name: Query existing cron jobs (for config backup)
+      ansible.builtin.command:
+        cmd: midclt call cronjob.query
+      register: _cronjobs_config
+      changed_when: false
+      check_mode: false
+      tags: [config-backup]
+
+    - name: Create TrueNAS config backup cron job
+      ansible.builtin.command:
+        cmd: >-
+          midclt call cronjob.create '{{ _payload | to_json }}'
+      vars:
+        _payload:
+          user: root
+          command: >-
+            DEST={{ truenas_config_backup_path }} &&
+            mkdir -p $DEST &&
+            cp /data/freenas-v1.db $DEST/freenas-v1-$(date +%Y%m%d).db &&
+            cp /data/pwenc_secret $DEST/pwenc_secret &&
+            find $DEST -name "freenas-v1-*.db" -mtime +{{ truenas_config_backup_retain_days }} -delete
+          description: "TrueNAS config backup (daily, retain {{ truenas_config_backup_retain_days }}d)"
+          enabled: true
+          schedule:
+            minute: "45"
+            hour: "23"
+            dom: "*"
+            month: "*"
+            dow: "*"
+      when: >-
+        (_cronjobs_config.stdout | from_json
+         | selectattr('description', 'search', 'config backup')
+         | list | length) == 0
+      changed_when: true
+      tags: [config-backup]
+
     # ----- UPS / NUT --------------------------------------------------------
 
     - name: Get current UPS config

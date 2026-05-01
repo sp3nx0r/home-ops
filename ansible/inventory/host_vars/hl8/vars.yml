@@ -317,3 +317,38 @@ truenas_csi_group: csi
 
 # -- Scrub ------------------------------------------------------------------
 truenas_scrub_threshold: 35
+
+# -- Cloud Sync (Backblaze B2) ------------------------------------------------
+truenas_cloudsync_credential_name: Backblaze B2
+truenas_cloudsync_bucket: sp3nx0r-truenas
+truenas_cloudsync_encryption_password: "{{ vault_truenas_b2_encryption_password }}"
+truenas_cloudsync_encryption_salt: "{{ vault_truenas_b2_encryption_salt }}"
+
+truenas_cloudsync_tasks:
+  - description: "B2 - backups"
+    path: "/mnt/{{ truenas_pool }}/backups"
+    folder: /backups/
+    hour: "0"
+    minute: "0"
+
+  - description: "B2 - k8s-exports"
+    path: "/mnt/{{ truenas_pool }}/homelab/k8s-exports"
+    folder: /homelab/k8s-exports/
+    hour: "0"
+    minute: "0"
+
+  - description: "B2 - kopia"
+    path: "/mnt/{{ truenas_pool }}/homelab/kopia"
+    folder: /homelab/kopia/
+    hour: "0"
+    minute: "15"
+
+  - description: "B2 - media"
+    path: "/mnt/{{ truenas_pool }}/media"
+    folder: /media/
+    hour: "0"
+    minute: "30"
+
+# -- Config Backup -------------------------------------------------------------
+truenas_config_backup_path: "/mnt/{{ truenas_pool }}/backups/truenas-config"
+truenas_config_backup_retain_days: 14
