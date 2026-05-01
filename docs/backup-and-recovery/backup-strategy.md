@@ -3,53 +3,53 @@
 ## Architecture Overview
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                     Kubernetes Cluster (Talos)                    │
-│                                                                   │
-│  PVCs (NFS) ──────────► tank/homelab/k8s-exports                 │
-│  PVCs (iSCSI) ────────► tank/homelab/k8s-iscsi (zvols)           │
-│  VolumeSnapshots ─────► tank/homelab/k8s-iscsi-snaps             │
-│                                                                   │
-│  Volsync (perfectra1n fork v0.18.5)                              │
-│    ReplicationSource ──► snapshot iSCSI PVC ──► Kopia backup     │
-│    Kopia repo (NFS) ──► tank/homelab/kopia                       │
-└─────────────────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────┐
+│                   Kubernetes Cluster (Talos)                  │
+│                                                               │
+│  PVCs (NFS) ──────────► tank/homelab/k8s-exports              │
+│  PVCs (iSCSI) ────────► tank/homelab/k8s-iscsi (zvols)        │
+│  VolumeSnapshots ─────► tank/homelab/k8s-iscsi-snaps          │
+│                                                               │
+│  Volsync (perfectra1n fork v0.18.5)                           │
+│    ReplicationSource ──► snapshot iSCSI PVC ──► Kopia backup  │
+│    Kopia repo (NFS) ──► tank/homelab/kopia                    │
+└───────────────────────────────────────────────────────────────┘
                               │
                               ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                  TrueNAS SCALE (themberchaud)                     │
-│                                                                   │
-│  Pool: tank (5x4TB RAIDZ1)                                       │
-│                                                                   │
-│  ZFS Periodic Snapshots:                                          │
-│    tank/backups             → hourly, retain 24h                  │
-│    tank/homelab/k8s-exports → hourly, retain 24h                  │
-│    tank/homelab/k8s-exports → daily, retain 14d                   │
-│    tank/homelab/k8s-iscsi   → hourly, retain 24h (recursive)     │
-│    tank/media               → daily, retain 7d                    │
-│                                                                   │
-│  Kopia Repository: tank/homelab/kopia (NFS-shared)               │
-│    Serves as deduplication-aware backup target for Volsync        │
-│    Kopia server UI via kopia.securimancy.com (volsync-system)     │
-└─────────────────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────┐
+│                 TrueNAS SCALE (themberchaud)                  │
+│                                                               │
+│  Pool: tank (5x4TB RAIDZ1)                                    │
+│                                                               │
+│  ZFS Periodic Snapshots:                                      │
+│    tank/backups             → hourly, retain 24h              │
+│    tank/homelab/k8s-exports → hourly, retain 24h              │
+│    tank/homelab/k8s-exports → daily, retain 14d               │
+│    tank/homelab/k8s-iscsi   → hourly, retain 24h (recursive)  │
+│    tank/media               → daily, retain 7d                │
+│                                                               │
+│  Kopia Repository: tank/homelab/kopia (NFS-shared)            │
+│    Deduplication-aware backup target for Volsync              │
+│    Kopia server UI via kopia.securimancy.com                  │
+└───────────────────────────────────────────────────────────────┘
                               │
-                              ▼ (nightly at midnight)
-┌─────────────────────────────────────────────────────────────────┐
-│                     Backblaze B2 (offsite)                        │
-│                                                                   │
-│  Bucket: sp3nx0r-truenas (encrypted, versioned)                  │
-│  Cloud Sync: per-dataset PUSH (snapshot: true)                    │
-│  Transfer mode: SYNC                                              │
-│  Schedule: staggered nightly (00:00–00:30)                        │
-│  Versioning: enabled, 30-day noncurrent retention                │
-│  (includes tank/homelab/kopia → offsite Kopia repo copy)         │
-│  Config: ansible/playbooks/backblaze-configure.yml               │
-│                                                                   │
-│  TrueNAS Config Backup:                                           │
-│    Cron: daily 23:45 → /mnt/tank/backups/truenas-config/         │
-│    Includes: freenas-v1.db + pwenc_secret, 14-day retention      │
-│    Synced offsite via B2 - backups cloud sync task                │
-└─────────────────────────────────────────────────────────────────┘
+                              ▼ (nightly, staggered)
+┌───────────────────────────────────────────────────────────────┐
+│                    Backblaze B2 (offsite)                     │
+│                                                               │
+│  Bucket: sp3nx0r-truenas (rclone crypt, versioned)            │
+│  Cloud Sync: per-dataset PUSH (snapshot: true)                │
+│  Transfer mode: SYNC                                          │
+│  Schedule: staggered nightly (00:00–00:30)                    │
+│  Versioning: enabled, 30-day noncurrent retention             │
+│  Includes tank/homelab/kopia → offsite Kopia repo copy        │
+│  Config: ansible/playbooks/backblaze-configure.yml            │
+│                                                               │
+│  TrueNAS Config Backup:                                       │
+│    Cron: daily 23:45 → /mnt/tank/backups/truenas-config/      │
+│    freenas-v1.db + pwenc_secret, 14-day retention             │
+│    Synced offsite via B2 - backups cloud sync task            │
+└───────────────────────────────────────────────────────────────┘
 ```
 
 ## Protection Levels
