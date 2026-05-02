@@ -186,28 +186,39 @@ configures NFS exports, snapshots, SMART tests, and scrub schedules.
 
 ---
 
-## Kubernetes NFS StorageClass
+## Kubernetes NFS volumes
 
-Single StorageClass pointing to the HL8 over the 10GbE SFP+ network:
+The cluster uses the built-in Kubernetes **NFS volume** type on
+`PersistentVolume` objects: each workload has a PV whose `spec.nfs` points at the HL8 over the 10GbE SFP+ network
+(`192.168.5.40`), with a `PersistentVolumeClaim` bound to that PV (static
+provisioning). There is no NFS CSI `StorageClass` or dynamic subdir provisioning.
+
+Example shape (paths and capacity vary per volume):
 
 ```yaml
-apiVersion: storage.k8s.io/v1
-kind: StorageClass
+apiVersion: v1
+kind: PersistentVolume
 metadata:
-  name: nfs-hl8
-provisioner: nfs.csi.k8s.io
-parameters:
-  server: 192.168.5.40
-  share: /mnt/tank/homelab/k8s-exports
-  subDir: ${pvc.metadata.namespace}-${pvc.metadata.name}
-reclaimPolicy: Delete
-volumeBindingMode: Immediate
-mountOptions: ["nfsvers=4.2", "nconnect=8", "hard", "noatime"]
+  name: example-nfs-pv
+spec:
+  capacity:
+    storage: 100Gi
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  nfs:
+    server: 192.168.5.40
+    path: /mnt/tank/homelab/k8s-exports/<subdir>
+  mountOptions:
+    - nfsvers=4.2
+    - nconnect=8
+    - hard
+    - noatime
 ```
 
-Prometheus, databases, and all other k8s PVCs use this class. If specific workloads
-need isolation later (e.g., databases on a dataset with smaller recordsize), create
-additional StorageClasses pointing to different NFS exports.
+Prometheus, databases, and other PVCs each use PVs like this. If a workload needs
+isolation later (e.g., a dataset with smaller `recordsize`), add another NFS export
+and point a separate PV at that path.
 
 ---
 
@@ -230,7 +241,7 @@ additional StorageClasses pointing to different NFS exports.
 9. Verify Talos nodes reconnect to NFS
 
 The dataset paths (`/mnt/tank/homelab/k8s-exports`, etc.) remain identical between
-phases — the Kubernetes StorageClass doesn't need to change.
+phases — NFS export paths and existing PV definitions stay valid as-is.
 
 ---
 

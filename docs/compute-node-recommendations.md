@@ -299,8 +299,8 @@ need a backup path.
 | node-0 | 192.168.5.50 | Prefer on SFP+ (`enp…`) |
 | node-1 | 192.168.5.51 | |
 | node-2 | 192.168.5.52 | |
-| HL8 NAS | 192.168.5.10 | NFS/SMB on same IP (10G path when clients use this address) |
-| MS-S1 | 192.168.1.60 | RJ45 to UniFi (example: separate main LAN if applicable) |
+| HL8 NAS | 192.168.5.40 | NFS/SMB on same IP (10G path when clients use this address) |
+| MS-S1 | 192.168.5.70 | RJ45 to UniFi LAN (Ollama / sardior; same subnet as nodes when unified) |
 
 From your laptop, `talosctl` / `kubectl` target the nodes at `192.168.5.50`–`.52`.
 Inter-node and NFS traffic flows at **10 Gbps** on the aggregation switch when
@@ -369,7 +369,7 @@ devices:
 ### TrueNAS HL8 Network Config
 
 On the HL8, the **Mellanox SFP+** NIC carries traffic to the Talos nodes at 10G via
-USW Aggregation. You can use **one IP** on the LAN (e.g. `192.168.5.10/24`) on the
+USW Aggregation. You can use **one IP** on the LAN (e.g. `192.168.5.40/24`) on the
 interface that is your preferred primary (often the SFP+ port once cabled), with
 default gateway / DNS pointed at the UDM. Expose **NFS/SMB shares** from TrueNAS
 on that address for LAN file access (bind addresses / firewall rules as you prefer).
