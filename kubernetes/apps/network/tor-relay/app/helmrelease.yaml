@@ -108,13 +108,13 @@ spec:
             port: 30913
             protocol: TCP
       metrics:
+        controller: tor-relay
         ports:
           metrics:
             port: 9035
             protocol: TCP
     serviceMonitor:
-      app:
-        serviceName: tor-relay-metrics
+      metrics:
         endpoints:
           - port: metrics
             interval: 30s
