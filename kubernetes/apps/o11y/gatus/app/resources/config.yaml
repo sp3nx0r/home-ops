@@ -1,0 +1,56 @@
+---
+connectivity:
+  checker:
+    interval: 1m
+    target: 1.1.1.1:53
+
+endpoints:
+  - conditions:
+      - "[CONNECTED] == true"
+    group: connectivity
+    interval: 1m
+    name: Cloudflare
+    url: icmp://1.1.1.1
+
+  - conditions:
+      - "[CONNECTED] == true"
+    group: connectivity
+    interval: 1m
+    name: Google
+    url: icmp://8.8.8.8
+
+  - conditions:
+      - "[CONNECTED] == true"
+    group: connectivity
+    interval: 1m
+    name: Quad9
+    url: icmp://9.9.9.9
+
+  - conditions:
+      - "[CONNECTED] == true"
+    group: infrastructure
+    interval: 1m
+    name: Gateway
+    url: icmp://192.168.1.1
+
+  - conditions:
+      - "[CONNECTED] == true"
+    group: infrastructure
+    interval: 1m
+    name: NAS
+    url: icmp://192.168.5.40
+
+metrics: true
+
+storage:
+  caching: true
+  path: ${GATUS_CONFIG_PATH}/gatus.db
+  type: sqlite
+
+ui:
+  default-sort-by: group
+  header: Status
+  title: Status | Gatus
+
+web:
+  port: ${GATUS_WEB_PORT}
