@@ -1,0 +1,98 @@
+---
+alerting:
+  discord:
+    webhook-url: ${GATUS_DISCORD_WEBHOOK}
+    default-alert:
+      description: health check failed
+      failure-threshold: 3
+      send-on-resolved: true
+      success-threshold: 2
+
+connectivity:
+  checker:
+    interval: 1m
+    target: 1.1.1.1:53
+
+endpoints:
+  - alerts:
+      - type: discord
+    conditions:
+      - "[DNS_RCODE] == NOERROR"
+    dns:
+      query-name: cloudflare.com
+      query-type: A
+    group: connectivity
+    interval: 1m
+    name: Cloudflare DNS
+    url: dns://1.1.1.1
+
+  - alerts:
+      - type: discord
+    conditions:
+      - "[DNS_RCODE] == NOERROR"
+    dns:
+      query-name: google.com
+      query-type: A
+    group: connectivity
+    interval: 1m
+    name: Google DNS
+    url: dns://8.8.8.8
+
+  - alerts:
+      - type: discord
+    conditions:
+      - "[DNS_RCODE] == NOERROR"
+    dns:
+      query-name: quad9.net
+      query-type: A
+    group: connectivity
+    interval: 1m
+    name: Quad9 DNS
+    url: dns://9.9.9.9
+
+  - alerts:
+      - type: discord
+    conditions:
+      - "[CONNECTED] == true"
+    group: infrastructure
+    interval: 1m
+    name: Unifi Gateway
+    url: tcp://192.168.1.1:443
+
+  - alerts:
+      - type: discord
+    client:
+      insecure: true
+    conditions:
+      - "[STATUS] == 200"
+    group: infrastructure
+    interval: 1m
+    name: TrueNAS
+    url: https://192.168.5.40
+
+  - alerts:
+      - type: discord
+    conditions:
+      - "[STATUS] == 200"
+      - "[RESPONSE_TIME] < 5000"
+      - "[CERTIFICATE_EXPIRATION] > 48h"
+    group: external
+    interval: 5m
+    name: Blog
+    url: https://www.securimancy.com
+
+metrics: true
+
+storage:
+  caching: true
+  path: ${GATUS_CONFIG_PATH}/gatus.db
+  type: sqlite
+
+ui:
+  default-sort-by: group
+  header: Status
+  title: Status | Gatus
+  link: https://github.com/sp3nx0r/home-ops
+
+web:
+  port: ${GATUS_WEB_PORT}
