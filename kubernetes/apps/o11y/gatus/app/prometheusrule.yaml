@@ -10,10 +10,21 @@ spec:
       rules:
         - alert: GatusEndpointDown
           expr: |-
-            gatus_results_endpoint_success == 0
+            gatus_results_endpoint_success{group=~"infrastructure|external"} == 0
           for: 5m
           annotations:
             summary: >-
               The {{ $labels.name }} endpoint is down
           labels:
             severity: critical
+            group: "{{ $labels.group }}"
+        - alert: GatusEndpointDown
+          expr: |-
+            gatus_results_endpoint_success{group="connectivity"} == 0
+          for: 5m
+          annotations:
+            summary: >-
+              The {{ $labels.name }} endpoint is down
+          labels:
+            severity: warning
+            group: "{{ $labels.group }}"

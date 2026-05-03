@@ -1,58 +1,39 @@
 ---
-alerting:
-  discord:
-    webhook-url: ${GATUS_DISCORD_WEBHOOK}
-    default-alert:
-      description: health check failed
-      failure-threshold: 3
-      send-on-resolved: true
-      success-threshold: 2
-
 connectivity:
   checker:
     interval: 1m
     target: 1.1.1.1:53
 
 endpoints:
-  - alerts:
-      - type: discord
-    conditions:
+  - conditions:
       - "[CONNECTED] == true"
     group: connectivity
     interval: 1m
     name: Cloudflare
     url: icmp://1.1.1.1
 
-  - alerts:
-      - type: discord
-    conditions:
+  - conditions:
       - "[CONNECTED] == true"
     group: connectivity
     interval: 1m
     name: Google
     url: icmp://8.8.8.8
 
-  - alerts:
-      - type: discord
-    conditions:
+  - conditions:
       - "[CONNECTED] == true"
     group: connectivity
     interval: 1m
     name: Quad9
     url: icmp://9.9.9.9
 
-  - alerts:
-      - type: discord
-    conditions:
+  - conditions:
       - "[CONNECTED] == true"
     group: infrastructure
     interval: 1m
     name: Unifi Gateway
     url: tcp://192.168.5.1:443
 
-  - alerts:
-      - type: discord
-    client:
+  - client:
       insecure: true
     conditions:
       - "[STATUS] == 200"
@@ -61,9 +42,7 @@ endpoints:
     name: TrueNAS
     url: https://192.168.5.40
 
-  - alerts:
-      - type: discord
-    conditions:
+  - conditions:
       - "[STATUS] == 200"
       - "[RESPONSE_TIME] < 5000"
       - "[CERTIFICATE_EXPIRATION] > 48h"
