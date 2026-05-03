@@ -23,10 +23,13 @@ spec:
     extraArgs:
       - --cloudflare-dns-records-per-page=1000
       - --cloudflare-proxied
+      - --exclude-target-net=10.0.0.0/8
+      - --exclude-target-net=172.16.0.0/12
+      - --exclude-target-net=192.168.0.0/16
       - --gateway-name=envoy-external
     triggerLoopOnEvent: true
     policy: sync
-    sources: ["gateway-httproute"]
+    sources: ["gateway-httproute", "crd"]
     txtPrefix: k8s.
     txtOwnerId: default
     domainFilters: ["${SECRET_DOMAIN}"]
