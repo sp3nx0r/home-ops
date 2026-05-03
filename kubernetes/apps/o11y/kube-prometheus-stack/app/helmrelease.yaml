@@ -106,6 +106,22 @@ spec:
         podMonitorSelectorNilUsesHelmValues: false
         probeSelectorNilUsesHelmValues: false
         scrapeConfigSelectorNilUsesHelmValues: false
+        additionalScrapeConfigs:
+          - job_name: sardior-node
+            static_configs:
+              - targets: ["192.168.5.70:9100"]
+                labels:
+                  instance: sardior
+          - job_name: sardior-ollama
+            static_configs:
+              - targets: ["192.168.5.70:8000"]
+                labels:
+                  instance: sardior
+          - job_name: sardior-nginx
+            static_configs:
+              - targets: ["192.168.5.70:9113"]
+                labels:
+                  instance: sardior
         enableAdminAPI: true
         walCompression: true
         enableFeatures:
