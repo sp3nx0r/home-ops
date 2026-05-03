@@ -17,29 +17,38 @@ endpoints:
   - alerts:
       - type: discord
     conditions:
-      - "[CONNECTED] == true"
+      - "[DNS_RCODE] == NOERROR"
+    dns:
+      query-name: cloudflare.com
+      query-type: A
     group: connectivity
     interval: 1m
-    name: Cloudflare
-    url: icmp://1.1.1.1
+    name: Cloudflare DNS
+    url: dns://1.1.1.1
 
   - alerts:
       - type: discord
     conditions:
-      - "[CONNECTED] == true"
+      - "[DNS_RCODE] == NOERROR"
+    dns:
+      query-name: google.com
+      query-type: A
     group: connectivity
     interval: 1m
-    name: Google
-    url: icmp://8.8.8.8
+    name: Google DNS
+    url: dns://8.8.8.8
 
   - alerts:
       - type: discord
     conditions:
-      - "[CONNECTED] == true"
+      - "[DNS_RCODE] == NOERROR"
+    dns:
+      query-name: quad9.net
+      query-type: A
     group: connectivity
     interval: 1m
-    name: Quad9
-    url: icmp://9.9.9.9
+    name: Quad9 DNS
+    url: dns://9.9.9.9
 
   - alerts:
       - type: discord
@@ -48,7 +57,7 @@ endpoints:
     group: infrastructure
     interval: 1m
     name: Unifi Gateway
-    url: icmp://192.168.1.1
+    url: tcp://192.168.1.1:443
 
   - alerts:
       - type: discord
@@ -65,6 +74,7 @@ endpoints:
       - type: discord
     conditions:
       - "[STATUS] == 200"
+      - "[RESPONSE_TIME] < 5000"
       - "[CERTIFICATE_EXPIRATION] > 48h"
     group: external
     interval: 5m

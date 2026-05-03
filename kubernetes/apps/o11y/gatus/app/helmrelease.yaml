@@ -83,6 +83,8 @@ spec:
             readOnly: true
     route:
       app:
+        annotations:
+          gatus.home-operations.com/enabled: "false"
         hostnames:
           - "status.${SECRET_DOMAIN}"
         parentRefs:
