@@ -61,6 +61,8 @@ spec:
               OBFS4_ENABLE_ADDITIONAL_VARIABLES: "1"
               OBFS4V_AddressDisableIPv6: "1"
               OBFS4V_HardwareAccel: "1"
+              OBFS4V_MetricsPort: "0.0.0.0:9035"
+              OBFS4V_MetricsPortPolicy: "accept 0.0.0.0/0"
             probes:
               liveness:
                 enabled: true
@@ -105,6 +107,18 @@ spec:
           pt-port:
             port: 30913
             protocol: TCP
+      metrics:
+        ports:
+          metrics:
+            port: 9035
+            protocol: TCP
+    serviceMonitor:
+      app:
+        serviceName: tor-relay-metrics
+        endpoints:
+          - port: metrics
+            interval: 30s
+            scrapeTimeout: 10s
     persistence:
       data:
         type: nfs

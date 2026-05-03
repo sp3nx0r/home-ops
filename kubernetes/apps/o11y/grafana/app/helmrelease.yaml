@@ -180,6 +180,13 @@ spec:
             - name: DS_PROMETHEUS
               value: Prometheus
       network:
+        tor-relay:
+          # renovate: depName="Tor Relay Stats Monitor"
+          gnetId: 24570
+          revision: 1
+          datasource:
+            - name: DS_GRAFANACLOUD-RAJIN4463-PROM
+              value: Prometheus
         cloudflare-tunnels:
           # renovate: depName="Cloudflare Tunnels"
           gnetId: 17457
