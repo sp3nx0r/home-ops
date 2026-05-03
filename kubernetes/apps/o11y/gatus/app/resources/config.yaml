@@ -52,12 +52,14 @@ endpoints:
 
   - alerts:
       - type: discord
+    client:
+      insecure: true
     conditions:
-      - "[CONNECTED] == true"
+      - "[STATUS] == 200"
     group: infrastructure
     interval: 1m
     name: TrueNAS
-    url: icmp://192.168.5.40
+    url: https://192.168.5.40
 
   - alerts:
       - type: discord
