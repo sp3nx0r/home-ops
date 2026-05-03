@@ -1,0 +1,38 @@
+---
+apiVersion: volsync.backube/v1alpha1
+kind: ReplicationDestination
+metadata:
+  name: ${APP}-manual
+  namespace: ${NS}
+spec:
+  trigger:
+    manual: restore-once
+  kopia:
+    accessModes:
+      - ReadWriteOnce
+    cacheAccessModes:
+      - ReadWriteOnce
+    cacheCapacity: ${CAPACITY}
+    cacheStorageClassName: iscsi
+    capacity: ${CAPACITY}
+    cleanupCachePVC: true
+    cleanupTempPVC: true
+    copyMethod: Snapshot
+    destinationPVC: ${CLAIM}
+    enableFileDeletion: true
+    moverSecurityContext:
+      runAsUser: ${PUID}
+      runAsGroup: ${PGID}
+      fsGroup: ${PGID}
+    moverVolumes:
+      - mountPath: repository
+        volumeSource:
+          nfs:
+            path: /mnt/tank/homelab/kopia
+            server: 192.168.5.40
+    previous: ${PREVIOUS}
+    repository: ${APP}-volsync-secret
+    sourceIdentity:
+      sourceName: ${APP}
+    storageClassName: iscsi
+    volumeSnapshotClassName: iscsi

@@ -23,6 +23,7 @@ includes:
   bootstrap: .taskfiles/bootstrap
   pre-commit: .taskfiles/pre-commit
   talos: .taskfiles/talos
+  volsync: .taskfiles/volsync
 
 tasks:
 
