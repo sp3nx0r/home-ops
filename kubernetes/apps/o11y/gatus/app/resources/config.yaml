@@ -24,7 +24,7 @@ endpoints:
     group: connectivity
     interval: 1m
     name: Cloudflare DNS
-    url: dns://1.1.1.1
+    url: dns://1.1.1.1:53
 
   - alerts:
       - type: discord
@@ -36,7 +36,7 @@ endpoints:
     group: connectivity
     interval: 1m
     name: Google DNS
-    url: dns://8.8.8.8
+    url: dns://8.8.8.8:53
 
   - alerts:
       - type: discord
@@ -48,7 +48,7 @@ endpoints:
     group: connectivity
     interval: 1m
     name: Quad9 DNS
-    url: dns://9.9.9.9
+    url: dns://9.9.9.9:53
 
   - alerts:
       - type: discord
