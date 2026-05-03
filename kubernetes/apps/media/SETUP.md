@@ -32,16 +32,16 @@ Configuration steps for the arr media stack, ordered by dependency chain.
 - [X] Add root folder: `/media/tv`
 - [X] Add download client: qBittorrent (`qbittorrent.media.svc.cluster.local:80`, category `sonarr`)
 - [ ] Add download client: SABnzbd (`sabnzbd.media.svc.cluster.local:80`, use API key from secret)
-- [ ] Verify Recyclarr synced quality profiles
+- [X] Verify Recyclarr synced quality profiles
 - API key pre-injected via `SONARR__AUTH__APIKEY` env var
 - Web UI: `sonarr.securimancy.com`
 
 ## 5. Radarr
 
-- [ ] Add root folder: `/media/movies`
-- [ ] Add download client: qBittorrent (`qbittorrent.media.svc.cluster.local:80`, category `radarr`)
+- [X] Add root folder: `/media/movies`
+- [X] Add download client: qBittorrent (`qbittorrent.media.svc.cluster.local:80`, category `radarr`)
 - [ ] Add download client: SABnzbd (`sabnzbd.media.svc.cluster.local:80`, use API key from secret)
-- [ ] Verify Recyclarr synced quality profiles
+- [X] Verify Recyclarr synced quality profiles
 - API key pre-injected via `RADARR__AUTH__APIKEY` env var
 - Web UI: `radarr.securimancy.com`
 
@@ -53,9 +53,9 @@ Configuration steps for the arr media stack, ordered by dependency chain.
 
 ## 7. Bazarr
 
-- [ ] Connect to Sonarr: `http://sonarr.media.svc.cluster.local` + API key
-- [ ] Connect to Radarr: `http://radarr.media.svc.cluster.local` + API key
-- [ ] Add subtitle providers (OpenSubtitles, etc.)
+- [X] Connect to Sonarr: `http://sonarr.media.svc.cluster.local` + API key
+- [X] Connect to Radarr: `http://radarr.media.svc.cluster.local` + API key
+- [X] Add subtitle providers (OpenSubtitles, etc.)
 - Web UI: `bazarr.securimancy.com`
 
 ## 8. Autobrr
@@ -67,15 +67,15 @@ Configuration steps for the arr media stack, ordered by dependency chain.
 
 ## 9. Seerr
 
-- [ ] Complete first-time setup wizard at `seerr.securimancy.com`
-- [ ] Connect to Plex for library scanning
-- [ ] Connect to Sonarr: `http://sonarr.media.svc.cluster.local` + API key
-- [ ] Connect to Radarr: `http://radarr.media.svc.cluster.local` + API key
+- [X] Complete first-time setup wizard at `seerr.securimancy.com`
+- [X] Connect to Plex for library scanning
+- [X] Connect to Sonarr: `http://sonarr.media.svc.cluster.local` + API key
+- [X] Connect to Radarr: `http://radarr.media.svc.cluster.local` + API key
 - Web UI: `seerr.securimancy.com`
 
 ## 10. Agregarr
 
-- [ ] Configure dashboard with URLs to all apps
+- [X] Configure dashboard with URLs to all apps
 - Web UI: `agregarr.securimancy.com`
 
 ## Auto-configured (no manual steps)
@@ -89,10 +89,6 @@ Configuration steps for the arr media stack, ordered by dependency chain.
 ## API Keys
 
 All API keys are stored in SOPS-encrypted secrets. To retrieve a key:
-
-```bash
-sops -d kubernetes/apps/media/<app>/app/secret.sops.yaml
-```
 
 ## Future TODOs
 
