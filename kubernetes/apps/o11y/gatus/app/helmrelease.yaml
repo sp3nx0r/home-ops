@@ -22,7 +22,6 @@ spec:
             args:
               - --auto-httproute
               - --enable-httproute
-              - --gateway-name=envoy-internal
             resources:
               requests:
                 cpu: 10m
