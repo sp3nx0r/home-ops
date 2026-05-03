@@ -20,10 +20,11 @@ spec:
               repository: ghcr.io/autobrr/qui
               tag: v1.17.0
             env:
+              QUI__AUTH_DISABLED: true
+              QUI__AUTH_DISABLED_ALLOWED_CIDRS: 0.0.0.0/0
+              QUI__I_ACKNOWLEDGE_THIS_IS_A_BAD_IDEA: true
               QUI__HOST: 0.0.0.0
               QUI__PORT: &port 80
-              QUI__QBITTORRENT__HOST: qbittorrent.media.svc.cluster.local
-              QUI__QBITTORRENT__PORT: 80
               TZ: America/Chicago
             envFrom:
               - secretRef:
@@ -34,7 +35,7 @@ spec:
                 custom: true
                 spec:
                   httpGet:
-                    path: /api/healthz
+                    path: /health
                     port: *port
                   initialDelaySeconds: 0
                   periodSeconds: 10
