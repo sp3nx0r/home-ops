@@ -109,6 +109,14 @@ spec:
             editable: true
             options:
               path: /var/lib/grafana/dashboards/unifi
+          - name: sardior
+            orgId: 1
+            folder: Sardior
+            type: file
+            disableDeletion: false
+            editable: true
+            options:
+              path: /var/lib/grafana/dashboards/sardior
     dashboards:
       flux:
         flux-cluster:
@@ -256,6 +264,14 @@ spec:
           # renovate: depName="UniFi-Poller: USW Insights"
           gnetId: 11312
           revision: 9
+          datasource:
+            - name: DS_PROMETHEUS
+              value: Prometheus
+      sardior:
+        nginx:
+          # renovate: depName="NGINX"
+          gnetId: 12708
+          revision: 1
           datasource:
             - name: DS_PROMETHEUS
               value: Prometheus

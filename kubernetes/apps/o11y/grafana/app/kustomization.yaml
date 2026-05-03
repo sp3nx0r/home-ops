@@ -6,3 +6,14 @@ resources:
   - ./helmrelease.yaml
   - ./ocirepository.yaml
   - ./secret.sops.yaml
+configMapGenerator:
+  - name: grafana-dashboard-ollama
+    files:
+      - ./dashboards/ollama.json
+    options:
+      labels:
+        grafana_dashboard: "1"
+      annotations:
+        grafana_folder: Sardior
+generatorOptions:
+  disableNameSuffixHash: true
