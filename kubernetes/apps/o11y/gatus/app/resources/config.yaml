@@ -47,7 +47,7 @@ endpoints:
       - "[CONNECTED] == true"
     group: infrastructure
     interval: 1m
-    name: Gateway
+    name: Unifi Gateway
     url: icmp://192.168.1.1
 
   - alerts:
@@ -56,8 +56,18 @@ endpoints:
       - "[CONNECTED] == true"
     group: infrastructure
     interval: 1m
-    name: NAS
+    name: TrueNAS
     url: icmp://192.168.5.40
+
+  - alerts:
+      - type: discord
+    conditions:
+      - "[STATUS] == 200"
+      - "[CERTIFICATE_EXPIRATION] > 48h"
+    group: external
+    interval: 5m
+    name: Blog
+    url: https://www.securimancy.com
 
 metrics: true
 
