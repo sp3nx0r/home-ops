@@ -19,7 +19,3 @@ spec:
       recordType: A
       targets:
         - 192.168.5.22
-    - dnsName: qbittorrent.securimancy.com
-      recordType: A
-      targets:
-        - 192.168.5.23
