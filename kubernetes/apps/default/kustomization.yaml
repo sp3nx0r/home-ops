@@ -10,5 +10,7 @@ components:
 resources:
   - ./namespace.yaml
   - ./it-tools/ks.yaml
+  - ./ollama-proxy/ks.yaml
+  - ./openwebui/ks.yaml
   - ./searxng/ks.yaml
   - ./volsync-test/ks.yaml

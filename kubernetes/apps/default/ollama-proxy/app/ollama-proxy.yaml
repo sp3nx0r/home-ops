@@ -1,0 +1,50 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ollama-proxy
+spec:
+  ports:
+    - name: http
+      port: 11435
+      targetPort: 11435
+---
+apiVersion: discovery.k8s.io/v1
+kind: EndpointSlice
+metadata:
+  name: ollama-proxy
+  labels:
+    kubernetes.io/service-name: ollama-proxy
+addressType: IPv4
+ports:
+  - name: http
+    port: 11435
+    protocol: TCP
+endpoints:
+  - addresses:
+      - 192.168.5.70
+    conditions:
+      ready: true
+---
+# yaml-language-server: $schema=https://kubernetes-schemas.pages.dev/gateway.networking.k8s.io/httproute_v1.json
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: ollama-proxy
+spec:
+  hostnames:
+    - ollama.${SECRET_DOMAIN}
+  parentRefs:
+    - name: envoy-internal
+      namespace: network
+      sectionName: https
+  rules:
+    - filters:
+        - type: RequestHeaderModifier
+          requestHeaderModifier:
+            set:
+              - name: Authorization
+                value: "Bearer ${SECRET_OLLAMA_API_KEY}"
+      backendRefs:
+        - name: ollama-proxy
+          port: 11435
