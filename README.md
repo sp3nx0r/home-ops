@@ -8,7 +8,7 @@ _... managed with Flux, Renovate, and GitHub Actions_
 
 <div align="center">
 
-[![Talos](https://img.shields.io/badge/talos-v1.12.6-blue?style=for-the-badge&logo=talos&logoColor=white)](https://talos.dev)&nbsp;&nbsp;
+[![Talos](https://img.shields.io/badge/talos-v1.13.0-blue?style=for-the-badge&logo=talos&logoColor=white)](https://talos.dev)&nbsp;&nbsp;
 [![Kubernetes](https://img.shields.io/badge/kubernetes-v1.35.4-blue?style=for-the-badge&logo=kubernetes&logoColor=white)](https://kubernetes.io)&nbsp;&nbsp;
 [![Flux](https://img.shields.io/badge/flux-v2.8.6-blue?style=for-the-badge&logo=flux&logoColor=white)](https://fluxcd.io)&nbsp;&nbsp;
 [![Renovate](https://img.shields.io/badge/renovate-enabled-blue?style=for-the-badge&logo=renovatebot&logoColor=white)](https://github.com/sp3nx0r/home-ops/issues?q=label%3Arenovate)
@@ -17,7 +17,6 @@ _... managed with Flux, Renovate, and GitHub Actions_
 
 <div align="center">
 
-[![Flux Local](https://img.shields.io/github/actions/workflow/status/sp3nx0r/home-ops/flux-local.yaml?branch=main&style=for-the-badge&logo=github&label=Flux%20Local)](https://github.com/sp3nx0r/home-ops/actions/workflows/flux-local.yaml)&nbsp;&nbsp;
 [![Status](https://img.shields.io/website?url=https%3A%2F%2Fstatus.securimancy.com&style=for-the-badge&logo=statuspage&label=Status)](https://status.securimancy.com)&nbsp;&nbsp;
 [![Last Commit](https://img.shields.io/github/last-commit/sp3nx0r/home-ops?style=for-the-badge&logo=git&logoColor=white&label=Last%20Commit)](https://github.com/sp3nx0r/home-ops/commits/main)&nbsp;&nbsp;
 [![Age](https://img.shields.io/github/created-at/sp3nx0r/home-ops?style=for-the-badge&logo=github&label=Repo%20Age)](https://github.com/sp3nx0r/home-ops)
