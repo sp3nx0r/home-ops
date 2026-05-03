@@ -17,38 +17,29 @@ endpoints:
   - alerts:
       - type: discord
     conditions:
-      - "[DNS_RCODE] == NOERROR"
-    dns:
-      query-name: cloudflare.com
-      query-type: A
+      - "[CONNECTED] == true"
     group: connectivity
     interval: 1m
-    name: Cloudflare DNS
-    url: dns://1.1.1.1:53
+    name: Cloudflare
+    url: icmp://1.1.1.1
 
   - alerts:
       - type: discord
     conditions:
-      - "[DNS_RCODE] == NOERROR"
-    dns:
-      query-name: google.com
-      query-type: A
+      - "[CONNECTED] == true"
     group: connectivity
     interval: 1m
-    name: Google DNS
-    url: dns://8.8.8.8:53
+    name: Google
+    url: icmp://8.8.8.8
 
   - alerts:
       - type: discord
     conditions:
-      - "[DNS_RCODE] == NOERROR"
-    dns:
-      query-name: quad9.net
-      query-type: A
+      - "[CONNECTED] == true"
     group: connectivity
     interval: 1m
-    name: Quad9 DNS
-    url: dns://9.9.9.9:53
+    name: Quad9
+    url: icmp://9.9.9.9
 
   - alerts:
       - type: discord
