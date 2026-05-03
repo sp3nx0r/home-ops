@@ -1,39 +1,58 @@
 ---
+alerting:
+  discord:
+    webhook-url: ${GATUS_DISCORD_WEBHOOK}
+    default-alert:
+      description: health check failed
+      failure-threshold: 3
+      send-on-resolved: true
+      success-threshold: 2
+
 connectivity:
   checker:
     interval: 1m
     target: 1.1.1.1:53
 
 endpoints:
-  - conditions:
+  - alerts:
+      - type: discord
+    conditions:
       - "[CONNECTED] == true"
     group: connectivity
     interval: 1m
     name: Cloudflare
     url: icmp://1.1.1.1
 
-  - conditions:
+  - alerts:
+      - type: discord
+    conditions:
       - "[CONNECTED] == true"
     group: connectivity
     interval: 1m
     name: Google
     url: icmp://8.8.8.8
 
-  - conditions:
+  - alerts:
+      - type: discord
+    conditions:
       - "[CONNECTED] == true"
     group: connectivity
     interval: 1m
     name: Quad9
     url: icmp://9.9.9.9
 
-  - conditions:
+  - alerts:
+      - type: discord
+    conditions:
       - "[CONNECTED] == true"
     group: infrastructure
     interval: 1m
     name: Gateway
     url: icmp://192.168.1.1
 
-  - conditions:
+  - alerts:
+      - type: discord
+    conditions:
       - "[CONNECTED] == true"
     group: infrastructure
     interval: 1m
@@ -51,6 +70,7 @@ ui:
   default-sort-by: group
   header: Status
   title: Status | Gatus
+  link: https://github.com/sp3nx0r/home-ops
 
 web:
   port: ${GATUS_WEB_PORT}
