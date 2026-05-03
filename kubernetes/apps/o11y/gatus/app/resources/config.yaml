@@ -34,13 +34,14 @@ endpoints:
     url: tcp://192.168.5.1:443
 
   - client:
-      insecure: true
     conditions:
       - "[STATUS] == 200"
+      - "[RESPONSE_TIME] < 5000"
+      - "[CERTIFICATE_EXPIRATION] > 48h"
     group: infrastructure
     interval: 1m
     name: TrueNAS
-    url: https://192.168.5.40
+    url: https://nas.securimancy.com
 
   - conditions:
       - "[STATUS] == 200"
