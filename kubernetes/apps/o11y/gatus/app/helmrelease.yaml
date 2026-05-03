@@ -21,6 +21,7 @@ spec:
               tag: 0.0.14@sha256:b77e0a1267708a555640b81dd8a9baa2a197c2f34647dc4ac053eb812d4b31cc
             args:
               - --auto-httproute
+              - --auto-group
               - --enable-httproute
             resources:
               requests:
