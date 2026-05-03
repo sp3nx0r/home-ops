@@ -60,10 +60,16 @@ storage:
   type: sqlite
 
 ui:
+  buttons:
+    - name: GitHub
+      url: https://github.com/sp3nx0r
+    - name: Homelab
+      url: https://github.com/sp3nx0r/home-ops
   default-sort-by: group
   header: Status
-  title: Status | Gatus
+  title: Status | Securimancy Homelab
   link: https://github.com/sp3nx0r/home-ops
+  logo: https://avatars.githubusercontent.com/u/10695887
 
 web:
   port: ${GATUS_WEB_PORT}
