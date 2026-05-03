@@ -109,14 +109,14 @@ spec:
             editable: true
             options:
               path: /var/lib/grafana/dashboards/unifi
-          - name: sardior
+          - name: ollama
             orgId: 1
-            folder: Sardior
+            folder: Ollama
             type: file
             disableDeletion: false
             editable: true
             options:
-              path: /var/lib/grafana/dashboards/sardior
+              path: /var/lib/grafana/dashboards/ollama
     dashboards:
       flux:
         flux-cluster:
@@ -201,6 +201,13 @@ spec:
           datasource:
             - name: DS_PROMETHEUS
               value: Prometheus
+        nginx:
+          # renovate: depName="NGINX"
+          gnetId: 12708
+          revision: 1
+          datasource:
+            - name: DS_PROMETHEUS
+              value: Prometheus
       observability:
         alertmanager-overview:
           # renovate: depName="Alertmanager / Overview"
@@ -264,14 +271,6 @@ spec:
           # renovate: depName="UniFi-Poller: USW Insights"
           gnetId: 11312
           revision: 9
-          datasource:
-            - name: DS_PROMETHEUS
-              value: Prometheus
-      sardior:
-        nginx:
-          # renovate: depName="NGINX"
-          gnetId: 12708
-          revision: 1
           datasource:
             - name: DS_PROMETHEUS
               value: Prometheus
