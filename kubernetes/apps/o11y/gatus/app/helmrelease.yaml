@@ -69,7 +69,7 @@ spec:
         runAsGroup: 1000
     persistence:
       config:
-        type: emptyDir
+        existingClaim: gatus
       config-file:
         type: configMap
         name: gatus-configmap
