@@ -1,0 +1,159 @@
+---
+ansible_user: ubuntu
+ansible_ssh_private_key_file: ~/.ssh/personal
+ansible_become: true
+ansible_become_method: sudo
+ansible_python_interpreter: /usr/bin/python3
+
+# -- Network ----------------------------------------------------------------
+ms_s1_host_ip: 192.168.5.70
+ms_s1_gateway: 192.168.5.1
+ms_s1_domain: securimancy.com
+
+# -- Realtek NIC PCI info (for recovery script) ----------------------------
+ms_s1_realtek_pci_id: "10ec:8127"
+ms_s1_realtek_bridge_addrs:
+  - "0000:00:02.1"
+  - "0000:00:02.2"
+
+# -- TPM LUKS auto-decrypt --------------------------------------------------
+# Set to the LUKS partition device (check with `lsblk` after install)
+ms_s1_luks_device: /dev/nvme0n1p3
+ms_s1_tpm_pcrs: "7"
+
+# -- GRUB ------------------------------------------------------------------
+ms_s1_grub_cmdline: "quiet pcie_aspm=off amdgpu.gttsize=98304 ttm.pages_limit=25165824"
+
+# -- SSH public key ---------------------------------------------------------
+ms_s1_ssh_pubkey_path: ~/.ssh/personal.pub
+
+# -- Ollama -----------------------------------------------------------------
+# renovate: datasource=github-releases depName=ollama/ollama
+ollama_version: "0.22.1"
+ollama_host: 127.0.0.1
+ollama_port: 11434
+ollama_keep_alive: 24h
+ollama_num_parallel: 1
+ollama_context_length: 65536
+ollama_load_timeout: 30m
+ollama_flash_attention: true
+ollama_api_key: "{{ vault_ollama_api_key }}"
+ollama_models:
+  - huihui_ai/qwen3-abliterated:latest
+  - gabegoodhart/minimax-m2.1:latest
+  - qwen3:32b
+  - qwen3-coder:latest
+
+# -- Nginx API proxy (optional) --------------------------------------------
+ollama_nginx_proxy: true
+ollama_proxy_listen: "{{ ms_s1_host_ip }}:11435"
+
+# -- Host sysctls -----------------------------------------------------------
+ms_s1_sysctls:
+  # -- Memory (Ollama GPU/DMA tuning) --
+  - name: vm.vfs_cache_pressure
+    value: "200"
+  - name: vm.min_free_kbytes
+    value: "1048576"
+  - name: vm.watermark_boost_factor
+    value: "15000"
+  - name: vm.watermark_scale_factor
+    value: "50"
+# -- Hardening sysctls -------------------------------------------------------
+ms_s1_hardening_sysctls:
+  - name: net.ipv4.conf.all.rp_filter
+    value: "1"
+  - name: net.ipv4.conf.default.rp_filter
+    value: "1"
+  - name: net.ipv4.icmp_echo_ignore_broadcasts
+    value: "1"
+  - name: net.ipv4.conf.all.accept_source_route
+    value: "0"
+  - name: net.ipv6.conf.all.accept_source_route
+    value: "0"
+  - name: net.ipv4.conf.all.accept_redirects
+    value: "0"
+  - name: net.ipv6.conf.all.accept_redirects
+    value: "0"
+  - name: net.ipv4.conf.all.send_redirects
+    value: "0"
+  - name: net.ipv4.tcp_syncookies
+    value: "1"
+  - name: net.ipv4.tcp_max_syn_backlog
+    value: "2048"
+  - name: net.ipv4.tcp_synack_retries
+    value: "2"
+  - name: net.ipv4.tcp_syn_retries
+    value: "5"
+  - name: net.ipv4.ip_forward
+    value: "0"
+  - name: net.ipv6.conf.all.forwarding
+    value: "0"
+  - name: net.ipv4.conf.all.log_martians
+    value: "1"
+  - name: net.ipv4.conf.default.log_martians
+    value: "1"
+  - name: net.ipv4.tcp_rfc1337
+    value: "1"
+  - name: kernel.yama.ptrace_scope
+    value: "1"
+  - name: kernel.dmesg_restrict
+    value: "1"
+  - name: kernel.sysrq
+    value: "176"
+  - name: kernel.randomize_va_space
+    value: "2"
+
+  # -- Network (aligned with Talos cluster tuning) --
+  - name: net.core.default_qdisc
+    value: fq
+  - name: net.core.rmem_max
+    value: "67108864"
+  - name: net.core.wmem_max
+    value: "67108864"
+  - name: net.ipv4.tcp_congestion_control
+    value: bbr
+  - name: net.ipv4.tcp_fastopen
+    value: "3"
+  - name: net.ipv4.tcp_rmem
+    value: "4096 87380 33554432"
+  - name: net.ipv4.tcp_slow_start_after_idle
+    value: "0"
+  - name: net.ipv4.tcp_wmem
+    value: "4096 65536 33554432"
+
+# -- NUT (UPS client) -------------------------------------------------------
+nut_server_host: 192.168.5.40
+nut_ups_name: cyberpower
+nut_monitor_user: upsmon
+nut_monitor_password: "{{ vault_nut_monitor_password }}"
+
+# -- Monitoring -------------------------------------------------------------
+node_exporter_port: 9100
+ollama_exporter_port: 8000
+ollama_exporter_path: /opt/ollama_exporter
+ollama_exporter_user: ollama
+nginx_exporter_port: 9113
+# renovate: datasource=github-releases depName=prometheus/node_exporter
+node_exporter_version: "1.11.1"
+# renovate: datasource=github-releases depName=nginxinc/nginx-prometheus-exporter
+nginx_exporter_version: "1.5.1"
+
+# -- Packages ---------------------------------------------------------------
+ms_s1_packages:
+  - rocm
+  - curl
+  - nginx
+  - pciutils
+  - htop
+  - tmux
+  - vim
+  - nut-client
+  - unattended-upgrades
+  - apt-listchanges
+  - cryptsetup-initramfs
+  - clevis
+  - clevis-luks
+  - clevis-initramfs
+  - clevis-tpm2
+  - tpm2-tools

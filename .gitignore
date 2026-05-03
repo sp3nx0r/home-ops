@@ -17,7 +17,7 @@
 kubeconfig
 talosconfig
 # Ansible
-ansible/.vault-password
+.ansible
 # Misc.
 .private/
 .task/

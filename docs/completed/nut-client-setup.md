@@ -9,13 +9,14 @@
                     USB
 CyberPower UPS ──────────── themberchaud (TrueNAS)
                               │  NUT server (upsd)
-                              │  192.168.5.X:3493
+                              │  192.168.5.40:3493
                               │
-              ┌───────────────┼───────────────┐
-              │               │               │
-          miirym         palarandusk       aurinax
-        NUT client        NUT client      NUT client
-       192.168.5.50      192.168.5.51    192.168.5.52
+              ┌───────────────┼───────────────┬───────────────┐
+              │               │               │               │
+          miirym         palarandusk       aurinax         sardior
+        NUT client        NUT client      NUT client      NUT client
+       192.168.5.50      192.168.5.51    192.168.5.52    192.168.5.70
+        (Talos)           (Talos)         (Talos)         (Ubuntu)
 ```
 
 The UPS connects via USB to themberchaud. TrueNAS runs the NUT server (`upsd`)

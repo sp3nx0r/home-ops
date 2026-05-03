@@ -1,0 +1,858 @@
+---
+# MS-S1 MAX Configuration — Ubuntu 26.04 LTS + Bare Metal Ollama
+# Target: Miniforum MS-S1 MAX (Ryzen AI MAX+ 395 / Radeon 8060S)
+#
+# Single-purpose GPU inference server. No hypervisor, no containers.
+# Ollama runs directly on the host as a systemd service.
+#
+# Prerequisites (manual, one-time):
+#   1. Install Ubuntu 26.04 LTS Server on the MS-S1
+#   2. Create user account with sudo, enable SSH
+#   3. Ensure ~/.ssh/personal.pub exists locally
+#
+# Usage:
+#   task ansible:ms-s1                    # full run
+#   task ansible:ms-s1:dry-run            # check mode
+#   task ansible:ms-s1 -- --tags ollama   # only ollama tasks
+#   task ansible:ms-s1 -- --tags models   # only pull models
+#
+- name: Configure MS-S1 MAX (Ubuntu 26.04 + Ollama)
+  hosts: sardior
+  gather_facts: true
+
+  tasks:
+    # ===== APT — packages =====================================================
+
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600
+      tags: [apt]
+
+    - name: Install packages
+      ansible.builtin.apt:
+        name: "{{ ms_s1_packages }}"
+        state: present
+      tags: [apt]
+
+    # ===== Unattended upgrades ==================================================
+
+    - name: Configure unattended-upgrades
+      ansible.builtin.copy:
+        dest: /etc/apt/apt.conf.d/50unattended-upgrades
+        mode: "0644"
+        content: |
+          Unattended-Upgrade::Allowed-Origins {
+              "${distro_id}:${distro_codename}";
+              "${distro_id}:${distro_codename}-security";
+              "${distro_id}ESMApps:${distro_codename}-apps-security";
+              "${distro_id}ESM:${distro_codename}-infra-security";
+              "${distro_id}:${distro_codename}-updates";
+          };
+          Unattended-Upgrade::AutoFixInterruptedDpkg "true";
+          Unattended-Upgrade::Remove-Unused-Kernel-Packages "true";
+          Unattended-Upgrade::Remove-Unused-Dependencies "true";
+          Unattended-Upgrade::Automatic-Reboot "true";
+          Unattended-Upgrade::Automatic-Reboot-Time "04:00";
+      tags: [apt, unattended-upgrades]
+
+    - name: Enable automatic apt updates
+      ansible.builtin.copy:
+        dest: /etc/apt/apt.conf.d/20auto-upgrades
+        mode: "0644"
+        content: |
+          APT::Periodic::Update-Package-Lists "1";
+          APT::Periodic::Unattended-Upgrade "1";
+          APT::Periodic::Download-Upgradeable-Packages "1";
+          APT::Periodic::AutocleanInterval "7";
+      tags: [apt, unattended-upgrades]
+
+    # ===== TPM LUKS auto-decrypt (Clevis) =======================================
+    # Clevis packages are installed via apt above, but binding requires
+    # interactive passphrase input that Ansible can't provide.
+    # See docs/ms-s1-provisioning-plan.md for manual TPM setup steps.
+
+    # ===== Sudo — passwordless for ansible user =================================
+
+    - name: Configure passwordless sudo
+      ansible.builtin.copy:
+        dest: "/etc/sudoers.d/{{ ansible_user }}"
+        content: "{{ ansible_user }} ALL=(ALL) NOPASSWD: ALL\n"
+        mode: "0440"
+        validate: /usr/sbin/visudo -cf %s
+      tags: [system]
+
+    # ===== SSH hardening ========================================================
+
+    - name: Remove cloud-init SSH override
+      ansible.builtin.file:
+        path: /etc/ssh/sshd_config.d/50-cloud-init.conf
+        state: absent
+      notify: restart sshd
+      tags: [ssh]
+
+    - name: Harden SSH configuration
+      ansible.builtin.copy:
+        dest: /etc/ssh/sshd_config.d/99-hardened.conf
+        mode: "0644"
+        content: |
+          Protocol 2
+          PermitRootLogin no
+          PasswordAuthentication no
+          KbdInteractiveAuthentication no
+          PubkeyAuthentication yes
+          AuthenticationMethods publickey
+          MaxAuthTries 3
+          MaxSessions 3
+          LoginGraceTime 30
+          X11Forwarding no
+          AllowTcpForwarding no
+          AllowAgentForwarding no
+          PermitEmptyPasswords no
+          UsePAM yes
+          KexAlgorithms sntrup761x25519-sha512@openssh.com,curve25519-sha256,curve25519-sha256@libssh.org
+          Ciphers chacha20-poly1305@openssh.com,aes256-gcm@openssh.com,aes128-gcm@openssh.com
+          MACs hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com
+          HostKeyAlgorithms ssh-ed25519,rsa-sha2-512,rsa-sha2-256
+      notify: restart sshd
+      tags: [ssh]
+
+    - name: Deploy authorized key
+      ansible.posix.authorized_key:
+        user: "{{ ansible_user }}"
+        key: "{{ lookup('file', ms_s1_ssh_pubkey_path) }}"
+        state: present
+        exclusive: true
+      tags: [ssh]
+
+    # ===== Disable unnecessary services ========================================
+
+    - name: Disable unnecessary services
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        enabled: false
+        state: stopped
+        masked: true
+      loop:
+        - bluetooth.service
+        - cups.service
+        - cups-browsed.service
+        - avahi-daemon.service
+        - avahi-daemon.socket
+      failed_when: false
+      tags: [system, hardening]
+
+    # ===== GRUB — PCIe ASPM off + amdgpu GTT sizing ==========================
+
+    - name: Configure GRUB cmdline
+      ansible.builtin.lineinfile:
+        path: /etc/default/grub
+        regexp: '^GRUB_CMDLINE_LINUX_DEFAULT='
+        line: 'GRUB_CMDLINE_LINUX_DEFAULT="{{ ms_s1_grub_cmdline }}"'
+      notify: update grub
+      tags: [grub]
+
+    # ===== System =============================================================
+
+    - name: Extend LV to use full disk
+      community.general.lvol:
+        vg: ubuntu-vg
+        lv: ubuntu-lv
+        size: +100%FREE
+        resizefs: true
+      when: ansible_lvm.lvs['ubuntu-lv'] is defined
+      tags: [system]
+
+    - name: Set hostname
+      ansible.builtin.hostname:
+        name: sardior
+      tags: [system]
+
+    - name: Ensure hostname resolves in /etc/hosts
+      ansible.builtin.lineinfile:
+        path: /etc/hosts
+        regexp: '.*sardior.*'
+        line: "{{ ms_s1_host_ip }} sardior.{{ ms_s1_domain }} sardior"
+        insertafter: '^127\.0\.0\.1'
+        state: present
+      tags: [system]
+
+    - name: Create journald drop-in directory
+      ansible.builtin.file:
+        path: /etc/systemd/journald.conf.d
+        state: directory
+        mode: "0755"
+      tags: [system]
+
+    - name: Cap journald log retention
+      ansible.builtin.copy:
+        dest: /etc/systemd/journald.conf.d/size-limit.conf
+        mode: "0644"
+        content: |
+          [Journal]
+          SystemMaxUse=2G
+          SystemKeepFree=50G
+      notify: restart journald
+      tags: [system]
+
+    # ===== GPU — ROCm =========================================================
+    # Ubuntu 26.04 ships ROCm in official repos. Just install and verify.
+
+    - name: Ensure current user is in render and video groups
+      ansible.builtin.user:
+        name: "{{ ansible_user }}"
+        groups:
+          - render
+          - video
+        append: true
+      tags: [gpu]
+
+    - name: Verify AMD GPU is accessible
+      ansible.builtin.command:
+        cmd: ls /dev/kfd
+      register: _kfd_check
+      changed_when: false
+      failed_when: _kfd_check.rc != 0
+      tags: [gpu]
+
+    # ===== PCIe NIC recovery service ==========================================
+
+    - name: Install PCIe NIC recovery script
+      ansible.builtin.copy:
+        dest: /usr/local/bin/pcie-nic-recovery.sh
+        mode: "0755"
+        content: |
+          #!/bin/bash
+          LOG_TAG="pcie-nic-recovery"
+
+          if lspci -d {{ ms_s1_realtek_pci_id }} | grep -q Realtek; then
+              logger -t $LOG_TAG "Realtek NICs detected, no recovery needed"
+              exit 0
+          fi
+
+          logger -t $LOG_TAG "Realtek NICs NOT found, attempting PCIe bridge reset..."
+
+          for BRIDGE in {{ ms_s1_realtek_bridge_addrs | join(' ') }}; do
+              if [ -e /sys/bus/pci/devices/$BRIDGE ]; then
+                  logger -t $LOG_TAG "Resetting bridge $BRIDGE"
+                  echo 1 > /sys/bus/pci/devices/$BRIDGE/reset 2>/dev/null || \
+                  setpci -s $BRIDGE BRIDGE_CONTROL.w=0x40:0x40 2>/dev/null
+                  sleep 0.5
+                  setpci -s $BRIDGE BRIDGE_CONTROL.w=0x00:0x40 2>/dev/null
+                  sleep 0.5
+              fi
+          done
+
+          sleep 1
+          logger -t $LOG_TAG "Rescanning PCI bus..."
+          echo 1 > /sys/bus/pci/rescan
+          sleep 2
+
+          if lspci -d {{ ms_s1_realtek_pci_id }} | grep -q Realtek; then
+              logger -t $LOG_TAG "SUCCESS: Realtek NICs recovered after bridge reset"
+              systemctl restart networking 2>/dev/null || true
+          else
+              logger -t $LOG_TAG "FAILED: Realtek NICs still not present after reset"
+              for BRIDGE in {{ ms_s1_realtek_bridge_addrs | join(' ') }}; do
+                  echo 1 > /sys/bus/pci/devices/$BRIDGE/remove 2>/dev/null
+              done
+              sleep 1
+              echo 1 > /sys/bus/pci/rescan
+              sleep 2
+              if lspci -d {{ ms_s1_realtek_pci_id }} | grep -q Realtek; then
+                  logger -t $LOG_TAG "SUCCESS: Realtek NICs recovered after bridge remove+rescan"
+                  systemctl restart networking 2>/dev/null || true
+              else
+                  logger -t $LOG_TAG "FAILED: Realtek NICs could not be recovered. Full power cycle needed."
+              fi
+          fi
+      tags: [nic-recovery]
+
+    - name: Install PCIe NIC recovery systemd service
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/pcie-nic-recovery.service
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=PCIe NIC recovery after dirty shutdown
+          DefaultDependencies=no
+          Before=network-pre.target systemd-networkd.service networking.service
+          After=systemd-modules-load.service
+          Wants=network-pre.target
+
+          [Service]
+          Type=oneshot
+          ExecStart=/usr/local/bin/pcie-nic-recovery.sh
+          RemainAfterExit=yes
+          TimeoutStartSec=30
+
+          [Install]
+          WantedBy=sysinit.target
+      register: _nic_recovery_service
+      tags: [nic-recovery]
+
+    - name: Enable PCIe NIC recovery service
+      ansible.builtin.systemd:
+        name: pcie-nic-recovery.service
+        enabled: true
+        daemon_reload: "{{ _nic_recovery_service.changed }}"
+      tags: [nic-recovery]
+
+    # ===== Hardware watchdog (SP5100 TCO) =====================================
+
+    - name: Load SP5100 TCO watchdog module
+      community.general.modprobe:
+        name: sp5100_tco
+        state: present
+      tags: [watchdog]
+
+    - name: Ensure SP5100 TCO loads at boot
+      ansible.builtin.copy:
+        dest: /etc/modules-load.d/sp5100-tco.conf
+        content: |
+          sp5100_tco
+        mode: "0644"
+      tags: [watchdog]
+
+    - name: Create systemd drop-in directory
+      ansible.builtin.file:
+        path: /etc/systemd/system.conf.d
+        state: directory
+        mode: "0755"
+      tags: [watchdog]
+
+    - name: Configure systemd hardware watchdog
+      ansible.builtin.copy:
+        dest: /etc/systemd/system.conf.d/watchdog.conf
+        content: |
+          [Manager]
+          RuntimeWatchdogSec=30
+          RuntimeWatchdogPreSec=15
+          RebootWatchdogSec=10min
+          WatchdogDevice=/dev/watchdog0
+        mode: "0644"
+      tags: [watchdog]
+
+    # ===== NUT client (UPS shutdown) ============================================
+
+    - name: Configure NUT mode
+      ansible.builtin.copy:
+        dest: /etc/nut/nut.conf
+        content: |
+          MODE=netclient
+        mode: "0644"
+      notify: restart nut-client
+      tags: [nut]
+
+    - name: Configure NUT upsmon
+      ansible.builtin.copy:
+        dest: /etc/nut/upsmon.conf
+        content: |
+          MONITOR {{ nut_ups_name }}@{{ nut_server_host }} 1 {{ nut_monitor_user }} {{ nut_monitor_password }} secondary
+          SHUTDOWNCMD "/sbin/shutdown -h now"
+          POLLFREQ 5
+          POLLFREQALERT 2
+          HOSTSYNC 15
+          DEADTIME 25
+          FINALDELAY 5
+        mode: "0640"
+        owner: root
+        group: nut
+      notify: restart nut-client
+      tags: [nut]
+
+    - name: Enable and start NUT client
+      ansible.builtin.systemd:
+        name: nut-client
+        enabled: true
+        state: started
+      tags: [nut]
+
+    # ===== Host sysctls =======================================================
+
+    - name: Configure host sysctls
+      ansible.posix.sysctl:
+        name: "{{ item.name }}"
+        value: "{{ item.value }}"
+        sysctl_file: /etc/sysctl.d/99-ollama-tuning.conf
+        reload: true
+        state: present
+      loop: "{{ ms_s1_sysctls }}"
+      loop_control:
+        label: "{{ item.name }}"
+      tags: [sysctl]
+
+    - name: Configure hardening sysctls
+      ansible.posix.sysctl:
+        name: "{{ item.name }}"
+        value: "{{ item.value }}"
+        sysctl_file: /etc/sysctl.d/99-hardening.conf
+        reload: true
+        state: present
+      loop: "{{ ms_s1_hardening_sysctls }}"
+      loop_control:
+        label: "{{ item.name }}"
+      tags: [sysctl, hardening]
+
+    # ===== Node exporter (host metrics) ========================================
+
+    - name: Check node exporter version
+      ansible.builtin.command:
+        cmd: /usr/local/bin/node_exporter --version
+      register: _node_exporter_version
+      changed_when: false
+      failed_when: false
+      tags: [monitoring]
+
+    - name: Download node exporter
+      vars:
+        _base: "https://github.com/prometheus/node_exporter/releases/download"
+        _file: "node_exporter-{{ node_exporter_version }}.linux-amd64.tar.gz"
+      ansible.builtin.unarchive:
+        src: "{{ _base }}/v{{ node_exporter_version }}/{{ _file }}"
+        dest: /usr/local/bin
+        remote_src: true
+        include:
+          - "node_exporter-{{ node_exporter_version }}.linux-amd64/node_exporter"
+        extra_opts:
+          - --strip-components=1
+        mode: "0755"
+      when: >-
+        _node_exporter_version.rc != 0 or
+        node_exporter_version not in (_node_exporter_version.stdout | default(''))
+      notify: restart node-exporter
+      tags: [monitoring]
+
+    - name: Create node exporter systemd service
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/node-exporter.service
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=Prometheus Node Exporter
+          After=network.target
+
+          [Service]
+          Type=simple
+          ExecStart=/usr/local/bin/node_exporter \
+            --web.listen-address=:{{ node_exporter_port }}
+          Restart=always
+          RestartSec=10
+
+          [Install]
+          WantedBy=multi-user.target
+      notify: restart node-exporter
+      tags: [monitoring]
+
+    - name: Enable and start node exporter
+      ansible.builtin.systemd:
+        name: node-exporter
+        enabled: true
+        state: started
+        daemon_reload: true
+      tags: [monitoring]
+
+    # ===== Ollama exporter (model/VRAM metrics) ===============================
+    # Pure Python, no external deps — queries /api/ps + /api/tags
+    # Based on github.com/akshaypgore/llm-ansible
+
+    - name: Ensure ollama system user exists
+      ansible.builtin.user:
+        name: "{{ ollama_exporter_user }}"
+        system: true
+        create_home: true
+        home: /home/ollama
+        shell: /usr/sbin/nologin
+      tags: [monitoring, ollama]
+
+    - name: Create ollama exporter directory
+      ansible.builtin.file:
+        path: "{{ ollama_exporter_path }}"
+        state: directory
+        owner: "{{ ollama_exporter_user }}"
+        group: "{{ ollama_exporter_user }}"
+        mode: "0755"
+      tags: [monitoring]
+
+    - name: Deploy ollama exporter script
+      ansible.builtin.template:
+        src: ollama-exporter/ollama_exporter.py.j2
+        dest: "{{ ollama_exporter_path }}/ollama_exporter.py"
+        owner: "{{ ollama_exporter_user }}"
+        group: "{{ ollama_exporter_user }}"
+        mode: "0755"
+      notify: restart ollama-exporter
+      tags: [monitoring]
+
+    - name: Deploy ollama exporter systemd service
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/ollama-exporter.service
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=Ollama Prometheus Exporter
+          After=network.target ollama.service
+          Wants=ollama.service
+
+          [Service]
+          Type=simple
+          User={{ ollama_exporter_user }}
+          ExecStart=/usr/bin/python3 {{ ollama_exporter_path }}/ollama_exporter.py
+          Restart=always
+          RestartSec=10
+          StandardOutput=journal
+          StandardError=journal
+
+          [Install]
+          WantedBy=multi-user.target
+      notify: restart ollama-exporter
+      tags: [monitoring]
+
+    # ===== Ollama =============================================================
+
+    - name: Check installed Ollama version
+      ansible.builtin.command:
+        cmd: ollama --version
+      register: _ollama_version
+      changed_when: false
+      failed_when: false
+      tags: [ollama]
+
+    - name: Download Ollama install script
+      ansible.builtin.get_url:
+        url: https://ollama.com/install.sh
+        dest: /tmp/ollama-install.sh
+        mode: "0755"
+      when: >-
+        _ollama_version.rc != 0 or
+        ollama_version not in (_ollama_version.stdout | default(''))
+      tags: [ollama]
+
+    - name: Run Ollama install script
+      ansible.builtin.command:
+        cmd: /tmp/ollama-install.sh
+      environment:
+        OLLAMA_VERSION: "{{ ollama_version }}"
+      when: >-
+        _ollama_version.rc != 0 or
+        ollama_version not in (_ollama_version.stdout | default(''))
+      timeout: 300
+      changed_when: true
+      notify: restart ollama
+      tags: [ollama]
+
+    - name: Create Ollama systemd override directory
+      ansible.builtin.file:
+        path: /etc/systemd/system/ollama.service.d
+        state: directory
+        mode: "0755"
+      tags: [ollama]
+
+    - name: Configure Ollama systemd overrides
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/ollama.service.d/override.conf
+        mode: "0644"
+        content: |
+          [Service]
+          Environment="OLLAMA_HOST={{ ollama_host }}:{{ ollama_port }}"
+          Environment="OLLAMA_KEEP_ALIVE={{ ollama_keep_alive }}"
+          Environment="OLLAMA_NUM_PARALLEL={{ ollama_num_parallel }}"
+          Environment="OLLAMA_CONTEXT_LENGTH={{ ollama_context_length }}"
+          Environment="OLLAMA_LOAD_TIMEOUT={{ ollama_load_timeout }}"
+          Environment="OLLAMA_FLASH_ATTENTION={{ ollama_flash_attention }}"
+          Environment="HSA_ENABLE_SDMA=0"
+          Environment="GPU_MAX_HW_QUEUES=1"
+      notify: restart ollama
+      tags: [ollama]
+
+    - name: Enable and start Ollama
+      ansible.builtin.systemd:
+        name: ollama
+        enabled: true
+        state: started
+        daemon_reload: true
+      tags: [ollama]
+
+    - name: Wait for Ollama to be ready
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ ollama_port }}/"
+        method: GET
+        status_code: 200
+      register: _ollama_health
+      retries: 10
+      delay: 3
+      until: _ollama_health.status == 200
+      tags: [ollama]
+
+    - name: Enable and start ollama exporter
+      ansible.builtin.systemd:
+        name: ollama-exporter
+        enabled: true
+        state: started
+        daemon_reload: true
+      tags: [monitoring, ollama]
+
+    # ===== Nginx API key proxy (optional) =====================================
+
+    - name: Configure nginx Ollama proxy
+      ansible.builtin.copy:
+        dest: /etc/nginx/sites-available/ollama
+        mode: "0644"
+        content: |
+          server {
+              listen {{ ollama_proxy_listen }};
+
+              location / {
+                  if ($http_authorization != "Bearer {{ ollama_api_key }}") {
+                      return 401 '{"error": "unauthorized"}';
+                  }
+
+                  proxy_pass http://127.0.0.1:{{ ollama_port }};
+                  proxy_set_header Host $host;
+                  proxy_set_header X-Real-IP $remote_addr;
+                  proxy_buffering off;
+                  proxy_read_timeout 600s;
+                  proxy_send_timeout 600s;
+
+                  proxy_set_header Connection "";
+                  proxy_http_version 1.1;
+                  chunked_transfer_encoding on;
+              }
+          }
+
+          server {
+              listen 127.0.0.1:8080;
+              location /stub_status {
+                  stub_status;
+              }
+          }
+      when: ollama_nginx_proxy
+      notify: restart nginx
+      tags: [nginx]
+
+    - name: Enable Ollama nginx site
+      ansible.builtin.file:
+        src: /etc/nginx/sites-available/ollama
+        dest: /etc/nginx/sites-enabled/ollama
+        state: link
+      when: ollama_nginx_proxy
+      notify: restart nginx
+      tags: [nginx]
+
+    - name: Remove default nginx site
+      ansible.builtin.file:
+        path: /etc/nginx/sites-enabled/default
+        state: absent
+      when: ollama_nginx_proxy
+      notify: restart nginx
+      tags: [nginx]
+
+    - name: Enable and start nginx
+      ansible.builtin.systemd:
+        name: nginx
+        enabled: true
+        state: started
+      when: ollama_nginx_proxy
+      tags: [nginx]
+
+    # ===== Nginx exporter (request metrics) ====================================
+
+    - name: Check nginx exporter version
+      ansible.builtin.command:
+        cmd: /usr/local/bin/nginx-prometheus-exporter --version
+      register: _nginx_exporter_version
+      ignore_errors: true
+      changed_when: false
+      tags: [monitoring]
+
+    - name: Download nginx-prometheus-exporter # noqa: yaml[line-length]
+      vars:
+        _base: "https://github.com/nginxinc/nginx-prometheus-exporter/releases/download"
+        _file: "nginx-prometheus-exporter_{{ nginx_exporter_version }}_linux_amd64.tar.gz"
+      ansible.builtin.unarchive:
+        src: "{{ _base }}/v{{ nginx_exporter_version }}/{{ _file }}"
+        dest: /usr/local/bin
+        remote_src: true
+        include:
+          - nginx-prometheus-exporter
+        mode: "0755"
+      when: _nginx_exporter_version.rc != 0 or nginx_exporter_version not in (_nginx_exporter_version.stdout | default(''))
+      notify: restart nginx-exporter
+      tags: [monitoring]
+
+    - name: Create nginx exporter systemd service
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/nginx-prometheus-exporter.service
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=NGINX Prometheus Exporter
+          After=network.target nginx.service
+          Wants=nginx.service
+
+          [Service]
+          Type=simple
+          ExecStart=/usr/local/bin/nginx-prometheus-exporter \
+            --nginx.scrape-uri=http://127.0.0.1:8080/stub_status \
+            --web.listen-address=:{{ nginx_exporter_port }}
+          Restart=always
+          RestartSec=10
+          StandardOutput=journal
+          StandardError=journal
+
+          [Install]
+          WantedBy=multi-user.target
+      notify: restart nginx-exporter
+      tags: [monitoring]
+
+    - name: Enable and start nginx exporter
+      ansible.builtin.systemd:
+        name: nginx-prometheus-exporter
+        enabled: true
+        state: started
+        daemon_reload: true
+      tags: [monitoring]
+
+    # ===== Model pulls ========================================================
+
+    - name: Pull Ollama models
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ ollama_port }}/api/pull"
+        method: POST
+        body_format: json
+        body:
+          name: "{{ item }}"
+        timeout: 1800
+      loop: "{{ ollama_models }}"
+      register: _model_pull
+      changed_when: true
+      tags: [models]
+
+    - name: Check if nothink variant exists
+      ansible.builtin.command:
+        cmd: ollama show minimax-m2.1-nothink --modelfile
+      register: _nothink_exists
+      changed_when: false
+      failed_when: false
+      tags: [models]
+
+    - name: Create nothink modelfile
+      ansible.builtin.copy:
+        dest: /tmp/nothink.modelfile
+        mode: "0644"
+        content: |
+          FROM gabegoodhart/minimax-m2.1:latest
+          SYSTEM "You must NEVER use <think> tags. Do not include <think> or </think> in your responses. Respond directly without any thinking blocks."
+          PARAMETER num_ctx 65536
+      when: _nothink_exists.rc != 0
+      tags: [models]
+
+    - name: Create minimax-m2.1-nothink model variant
+      ansible.builtin.command:
+        cmd: ollama create minimax-m2.1-nothink -f /tmp/nothink.modelfile
+      when: _nothink_exists.rc != 0
+      timeout: 120
+      changed_when: true
+      tags: [models]
+
+    # ===== Validation =========================================================
+
+    - name: Verify Ollama API responds
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ ollama_port }}/api/tags"
+        method: GET
+        status_code: 200
+      register: _ollama_tags
+      changed_when: false
+      tags: [validate]
+
+    - name: Verify GPU is detected by Ollama
+      ansible.builtin.command:
+        cmd: ollama ps
+      register: _ollama_ps
+      changed_when: false
+      tags: [validate]
+
+    - name: Print summary
+      ansible.builtin.debug:
+        msg: |
+          ============================================
+          MS-S1 configured — Ubuntu 26.04 + Ollama
+          ============================================
+          Host:           {{ ms_s1_host_ip }} (sardior.{{ ms_s1_domain }})
+          OS:             Ubuntu 26.04 LTS (Resolute Raccoon)
+          GPU:            AMD Radeon 8060S via ROCm
+          Ollama API:     http://{{ ms_s1_host_ip }}:{{ ollama_port }}
+          {% if ollama_nginx_proxy %}
+          Ollama (auth):  http://{{ ollama_proxy_listen }}
+          {% endif %}
+          Models:         {{ ollama_models | join(', ') }}
+          Monitoring:
+            - Node exporter:   http://{{ ms_s1_host_ip }}:{{ node_exporter_port }}/metrics
+            - Ollama exporter: http://{{ ms_s1_host_ip }}:{{ ollama_exporter_port }}/metrics
+            - Nginx exporter:  http://{{ ms_s1_host_ip }}:{{ nginx_exporter_port }}/metrics
+          NUT client:     {{ nut_ups_name }}@{{ nut_server_host }} (secondary)
+          TPM LUKS:       see docs/ms-s1-provisioning-plan.md for manual setup
+          Watchdog:       SP5100 TCO (30s timeout)
+          NIC recovery:   enabled (auto-resets on boot)
+          ============================================
+      tags: [validate]
+
+  handlers:
+    - name: Update GRUB
+      ansible.builtin.command:
+        cmd: update-grub
+      changed_when: true
+      listen: update grub
+
+    - name: Restart Ollama
+      ansible.builtin.systemd:
+        name: ollama
+        state: restarted
+        daemon_reload: true
+      listen: restart ollama
+
+    - name: Restart nginx
+      ansible.builtin.systemd:
+        name: nginx
+        state: restarted
+      listen: restart nginx
+
+    - name: Restart ollama-exporter
+      ansible.builtin.systemd:
+        name: ollama-exporter
+        state: restarted
+        daemon_reload: true
+      listen: restart ollama-exporter
+
+    - name: Restart NUT client
+      ansible.builtin.systemd:
+        name: nut-client
+        state: restarted
+      listen: restart nut-client
+
+    - name: Restart node exporter
+      ansible.builtin.systemd:
+        name: node-exporter
+        state: restarted
+        daemon_reload: true
+      listen: restart node-exporter
+
+    - name: Restart nginx exporter
+      ansible.builtin.systemd:
+        name: nginx-prometheus-exporter
+        state: restarted
+        daemon_reload: true
+      listen: restart nginx-exporter
+
+    - name: Restart sshd
+      ansible.builtin.systemd:
+        name: ssh
+        state: restarted
+      listen: restart sshd
+
+    - name: Restart journald
+      ansible.builtin.systemd:
+        name: systemd-journald
+        state: restarted
+      listen: restart journald

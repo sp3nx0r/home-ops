@@ -1,0 +1,147 @@
+#!/usr/bin/env python3
+"""
+Ollama Prometheus exporter — no external dependencies.
+
+Queries Ollama REST API and exposes metrics in Prometheus format.
+Based on github.com/akshaypgore/llm-ansible, extended for GPU
+monitoring (size_vram, gpu offload %) and model detail labels.
+
+API docs evaluated: 2026-05-02
+  - https://docs.ollama.com/api/ps
+  - https://docs.ollama.com/api/tags
+"""
+
+import http.server
+import json
+import time
+import urllib.request
+
+OLLAMA_HOST = "http://localhost:{{ ollama_port }}"
+EXPORTER_PORT = {{ ollama_exporter_port }}
+EXPORTER_VERSION = "1.0.0"
+
+{% raw %}
+
+def _query(path):
+    try:
+        url = f"{OLLAMA_HOST}{path}"
+        with urllib.request.urlopen(url, timeout=5) as r:
+            return json.loads(r.read())
+    except Exception:
+        return None
+
+
+def _health():
+    try:
+        with urllib.request.urlopen(OLLAMA_HOST, timeout=5) as r:
+            return 1 if r.status == 200 else 0
+    except Exception:
+        return 0
+
+
+def _labels(mdl):
+    """Build common label string from model details."""
+    d = mdl.get("details", {})
+    return (
+        f'model="{mdl.get("name", "unknown")}",'
+        f'family="{d.get("family", "")}",'
+        f'parameter_size="{d.get("parameter_size", "")}",'
+        f'quantization="{d.get("quantization_level", "")}"'
+    )
+
+
+def generate_metrics():
+    t0 = time.monotonic()
+    m = []
+
+    m.append("# HELP ollama_exporter_info Exporter metadata")
+    m.append("# TYPE ollama_exporter_info gauge")
+    m.append(f'ollama_exporter_info{{version="{EXPORTER_VERSION}"}} 1')
+
+    health = _health()
+    m.append("# HELP ollama_up Whether Ollama API is responding")
+    m.append("# TYPE ollama_up gauge")
+    m.append(f"ollama_up {health}")
+
+    # -- Running models (/api/ps) --
+    ps = _query("/api/ps")
+    models = ps.get("models", []) if ps else []
+    m.append("# HELP ollama_models_loaded Models currently in memory")
+    m.append("# TYPE ollama_models_loaded gauge")
+    m.append(f"ollama_models_loaded {len(models)}")
+
+    if models:
+        m.append("# HELP ollama_model_size_bytes Total size per loaded model")
+        m.append("# TYPE ollama_model_size_bytes gauge")
+        m.append("# HELP ollama_model_vram_bytes VRAM consumed per loaded model")
+        m.append("# TYPE ollama_model_vram_bytes gauge")
+        m.append("# HELP ollama_model_gpu_percent Percent of model offloaded to GPU")
+        m.append("# TYPE ollama_model_gpu_percent gauge")
+        m.append("# HELP ollama_model_context_length Context window of loaded model")
+        m.append("# TYPE ollama_model_context_length gauge")
+
+        for mdl in models:
+            lbl = _labels(mdl)
+            size = mdl.get("size", 0)
+            vram = mdl.get("size_vram", 0)
+            gpu_pct = (vram / size * 100) if size > 0 else 0
+            m.append(f"ollama_model_size_bytes{{{lbl}}} {size}")
+            m.append(f"ollama_model_vram_bytes{{{lbl}}} {vram}")
+            m.append(f"ollama_model_gpu_percent{{{lbl}}} {gpu_pct:.1f}")
+            ctx = mdl.get("context_length", 0)
+            m.append(f"ollama_model_context_length{{{lbl}}} {ctx}")
+
+    # -- Available models (/api/tags) --
+    tags = _query("/api/tags")
+    available = tags.get("models", []) if tags else []
+    m.append("# HELP ollama_models_available Models downloaded on disk")
+    m.append("# TYPE ollama_models_available gauge")
+    m.append(f"ollama_models_available {len(available)}")
+
+    if available:
+        m.append("# HELP ollama_model_disk_bytes Disk per model")
+        m.append("# TYPE ollama_model_disk_bytes gauge")
+        total = 0
+        for mdl in available:
+            lbl = _labels(mdl)
+            s = mdl.get("size", 0)
+            total += s
+            m.append(f"ollama_model_disk_bytes{{{lbl}}} {s}")
+        m.append("# HELP ollama_total_disk_bytes Total disk for all models")
+        m.append("# TYPE ollama_total_disk_bytes gauge")
+        m.append(f"ollama_total_disk_bytes {total}")
+
+    elapsed = time.monotonic() - t0
+    m.append("# HELP ollama_scrape_duration_seconds Time to collect metrics")
+    m.append("# TYPE ollama_scrape_duration_seconds gauge")
+    m.append(f"ollama_scrape_duration_seconds {elapsed:.4f}")
+
+    return "\n".join(m)
+
+
+class Handler(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path == "/metrics":
+            body = generate_metrics().encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(body)
+        elif self.path == "/health":
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain")
+            self.end_headers()
+            self.wfile.write(b"ok")
+        else:
+            self.send_response(404)
+            self.end_headers()
+
+    def log_message(self, format, *args):
+        pass
+
+
+if __name__ == "__main__":
+    srv = http.server.HTTPServer(("0.0.0.0", EXPORTER_PORT), Handler)
+    print(f"Ollama exporter v{EXPORTER_VERSION} on :{EXPORTER_PORT}")
+    srv.serve_forever()
+{% endraw %}

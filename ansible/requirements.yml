@@ -4,6 +4,10 @@ collections:
     version: ">=1.14.0"
   - name: community.sops
     version: ">=1.9.0"
+  - name: community.general
+    version: ">=9.0.0"
+  - name: ansible.posix
+    version: ">=1.6.0"
   - name: amazon.aws
     version: ">=8.0.0"
   - name: community.aws

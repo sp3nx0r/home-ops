@@ -41,6 +41,20 @@ tasks:
     preconditions:
       - test -f {{.ANSIBLE_VENV}}/bin/ansible-playbook
 
+  ms-s1:
+    desc: Run MS-S1 (sardior) configuration playbook
+    dir: '{{.ANSIBLE_DIR}}'
+    cmd: '{{.ANSIBLE_VENV}}/bin/ansible-playbook playbooks/ms-s1-configure.yml {{.CLI_ARGS}}'
+    preconditions:
+      - test -f {{.ANSIBLE_VENV}}/bin/ansible-playbook
+
+  ms-s1:dry-run:
+    desc: Dry run MS-S1 (sardior) configuration playbook
+    dir: '{{.ANSIBLE_DIR}}'
+    cmd: '{{.ANSIBLE_VENV}}/bin/ansible-playbook playbooks/ms-s1-configure.yml --check --diff {{.CLI_ARGS}}'
+    preconditions:
+      - test -f {{.ANSIBLE_VENV}}/bin/ansible-playbook
+
   backblaze:
     desc: Configure Backblaze B2 bucket (versioning + lifecycle)
     dir: '{{.ANSIBLE_DIR}}'
