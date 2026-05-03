@@ -16,6 +16,9 @@ spec:
       route:
         main:
           enabled: true
+          annotations:
+            gatus.home-operations.com/endpoint: |
+              name: Alertmanager
           hostnames:
             - alertmanager.securimancy.com
           parentRefs:
@@ -89,6 +92,9 @@ spec:
       route:
         main:
           enabled: true
+          annotations:
+            gatus.home-operations.com/endpoint: |
+              name: Prometheus
           hostnames:
             - prometheus.securimancy.com
           parentRefs:
