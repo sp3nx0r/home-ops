@@ -22,6 +22,12 @@ spec:
               DOWNLOADER: securimancer
               SELECTED_PROJECT: auto
               CONCURRENT_ITEMS: "3"
+              HTTP_USERNAME: securimancer
+              HTTP_PASSWORD:
+                valueFrom:
+                  secretKeyRef:
+                    name: warrior-secret
+                    key: HTTP_PASSWORD
             probes:
               liveness:
                 enabled: true
@@ -69,6 +75,17 @@ spec:
         ports:
           http:
             port: *port
+    route:
+      app:
+        hostnames:
+          - "warrior.securimancy.com"
+        parentRefs:
+          - name: envoy-internal
+            namespace: network
+        rules:
+          - backendRefs:
+              - identifier: app
+                port: *port
     persistence:
       tmp:
         type: emptyDir

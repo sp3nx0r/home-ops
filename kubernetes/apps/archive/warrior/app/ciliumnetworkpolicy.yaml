@@ -9,8 +9,10 @@ spec:
     matchLabels:
       app.kubernetes.io/name: warrior
   ingress:
-    - fromEntities:
-        - cluster
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: network
+            gateway.envoyproxy.io/owning-gateway-name: envoy-internal
       toPorts:
         - ports:
             - port: "8001"
