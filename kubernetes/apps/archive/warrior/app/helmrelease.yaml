@@ -21,13 +21,7 @@ spec:
             env:
               DOWNLOADER: securimancer
               SELECTED_PROJECT: auto
-              CONCURRENT_ITEMS: "3"
-              HTTP_USERNAME: securimancer
-              HTTP_PASSWORD:
-                valueFrom:
-                  secretKeyRef:
-                    name: warrior-secret
-                    key: HTTP_PASSWORD
+              CONCURRENT_ITEMS: "6"
             probes:
               liveness:
                 enabled: true
@@ -53,11 +47,11 @@ spec:
               capabilities: {drop: ["ALL"]}
             resources:
               requests:
-                cpu: 50m
-                memory: 512Mi
+                cpu: 150m
+                memory: 128Mi
                 ephemeral-storage: 1Gi
               limits:
-                memory: 2Gi
+                memory: 512Mi
                 ephemeral-storage: 60Gi
     defaultPodOptions:
       automountServiceAccountToken: false

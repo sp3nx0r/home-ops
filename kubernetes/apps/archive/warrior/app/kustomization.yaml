@@ -6,4 +6,3 @@ resources:
   - ./ciliumnetworkpolicy.yaml
   - ./helmrelease.yaml
   - ./ocirepository.yaml
-  - ./secret.sops.yaml
