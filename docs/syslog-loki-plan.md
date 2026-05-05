@@ -16,7 +16,7 @@
        └──────┬────────────┘
               ▼
 ┌─────────────────────────────────┐
-│  Vector (Deployment)           │  ← LoadBalancer 192.168.5.23
+│  Vector (Deployment)           │  ← LoadBalancer 192.168.5.24
 │  syslog source                 │     syslog listener for external devices
 │  → loki sink                   │
 └─────────────────────────────────┘
@@ -35,8 +35,8 @@
 └──────────────┬──────────────────┘
                ▼
 ┌─────────────────────────────────┐
-│  Garage (S3-compatible)        │  ← 3 pods, ~50MB each
-│  data on iSCSI PVC             │     backed by TrueNAS zvol
+│  Garage (S3-compatible)        │  ← 1 pod, ~50MB
+│  data on iSCSI PVC (50 Gi)     │     backed by TrueNAS zvol
 └─────────────────────────────────┘
                ▼
 ┌─────────────────────────────────┐
@@ -56,6 +56,14 @@ Future (tracing):
 ---
 
 ## Component Selection
+
+### Versions (as deployed)
+
+| Component | Chart | App Version | Image |
+|---|---|---|---|
+| Loki | grafana-community/loki 9.4.5 (OCI) | 3.7.1 | grafana/loki |
+| Vector | vectordotdev/vector 0.52.0 (OCI) | 0.55.0 | timberio/vector |
+| Garage | datahub-local/garage 0.5.0 (Helm) | v2.3.0 | dxflrs/garage |
 
 ### Log Aggregator: Grafana Loki
 
@@ -195,7 +203,7 @@ workload in the cluster where Flux manages it.
 
 | IP | Service | Protocol |
 |---|---|---|
-| **192.168.5.23** | Vector syslog listener | UDP 514 |
+| **192.168.5.24** | Vector syslog listener | UDP 514 |
 
 Cilium L2 announcement policy already covers the full 192.168.5.0/24 CIDR
 (`CiliumLoadBalancerIPPool` in `kube-system/cilium/app/networks.yaml`). No
@@ -208,7 +216,7 @@ pool changes needed.
 ### UniFi Dream Machine (192.168.5.1)
 
 1. **Settings → Logging → Remote Syslog** → enable
-2. Server: `192.168.5.23`
+2. Server: `192.168.5.24`
 3. Port: `514`
 4. Protocol: UDP
 5. Log level: Info (or Debug for more verbosity)
@@ -221,7 +229,7 @@ syslog covers: AP events, switch events, controller events, system logs.
 ### TrueNAS SCALE (192.168.5.40)
 
 1. **System → Advanced → Syslog**
-2. Remote Syslog Server: `192.168.5.23:514`
+2. Remote Syslog Server: `192.168.5.24:514`
 3. Transport: UDP
 4. Level: Info
 
@@ -349,12 +357,12 @@ source = "kubernetes"
 ### Deployment — Syslog Listener
 
 Separate Vector instance (`role: Stateless-Aggregator`, Deployment) with a
-LoadBalancer service on 192.168.5.23:514.
+LoadBalancer service on 192.168.5.24:514.
 
 ```toml
 [sources.syslog]
 type = "syslog"
-address = "0.0.0.0:514"
+address = "0.0.0.0:5140"    # high port, service maps 514 → 5140
 mode = "udp"
 
 [transforms.syslog_parse]
@@ -417,8 +425,10 @@ new `logs` folder provider.
 
 ### Deployment
 
-3 replicas for availability across nodes. Each replica uses ~50 MB RAM.
-Data stored on iSCSI PVCs provisioned by democratic-csi.
+1 replica with replication factor 1. ZFS on TrueNAS provides the
+underlying data redundancy via RAIDZ. Each replica uses ~50 MB RAM.
+Data stored on iSCSI PVCs (50 Gi data, 1 Gi meta) provisioned by
+democratic-csi.
 
 ### S3 Buckets
 
@@ -472,7 +482,7 @@ kubernetes/apps/
     │   └── app/
     │       ├── kustomization.yaml
     │       ├── helmrelease.yaml
-    │       ├── ocirepository.yaml
+    │       ├── helmrepository.yaml
     │       └── secret.sops.yaml          # Garage admin + S3 keys
     └── ... (future: other storage services)
 ```
@@ -483,11 +493,12 @@ kubernetes/apps/
 
 | Component | Instances | RAM (per) | RAM (total) | CPU (request) |
 |---|---|---|---|---|
-| Loki (single binary) | 1 | 512 MB–1 GB | ~1 GB | 100m |
-| Vector DaemonSet (Agent) | 3 (one per node) | ~30–50 MB | ~150 MB | 50m × 3 |
-| Vector syslog Deployment (Aggregator) | 1 | ~30–50 MB | ~50 MB | 50m |
-| Garage | 3 | ~50 MB | ~150 MB | 50m × 3 |
-| **Total** | | | **~1.35 GB** | **~400m** |
+| Loki (single binary) | 1 | 256 MB–1 GB | ~1 GB | 100m |
+| Loki gateway | 1 | ~32 MB | ~32 MB | (chart default) |
+| Vector DaemonSet (Agent) | 3 (one per node) | ~64 MB | ~192 MB | 25m × 3 |
+| Vector syslog Deployment (Aggregator) | 1 | ~64 MB | ~64 MB | 25m |
+| Garage | 1 | ~64 MB | ~64 MB | 50m |
+| **Total** | | | **~1.35 GB** | **~250m** |
 
 Against the cluster's 96 GB total RAM (3 × 32 GB), this is ~1.4% utilization
 for the entire logging stack.
@@ -510,17 +521,75 @@ and Loki is independent of the Prometheus stack.
 
 ---
 
+## SOPS Secrets (must be created manually)
+
+Two SOPS-encrypted secrets are required before deployment. Generate the
+credentials, then encrypt with `sops --encrypt --age <your-public-key>`.
+
+### 1. Garage Secret — `kubernetes/apps/storage/garage/app/secret.sops.yaml`
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: garage-secret
+stringData:
+  # 32-byte hex string for inter-node RPC authentication
+  GARAGE_RPC_SECRET: "<openssl rand -hex 32>"
+  # admin API bearer token
+  GARAGE_ADMIN_TOKEN: "<openssl rand -hex 32>"
+  # S3 key ID: must start with 'GK' + 24 hex chars (12 bytes)
+  GARAGE_S3_KEY_ID: "GK<openssl rand -hex 12>"
+  # S3 secret key: 64 hex chars (32 bytes)
+  GARAGE_S3_SECRET_KEY: "<openssl rand -hex 32>"
+```
+
+### 2. Loki Secret — `kubernetes/apps/o11y/loki/app/secret.sops.yaml`
+
+Must contain the **same S3 key pair** as the Garage secret above.
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: loki-secret
+stringData:
+  LOKI_S3_KEY_ID: "<same GK... value as GARAGE_S3_KEY_ID>"
+  LOKI_S3_SECRET_KEY: "<same value as GARAGE_S3_SECRET_KEY>"
+```
+
+### Quick generation script
+
+```bash
+RPC=$(openssl rand -hex 32)
+ADMIN=$(openssl rand -hex 32)
+KEY_ID="GK$(openssl rand -hex 12)"
+SECRET_KEY=$(openssl rand -hex 32)
+
+echo "GARAGE_RPC_SECRET: $RPC"
+echo "GARAGE_ADMIN_TOKEN: $ADMIN"
+echo "GARAGE_S3_KEY_ID: $KEY_ID"
+echo "GARAGE_S3_SECRET_KEY: $SECRET_KEY"
+echo "LOKI_S3_KEY_ID: $KEY_ID"
+echo "LOKI_S3_SECRET_KEY: $SECRET_KEY"
+```
+
+---
+
 ## Manual Steps (post-deploy)
 
-1. **Garage bucket creation** — after Garage pods are running, exec into a
-   Garage pod and create the `loki-chunks` and `loki-ruler` buckets, then
-   generate an S3 key pair. Alternatively, use an init Job.
-2. **UDM syslog** — Settings → Logging → enable Remote Syslog →
-   `192.168.5.23:514` UDP
-3. **TrueNAS syslog** — System → Advanced → Syslog → `192.168.5.23:514` UDP
-4. **Verify in Grafana** — navigate to Explore, select the Loki datasource,
-   query `{job="syslog"}` to confirm syslog ingestion, and `{namespace="o11y"}`
-   to confirm pod log scraping
+1. **Create SOPS secrets** — generate credentials using the script above,
+   create the two `secret.sops.yaml` files, encrypt with age, commit
+2. **Verify Garage** — `kubectl exec -n storage garage-0 -- garage status`
+   should show the node connected and buckets created
+3. **Verify Loki** — `kubectl logs -n o11y -l app.kubernetes.io/name=loki`
+   should show successful S3 connection
+4. **UDM syslog** — Settings → Logging → enable Remote Syslog →
+   `192.168.5.24:514` UDP
+5. **TrueNAS syslog** — System → Advanced → Syslog → `192.168.5.24:514` UDP
+6. **Verify in Grafana** — navigate to Explore, select the Loki datasource,
+   query `{source="syslog"}` to confirm syslog ingestion, and
+   `{source="kubernetes"}` to confirm pod log scraping
 
 ---
 

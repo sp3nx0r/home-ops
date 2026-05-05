@@ -1,0 +1,64 @@
+---
+# yaml-language-server: $schema=https://kubernetes-schemas.pages.dev/helm.toolkit.fluxcd.io/helmrelease_v2.json
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: vector
+spec:
+  chartRef:
+    kind: OCIRepository
+    name: vector
+  interval: 1h
+  values:
+    role: Agent
+
+    customConfig:
+      data_dir: /vector-data-dir
+      api:
+        enabled: true
+        address: 0.0.0.0:8686
+      sources:
+        kubernetes_logs:
+          type: kubernetes_logs
+      transforms:
+        kube_parse:
+          type: remap
+          inputs: ["kubernetes_logs"]
+          source: |
+            .namespace = .kubernetes.pod_namespace
+            .pod = .kubernetes.pod_name
+            .container = .kubernetes.container_name
+            .node = .kubernetes.pod_node_name
+            del(.kubernetes)
+            del(.file)
+      sinks:
+        loki:
+          type: loki
+          inputs: ["kube_parse"]
+          endpoint: http://loki-gateway.o11y.svc.cluster.local
+          encoding:
+            codec: json
+          labels:
+            namespace: "{{ namespace }}"
+            pod: "{{ pod }}"
+            container: "{{ container }}"
+            node: "{{ node }}"
+            source: kubernetes
+          out_of_order_action: accept
+
+    securityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop: ["ALL"]
+
+    resources:
+      requests:
+        cpu: 25m
+        memory: 64Mi
+      limits:
+        memory: 256Mi
+
+    tolerations:
+      - effect: NoSchedule
+        operator: Exists
