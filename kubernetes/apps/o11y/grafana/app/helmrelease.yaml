@@ -245,6 +245,11 @@ spec:
           datasource:
             - name: DS_PROMETHEUS
               value: Prometheus
+        truenas:
+          url: https://raw.githubusercontent.com/Unknowlars/truenas-scale-api-prometheus-exporter/main/grafana-dashboard/operations-center-dashboard.json
+          datasource:
+            - name: DS_PROMETHEUS
+              value: Prometheus
       unifi:
         unifi-pdu:
           # renovate: depName="UniFi-Poller: USW PDU Insight"
