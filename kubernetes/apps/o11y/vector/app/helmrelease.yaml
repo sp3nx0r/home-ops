@@ -39,10 +39,10 @@ spec:
           encoding:
             codec: json
           labels:
-            namespace: "{{ namespace }}"
-            pod: "{{ pod }}"
-            container: "{{ container }}"
-            node: "{{ node }}"
+            namespace: '{{ "{{ namespace }}" }}'
+            pod: '{{ "{{ pod }}" }}'
+            container: '{{ "{{ container }}" }}'
+            node: '{{ "{{ node }}" }}'
             source: kubernetes
           out_of_order_action: accept
 

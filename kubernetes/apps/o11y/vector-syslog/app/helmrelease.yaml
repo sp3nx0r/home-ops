@@ -44,10 +44,10 @@ spec:
           encoding:
             codec: json
           labels:
-            host: "{{ host }}"
-            severity: "{{ severity }}"
-            facility: "{{ facility }}"
-            app: "{{ app }}"
+            host: '{{ "{{ host }}" }}'
+            severity: '{{ "{{ severity }}" }}'
+            facility: '{{ "{{ facility }}" }}'
+            app: '{{ "{{ app }}" }}'
             source: syslog
           out_of_order_action: accept
 
