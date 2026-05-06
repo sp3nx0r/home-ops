@@ -47,6 +47,12 @@ spec:
             access: proxy
             jsonData:
               implementation: prometheus
+          - name: Loki
+            type: loki
+            url: http://loki-gateway.o11y.svc.cluster.local
+            access: proxy
+            jsonData:
+              maxLines: 1000
     sidecar:
       dashboards:
         enabled: true
@@ -109,6 +115,14 @@ spec:
             editable: true
             options:
               path: /var/lib/grafana/dashboards/unifi
+          - name: logs
+            orgId: 1
+            folder: Logs
+            type: file
+            disableDeletion: false
+            editable: true
+            options:
+              path: /var/lib/grafana/dashboards/logs
           - name: ollama
             orgId: 1
             folder: Ollama
@@ -250,6 +264,14 @@ spec:
           datasource:
             - name: DS_PROMETHEUS
               value: Prometheus
+      logs:
+        loki-quick-search:
+          # renovate: depName="Loki Dashboard quick search"
+          gnetId: 12019
+          revision: 2
+          datasource:
+            - name: DS_LOKI
+              value: Loki
       unifi:
         unifi-pdu:
           # renovate: depName="UniFi-Poller: USW PDU Insight"
