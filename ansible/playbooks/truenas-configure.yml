@@ -107,6 +107,30 @@
       changed_when: true
       tags: [system]
 
+    # ----- Syslog -------------------------------------------------------------
+
+    - name: Get current syslog config
+      ansible.builtin.command:
+        cmd: midclt call system.advanced.config
+      register: _syslog_config
+      changed_when: false
+      check_mode: false
+      tags: [syslog]
+
+    - name: Configure remote syslog
+      ansible.builtin.command:
+        cmd: >-
+          midclt call system.advanced.update
+          '{"sysloglevel": "{{ truenas_syslog_level }}",
+            "syslogserver": "{{ truenas_syslog_remote }}:{{ truenas_syslog_remote_port }}",
+            "syslog_transport": "{{ truenas_syslog_transport }}",
+            "syslog": true}'
+      when: >-
+        not (_syslog_config.stdout | from_json).syslog | default(false) or
+        (_syslog_config.stdout | from_json).syslogserver | default('') != truenas_syslog_remote + ':' + (truenas_syslog_remote_port | string)
+      changed_when: true
+      tags: [syslog]
+
     # ----- NTP ---------------------------------------------------------------
 
     - name: Query existing NTP servers
