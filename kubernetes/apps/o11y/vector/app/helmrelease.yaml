@@ -35,7 +35,13 @@ spec:
             if err == null && is_object(parsed) {
               msg = del(.message)
               . = merge!(., parsed)
-              .message = .message ?? .msg ?? msg
+              if !exists(.message) {
+                if exists(.msg) {
+                  .message = del(.msg)
+                } else {
+                  .message = msg
+                }
+              }
             }
       sinks:
         loki:
