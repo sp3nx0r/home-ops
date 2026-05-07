@@ -33,14 +33,16 @@ spec:
             del(.file)
             parsed, err = parse_json(.message)
             if err == null && is_object(parsed) {
-              msg = del(.message)
+              raw = del(.message)
               . = merge!(., parsed)
+              if exists(.msg) && !exists(.message) {
+                .message = del(.msg)
+              }
               if !exists(.message) {
-                if exists(.msg) {
-                  .message = del(.msg)
-                } else {
-                  .message = msg
-                }
+                .message = raw
+              }
+              if exists(.msg) {
+                del(.msg)
               }
             }
       sinks:
