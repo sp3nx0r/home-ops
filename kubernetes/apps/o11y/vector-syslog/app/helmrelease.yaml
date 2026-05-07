@@ -56,7 +56,7 @@ spec:
           endpoint: http://loki-gateway.o11y.svc.cluster.local
           buffer:
             type: disk
-            max_size: 67108864
+            max_size: 268435488
             when_full: drop_newest
           encoding:
             codec: json
