@@ -53,6 +53,9 @@ spec:
 
     singleBinary:
       replicas: 1
+      persistence:
+        storageClass: iscsi
+        size: 5Gi
       resources:
         requests:
           cpu: 100m
