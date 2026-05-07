@@ -21,6 +21,7 @@ spec:
         kubernetes_logs:
           type: kubernetes_logs
           ignore_older_secs: 600
+          read_from: end
       transforms:
         kube_parse:
           type: remap
