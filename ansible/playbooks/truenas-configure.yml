@@ -107,7 +107,7 @@
       changed_when: true
       tags: [system]
 
-    # ----- Syslog -------------------------------------------------------------
+    # ----- Syslog (TrueNAS 25.10+) --------------------------------------------
 
     - name: Get current syslog config
       ansible.builtin.command:
@@ -120,14 +120,19 @@
     - name: Configure remote syslog
       ansible.builtin.command:
         cmd: >-
-          midclt call system.advanced.update
-          '{"sysloglevel": "{{ truenas_syslog_level }}",
-            "syslogserver": "{{ truenas_syslog_remote }}:{{ truenas_syslog_remote_port }}",
-            "syslog_transport": "{{ truenas_syslog_transport }}",
-            "syslog": true}'
+          midclt call system.advanced.update '{{ _payload | to_json }}'
+      vars:
+        _current_servers: "{{ (_syslog_config.stdout | from_json).syslogservers | default([]) }}"
+        _desired_servers:
+          - host: "{{ truenas_syslog_remote }}"
+            transport: "{{ truenas_syslog_transport }}"
+        _payload:
+          sysloglevel: "{{ truenas_syslog_level }}"
+          syslogservers: "{{ _desired_servers }}"
       when: >-
-        not (_syslog_config.stdout | from_json).syslog | default(false) or
-        (_syslog_config.stdout | from_json).syslogserver | default('') != truenas_syslog_remote + ':' + (truenas_syslog_remote_port | string)
+        _current_servers | length == 0 or
+        _current_servers[0].host | default('') != truenas_syslog_remote or
+        _current_servers[0].transport | default('') != truenas_syslog_transport
       changed_when: true
       tags: [syslog]
 
