@@ -54,6 +54,10 @@ spec:
           type: loki
           inputs: ["syslog_parse"]
           endpoint: http://loki-gateway.o11y.svc.cluster.local
+          buffer:
+            type: disk
+            max_size: 67108864
+            when_full: drop_newest
           encoding:
             codec: json
           labels:
