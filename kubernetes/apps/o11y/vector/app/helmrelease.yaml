@@ -33,8 +33,9 @@ spec:
             del(.file)
             parsed, err = parse_json(.message)
             if err == null && is_object(parsed) {
+              msg = del(.message)
               . = merge!(., parsed)
-              del(.message)
+              .message = .message ?? .msg ?? msg
             }
       sinks:
         loki:
