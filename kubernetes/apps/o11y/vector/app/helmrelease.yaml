@@ -22,6 +22,7 @@ spec:
           type: kubernetes_logs
           ignore_older_secs: 600
           read_from: end
+          glob_minimum_cooldown_ms: 15000
       transforms:
         kube_parse:
           type: remap
@@ -57,12 +58,13 @@ spec:
             max_events: 5000
             when_full: drop_newest
           request:
-            concurrency: 2
-            rate_limit_num: 5
+            concurrency: 1
+            rate_limit_num: 3
             rate_limit_duration_secs: 1
+            retry_max_duration_secs: 10
           batch:
-            max_bytes: 524288
-            timeout_secs: 5
+            max_bytes: 262144
+            timeout_secs: 10
           encoding:
             codec: json
           labels:
@@ -72,6 +74,7 @@ spec:
             node: '{{ "{{ node }}" }}'
             source: kubernetes
           out_of_order_action: accept
+          remove_timestamp: true
 
     securityContext:
       allowPrivilegeEscalation: false
@@ -84,7 +87,7 @@ spec:
         cpu: 25m
         memory: 128Mi
       limits:
-        memory: 512Mi
+        memory: 2Gi
 
     podMonitor:
       enabled: true
