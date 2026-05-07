@@ -60,6 +60,13 @@ spec:
         loki:
           keyId: "${GARAGE_S3_KEY_ID}"
           secretKey: "${GARAGE_S3_SECRET_KEY}"
+          buckets:
+            - name: loki-chunks
+              read: true
+              write: true
+            - name: loki-ruler
+              read: true
+              write: true
       buckets:
         - name: loki-chunks
           keys:
