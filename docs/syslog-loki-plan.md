@@ -605,6 +605,204 @@ echo "LOKI_S3_SECRET_KEY: $SECRET_KEY"
 
 ---
 
+## Rollout Notes (2026-05-06)
+
+Deployed the full stack in one PR. Several issues surfaced during rollout
+that required iterative fixes pushed directly to `main`. This section
+captures the problems, fixes, and tradeoffs made under pressure that
+should be revisited with fresh eyes.
+
+### Issues Encountered
+
+#### 1. Helm Template Escaping
+
+Vector's label syntax `{{ field }}` conflicts with Helm's Go template
+engine. The CI `helm template` check failed because Helm tried to evaluate
+`{{ namespace }}` as a Go template variable.
+
+**Fix:** Escape as `{{ "{{ field }}" }}` in all HelmRelease label blocks.
+This is ugly but correct — Helm renders the outer `{{ }}`, leaving the
+literal `{{ field }}` for Vector.
+
+#### 2. Secret Management (Chicken-and-Egg)
+
+Originally created per-app SOPS secrets (`garage-secret`, `loki-secret`)
+referenced via `postBuild.substituteFrom` in the same Flux Kustomization
+that deployed them. Flux can't substitute from a secret that doesn't exist
+yet.
+
+**Fix:** Consolidated all credentials into `cluster-secrets` (already
+replicated to all namespaces via the `components/sops` Kustomization
+component). Deleted the per-app secret files.
+
+**Note:** The "SOPS Secrets" section above still describes the old per-app
+approach. The actual implementation uses `cluster-secrets`.
+
+#### 3. Garage S3 Bucket Permissions (403s)
+
+Loki got 403 Forbidden from Garage. The Garage Helm chart has two places
+that look like they control bucket permissions:
+- `clusterConfig.buckets[].keys[]` — **informational only**, does nothing
+- `clusterConfig.keys.<name>.buckets[]` — **actually grants permissions**
+
+**Fix:** Moved permission grants to `clusterConfig.keys.loki.buckets[]`
+with explicit `read: true, write: true` for each bucket.
+
+#### 4. Loki PVC Stuck Pending
+
+The Loki chart's `singleBinary` mode creates a PVC but doesn't set a
+`storageClass` by default, so it used the cluster default (none configured),
+leaving the PVC pending.
+
+**Fix:** Added `persistence.storageClass: iscsi` and `persistence.size: 5Gi`
+to the Loki HelmRelease. Had to delete the old StatefulSet and PVC to force
+recreation since StatefulSet PVC templates are immutable.
+
+#### 5. Vector OOM Cycle (the big one)
+
+This was a cascading failure that took multiple iterations to resolve:
+
+1. **Initial burst:** Vector read every pod log file from byte 0, sending
+   days of historical logs to Loki simultaneously across all 3 nodes.
+2. **Loki rejects:** Loki hit rate limits (429 Too Many Requests) and
+   rejected old entries beyond its acceptance window (400 Bad Request
+   "entry too far behind").
+3. **Retry storm:** Vector retried 429s with exponential backoff, buffering
+   all pending data in memory while waiting.
+4. **OOMKill:** Memory exceeded the 256Mi limit → OOMKilled → pod restarts
+   → Vector loses its checkpoint → reads from byte 0 again → cycle repeats.
+
+**Fixes applied (in order):**
+
+| Fix | What | Why |
+|---|---|---|
+| Raise Loki rate limits | `ingestion_rate_mb: 16`, `per_stream_rate_limit: 5MB` | Single-tenant homelab doesn't need conservative multi-tenant defaults |
+| Disk-backed buffers | `buffer.type: disk`, `max_size: 268435488` (256 MB), `when_full: drop_newest` | Spills to disk instead of RAM; drops newest entries under pressure rather than OOMing |
+| Increase Vector memory limit | 256Mi → 1Gi | Headroom for VRL transforms and in-flight batches |
+| `ignore_older_secs: 600` | Skip log files not modified in 10 minutes | Didn't actually help — see below |
+| `read_from: end` | Start reading new/unknown files from the tail | **This was the real fix** — prevents replaying old entries on restart |
+| `reject_old_samples_max_age: 168h` | Loki accepts entries up to 7 days old | Wider window so late-arriving entries get a clean 400 instead of retry storms |
+
+**Why `ignore_older_secs` didn't work:** It controls which *files* Vector
+opens, not which *lines* it reads. Pod log files are still actively written
+to (they contain both old and new lines), so Vector opens them and reads
+from the beginning regardless of the setting.
+
+#### 6. VRL Transform Refinements
+
+- `parse_json` on `.message` was double-encoding JSON logs (JSON inside
+  JSON). Fixed by merging parsed fields into the top-level event with
+  `merge!` and deleting the original `.message`.
+- Some apps use `.msg` instead of `.message`. Added normalization:
+  `if exists(.msg) && !exists(.message) { .message = del(.msg) }`
+- VRL's `??` operator threw "unnecessary error coalescing" on expressions
+  it deemed infallible. Replaced with explicit `if exists()` checks.
+
+#### 7. UniFi CEF Syslog Parsing
+
+UniFi UDM sends CEF-formatted syslog with the timestamp stuffed into the
+`hostname` field, so `.host` was a timestamp string instead of a device
+name. Added VRL regex extraction:
+
+```
+device_name, err = parse_regex(msg_str, r'UNIFIdeviceName=(?P<name>.+?)\sUNIFIdeviceModel')
+```
+
+This pulls the actual device name from the CEF payload.
+
+#### 8. TrueNAS Syslog API Change
+
+TrueNAS SCALE 25.10 deprecated the flat `syslogserver` / `syslog_transport`
+fields. The new API uses a `syslogservers` array:
+
+```json
+{"sysloglevel": "F_INFO", "syslogservers": [{"host": "192.168.5.24", "transport": "UDP"}]}
+```
+
+Updated the Ansible playbook to use `system.advanced.update` with the
+new schema.
+
+#### 9. Dashboard Issues
+
+- **Loki Quick Search (gnetId 12019)** was broken with Loki 3.x — uses
+  legacy matchers like `{job=~".*"}` which are now rejected. Replaced
+  with "Logging Dashboard via Loki v3" (gnetId 24574).
+- **New dashboards showed no data** because Prometheus wasn't scraping
+  Loki or Vector metrics. Fixed by enabling `monitoring.serviceMonitor`
+  on Loki and `podMonitor.enabled: true` on both Vector instances.
+
+---
+
+### Tradeoffs to Revisit
+
+These are deliberate compromises made to stabilize the system. They should
+be re-evaluated once things are running smoothly.
+
+#### `read_from: end` — We Skip Logs on Restart
+
+With `read_from: end`, if a Vector pod restarts (OOM, node drain, upgrade),
+any logs written to pod log files while Vector was down are **silently
+skipped**. For a homelab this is acceptable, but it means:
+- Brief log gaps after every Vector restart or node reboot
+- No backfill capability
+
+**To revisit:** Once the system is stable and no longer OOMing, consider
+switching back to `read_from: beginning` (the default) and relying on the
+disk buffer + `ignore_older_secs` to handle backfill safely. The key
+prerequisite is that the OOM cycle must be truly broken first.
+
+#### Vector Memory at 1Gi (vs. Planned ~64 MB)
+
+The original plan estimated ~64 MB per Vector Agent pod. The actual limit
+is now 1Gi — a 16x increase. Typical steady-state usage should be well
+under this (probably ~100–200 MB), but the high limit is there as a safety
+net against burst ingestion.
+
+**To revisit:** Monitor `container_memory_working_set_bytes` for Vector
+pods over a few days. If steady-state is consistently under 256 MB, lower
+the limit to 512 MB to reclaim headroom and catch regressions earlier.
+
+#### Disk Buffer Minimum Size (256 MB)
+
+The Vector Loki sink disk buffer is set to 268435488 bytes (~256 MB),
+which is the minimum allowed by Vector. This is small — a burst of logs
+at 5 MB/s would fill it in under a minute, at which point `drop_newest`
+kicks in and logs are lost.
+
+**To revisit:** Consider increasing to 1–2 GB. The iSCSI PVCs have room.
+This gives more runway during Loki maintenance windows or temporary
+rate-limit hits.
+
+#### Loki Rate Limits Are Generous
+
+The current limits (`ingestion_rate_mb: 16`, `per_stream_rate_limit: 5MB`)
+are well above what a homelab should produce in steady state. They were
+raised to survive the initial log backfill flood.
+
+**To revisit:** After a week of steady-state operation, check Loki's
+`loki_distributor_bytes_received_total` rate in Prometheus. If sustained
+ingestion is under 1 MB/s, consider tightening limits back to defaults to
+catch runaway log producers (e.g., a debug-logging app filling a stream).
+
+#### Resource Budget Outdated
+
+The "Resource Budget" table above reflects original estimates, not actual
+deployed values. Key differences:
+- Vector Agent: 64 MB planned → 1Gi actual limit (128Mi request)
+- Loki: added `persistence.storageClass: iscsi` and `persistence.size: 5Gi`
+- Total cluster RAM impact is closer to ~4 GB worst-case (3 × 1Gi Vector +
+  1Gi Loki) vs. the planned ~1.35 GB
+
+#### Secrets Section Outdated
+
+The "SOPS Secrets" section above still describes per-app secrets
+(`garage-secret`, `loki-secret`). The actual implementation consolidated
+all credentials into `cluster-secrets` at
+`kubernetes/components/sops/cluster-secrets.sops.yaml`. The per-app
+secret files were deleted.
+
+---
+
 ## Future Enhancements
 
 | Enhancement | When |
