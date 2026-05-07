@@ -53,8 +53,8 @@ spec:
           inputs: ["kube_parse"]
           endpoint: http://loki-gateway.o11y.svc.cluster.local
           buffer:
-            type: disk
-            max_size: 268435488
+            type: memory
+            max_events: 5000
             when_full: drop_newest
           request:
             concurrency: 2
@@ -84,7 +84,7 @@ spec:
         cpu: 25m
         memory: 128Mi
       limits:
-        memory: 1Gi
+        memory: 512Mi
 
     podMonitor:
       enabled: true
