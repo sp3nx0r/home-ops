@@ -101,7 +101,7 @@ collector.
 | | Alloy | Vector |
 |---|---|---|
 | Language | Go | Rust |
-| Memory footprint | ~100 MB | **~30–50 MB** |
+| Memory footprint | ~100 MB | **~30–50 MB base** (see note below) |
 | Config language | Alloy/River (Grafana-specific) | **TOML** (standard) |
 | Transform engine | `loki.process` stages | **VRL** (full expression language) |
 | Vendor lock-in | Grafana ecosystem | **Vendor-neutral**, any sink |
@@ -112,10 +112,17 @@ Key advantages:
 - **VRL (Vector Remap Language)** — a proper programming language for log
   transforms, far more powerful than Alloy's pipeline stages for parsing,
   enriching, and routing
-- **Lower memory** — ~30–50 MB per instance vs ~100 MB
 - **Career alignment** — used at work, homelab builds hands-on expertise
 - **Future trace support** — Vector can receive OTLP traces and forward to
   Tempo, acting as a basic trace pipeline until OTel Collector is needed
+
+> **Memory reality check:** Vector's advertised ~30–50 MB footprint is for
+> a bare process. The `kubernetes_logs` source maintains a Kubernetes API
+> watch, per-pod metadata, and a file reader per active container log file.
+> Observed steady-state memory scales roughly linearly with pod count:
+> ~634 Mi (15 pods), ~666 Mi (30 pods), ~1215 Mi (41 pods). Plan for
+> ~15–30 MB per pod on the node, not 30–50 MB total. The syslog Deployment
+> (push-based, no file readers) genuinely runs at ~26 Mi.
 
 Two deployment patterns:
 
@@ -252,145 +259,120 @@ system daemon logs.
 | Replication factor | 1 | Single binary mode |
 | Structured metadata | enabled | Required for schema v13 |
 
-### Helm Values (reference)
+### Helm Values (as deployed)
+
+See `kubernetes/apps/o11y/loki/app/helmrelease.yaml` for the full
+HelmRelease. Key values that differ from chart defaults:
 
 ```yaml
 loki:
   auth_enabled: false
-  schemaConfig:
-    configs:
-      - from: "2024-04-01"
-        store: tsdb
-        object_store: s3
-        schema: v13
-        index:
-          prefix: loki_index_
-          period: 24h
-  ingester:
-    chunk_encoding: snappy
-  querier:
-    max_concurrent: 2
-  pattern_ingester:
-    enabled: true
   limits_config:
-    allow_structured_metadata: true
-    volume_enabled: true
-    retention_period: 720h  # 30 days
-  compactor:
-    retention_enabled: true
-    delete_request_store: s3
+    retention_period: 720h                # 30 days
+    ingestion_rate_mb: 16                 # raised from default 4
+    ingestion_burst_size_mb: 32           # raised from default 6
+    per_stream_rate_limit: 5MB            # raised from default 3MB
+    per_stream_rate_limit_burst: 15MB     # raised from default 15MB
+    reject_old_samples: true
+    reject_old_samples_max_age: 168h      # 7 days — prevents 400s from late entries
   storage:
-    type: s3
-    bucketNames:
-      chunks: loki-chunks
-      ruler: loki-ruler
     s3:
       endpoint: garage.storage.svc.cluster.local:3900
-      region: garage
-      accessKeyId: ${GARAGE_ACCESS_KEY}
-      secretAccessKey: ${GARAGE_SECRET_KEY}
       s3ForcePathStyle: true
-      insecure: true
-  commonConfig:
-    replication_factor: 1
-
-deploymentMode: SingleBinary
+      insecure: true                      # in-cluster traffic, no TLS needed
 
 singleBinary:
-  replicas: 1
-  resources:
-    requests:
-      cpu: 100m
-      memory: 256Mi
-    limits:
-      memory: 1Gi
+  persistence:
+    storageClass: iscsi                   # TrueNAS-backed zvol
+    size: 5Gi
 
-gateway:
-  enabled: true
-
-minio:
-  enabled: false
-
-lokiCanary:
-  enabled: false
+monitoring:
+  serviceMonitor:
+    enabled: true                         # Prometheus scraping for dashboards
 ```
+
+Credentials are sourced from `cluster-secrets` via Flux `postBuild`
+variable substitution (`${LOKI_S3_KEY_ID}`, `${LOKI_S3_SECRET_KEY}`).
 
 ---
 
 ## Vector Configuration
 
+See the HelmRelease files for the full configs. This section documents
+the design decisions and tradeoffs.
+
 ### DaemonSet — Kubernetes Pod Logs
 
-Deployed via the Vector Helm chart with `role: Agent` (DaemonSet). Scrapes
-pod logs from all namespaces and forwards to Loki.
+Deployed via `role: Agent` (DaemonSet). One pod per node, scrapes pod
+logs from all namespaces.
 
-```toml
-[sources.kubernetes_logs]
-type = "kubernetes_logs"
+**Source tuning:**
 
-[transforms.kube_parse]
-type = "remap"
-inputs = ["kubernetes_logs"]
-source = '''
-.namespace = .kubernetes.pod_namespace
-.pod = .kubernetes.pod_name
-.container = .kubernetes.container_name
-.node = .kubernetes.pod_node_name
-del(.kubernetes)
-del(.file)
-'''
+| Setting | Value | Why |
+|---|---|---|
+| `read_from` | `end` | Prevents replaying entire log files on restart (see Rollout Notes §5). New files start tailing from the current end. |
 
-[sinks.loki]
-type = "loki"
-inputs = ["kube_parse"]
-endpoint = "http://loki-gateway.o11y.svc.cluster.local"
-encoding.codec = "json"
+**Transform (VRL):** Flattens Kubernetes metadata into top-level labels
+(`namespace`, `pod`, `container`, `node`), then attempts `parse_json` on
+`.message`. If the message is valid JSON, the parsed fields are merged
+into the event (avoiding double-encoded JSON). Normalizes `.msg` → `.message`
+for apps that use the non-standard key.
 
-[sinks.loki.labels]
-namespace = "{{ namespace }}"
-pod = "{{ pod }}"
-container = "{{ container }}"
-node = "{{ node }}"
-source = "kubernetes"
-```
+**Sink tuning (Loki):**
+
+| Setting | Value | Why |
+|---|---|---|
+| `buffer.type` | `memory` | Disk buffers replay stale data on restart → OOM cascade. Memory buffer drops cleanly. |
+| `buffer.max_events` | `5000` | Caps in-memory queue. At ~1 KB/event, this is ~5 MB. |
+| `buffer.when_full` | `drop_newest` | Sheds load under backpressure instead of blocking the source. |
+| `request.concurrency` | `2` | Prevents adaptive concurrency from opening too many in-flight requests during 429 storms. |
+| `request.rate_limit_num` | `10` | 10 requests/second to Loki — well above steady-state needs, low enough to avoid overwhelming a single Loki pod. |
+| `request.retry_max_duration_secs` | `30` | Caps retry backoff so a stuck batch is dropped after 30s instead of buffered indefinitely. |
+| `batch.max_bytes` | `524288` | 512 KB batches — balances throughput with memory per in-flight request. |
+| `out_of_order_action` | `accept` | Don't reject out-of-order entries; let Loki handle deduplication. |
+
+**Tradeoff — `read_from: end`:** On restart (OOM, upgrade, node drain),
+Vector skips any logs written while it was down. Checkpoints on the
+hostPath (`/var/lib/vector`) track position in files Vector has already
+seen, so only truly new/unknown files start from the end. This means:
+- Normal operation: no data loss (checkpoints track position)
+- After a crash: brief gap for logs written during the ~2s restart window
+- After wiping checkpoints: all existing log content is skipped, only new
+  writes are captured
+
+**Tradeoff — memory buffer:** During Loki downtime or sustained 429s,
+logs beyond the 5000-event buffer are dropped. For a homelab, this is
+preferable to the alternative (disk buffer → stale replay → OOM cascade →
+permanent crash loop). If durable delivery matters, the solution is
+Loki scaling (more replicas or higher rate limits), not bigger buffers.
+
+**Memory sizing (measured 2026-05-07):**
+
+| Node | Pods | Steady-state RSS |
+|---|---|---|
+| aurinax | 15 | 634 Mi |
+| miirym | 30 | 666 Mi |
+| palarandusk | 41 | 1215 Mi |
+
+Limit set to 2 Gi. Request set to 256 Mi. The high limit is deliberate —
+the DaemonSet applies a uniform limit across all nodes, so it must
+accommodate the busiest node (palarandusk).
 
 ### Deployment — Syslog Listener
 
-Separate Vector instance (`role: Stateless-Aggregator`, Deployment) with a
-LoadBalancer service on 192.168.5.24:514.
+Deployed via `role: Stateless-Aggregator` (Deployment, 1 replica).
+LoadBalancer on 192.168.5.24:514 (UDP).
 
-```toml
-[sources.syslog]
-type = "syslog"
-address = "0.0.0.0:5140"    # high port, service maps 514 → 5140
-mode = "udp"
-
-[transforms.syslog_parse]
-type = "remap"
-inputs = ["syslog"]
-source = '''
-.host = del(.hostname)
-.severity = del(.severity)
-.facility = del(.facility)
-.app = del(.appname)
-del(.procid)
-del(.msgid)
-del(.version)
-'''
-
-[sinks.loki]
-type = "loki"
-inputs = ["syslog_parse"]
-endpoint = "http://loki-gateway.o11y.svc.cluster.local"
-encoding.codec = "json"
-
-[sinks.loki.labels]
-host = "{{ host }}"
-severity = "{{ severity }}"
-facility = "{{ facility }}"
-app = "{{ app }}"
-source = "syslog"
-```
+**Key differences from the Agent:**
+- **Disk buffer is safe here.** Syslog is push-based — there's no file
+  backlog to replay on restart. A disk buffer means syslog events survive
+  Vector restarts and are delivered to Loki when it comes back.
+- **Low volume.** Two sources (UDM + TrueNAS) producing a few hundred
+  events/minute. Memory usage is ~26 Mi steady-state. 256 Mi limit is
+  generous.
+- **CEF parsing.** UniFi UDM sends syslog in CEF format with the
+  timestamp in the hostname field. VRL extracts the real device name from
+  `UNIFIdeviceName=` in the CEF payload.
 
 ---
 
@@ -409,15 +391,15 @@ Add to the existing Grafana HelmRelease `datasources.yaml`:
     maxLines: 1000
 ```
 
-### Dashboard Recommendations
+### Dashboards (as deployed)
 
-| Dashboard | gnetId | Description |
+Added to Grafana HelmRelease under a `logs` folder provider:
+
+| Dashboard | gnetId | Notes |
 |---|---|---|
-| Loki & Promtail | 10880 | Log volume, ingestion rate, error rates |
-| Loki Dashboard quick search | 12019 | Fast log search interface |
-
-These can be added to the Grafana HelmRelease `dashboards` section under a
-new `logs` folder provider.
+| Logging Dashboard via Loki v3 | 24574 | Replaced 12019 (broken with Loki 3.x legacy matchers) |
+| Loki Metrics Dashboard | 17781 | Ingestion rate, chunk stats — requires Prometheus scraping Loki |
+| Vector | 17045 | Agent/aggregator throughput, errors — requires PodMonitor |
 
 ---
 
@@ -455,53 +437,55 @@ Prometheus and Grafana. Garage gets a new `storage` namespace.
 kubernetes/apps/
 ├── o11y/
 │   ├── loki/
-│   │   ├── ks.yaml
+│   │   ├── ks.yaml                       # dependsOn: garage; substituteFrom: cluster-secrets
 │   │   └── app/
 │   │       ├── kustomization.yaml
 │   │       ├── helmrelease.yaml
-│   │       ├── ocirepository.yaml
-│   │       └── secret.sops.yaml          # Garage S3 credentials
+│   │       └── ocirepository.yaml
 │   ├── vector/
-│   │   ├── ks.yaml
+│   │   ├── ks.yaml                       # dependsOn: loki
 │   │   └── app/
 │   │       ├── kustomization.yaml
 │   │       ├── helmrelease.yaml          # DaemonSet (Agent) for pod logs
 │   │       └── ocirepository.yaml
 │   ├── vector-syslog/
-│   │   ├── ks.yaml
+│   │   ├── ks.yaml                       # dependsOn: loki
 │   │   └── app/
 │   │       ├── kustomization.yaml
 │   │       ├── helmrelease.yaml          # Deployment (Aggregator) + LoadBalancer
 │   │       └── ocirepository.yaml
 │   └── ... (existing: grafana, prometheus, etc.)
-└── storage/
-    ├── namespace.yaml
-    ├── kustomization.yaml
-    ├── garage/
-    │   ├── ks.yaml
-    │   └── app/
-    │       ├── kustomization.yaml
-    │       ├── helmrelease.yaml
-    │       ├── helmrepository.yaml
-    │       └── secret.sops.yaml          # Garage admin + S3 keys
-    └── ... (future: other storage services)
+├── storage/
+│   ├── namespace.yaml
+│   ├── kustomization.yaml                # includes components/sops for cluster-secrets
+│   ├── garage/
+│   │   ├── ks.yaml                       # substituteFrom: cluster-secrets
+│   │   └── app/
+│   │       ├── kustomization.yaml
+│   │       ├── helmrelease.yaml
+│   │       └── helmrepository.yaml
+│   └── ... (future: other storage services)
+└── components/sops/
+    └── cluster-secrets.sops.yaml         # all Garage + Loki S3 credentials
 ```
 
 ---
 
-## Resource Budget
+## Resource Budget (measured 2026-05-07)
 
-| Component | Instances | RAM (per) | RAM (total) | CPU (request) |
+| Component | Instances | Steady-state RSS | Memory limit | CPU request |
 |---|---|---|---|---|
-| Loki (single binary) | 1 | 256 MB–1 GB | ~1 GB | 100m |
-| Loki gateway | 1 | ~32 MB | ~32 MB | (chart default) |
-| Vector DaemonSet (Agent) | 3 (one per node) | ~64 MB | ~192 MB | 25m × 3 |
-| Vector syslog Deployment (Aggregator) | 1 | ~64 MB | ~64 MB | 25m |
-| Garage | 1 | ~64 MB | ~64 MB | 50m |
-| **Total** | | | **~1.35 GB** | **~250m** |
+| Loki (single binary) | 1 | ~500 Mi | 1 Gi | 100m |
+| Loki gateway | 1 | ~32 Mi | (chart default) | (chart default) |
+| Vector Agent (DaemonSet) | 3 | 634–1215 Mi (varies by pod count on node) | 2 Gi × 3 | 25m × 3 |
+| Vector syslog (Deployment) | 1 | ~26 Mi | 256 Mi | 25m |
+| Garage | 1 | ~64 Mi | 256 Mi | 50m |
+| **Worst-case total** | | | **~7.5 Gi** | **~250m** |
 
-Against the cluster's 96 GB total RAM (3 × 32 GB), this is ~1.4% utilization
-for the entire logging stack.
+The worst-case total (all pods at limit) is ~7.8% of the cluster's 96 GB.
+Measured steady-state is closer to ~3.2 Gi (~3.3%). The Vector Agent
+dominates — its memory is proportional to pod count per node, not log
+volume. See the Vector Configuration section for per-node measurements.
 
 ---
 
@@ -521,58 +505,28 @@ and Loki is independent of the Prometheus stack.
 
 ---
 
-## SOPS Secrets (must be created manually)
+## SOPS Secrets
 
-Two SOPS-encrypted secrets are required before deployment. Generate the
-credentials, then encrypt with `sops --encrypt --age <your-public-key>`.
+All credentials are consolidated in the cluster-wide secret at
+`kubernetes/components/sops/cluster-secrets.sops.yaml`. This secret is
+replicated to every namespace via the `components/sops` Kustomization
+component. Both the Garage and Loki Flux Kustomizations use
+`postBuild.substituteFrom` to reference `cluster-secrets`.
 
-### 1. Garage Secret — `kubernetes/apps/storage/garage/app/secret.sops.yaml`
+### Variables added to `cluster-secrets`
 
-```yaml
-apiVersion: v1
-kind: Secret
-metadata:
-  name: garage-secret
-stringData:
-  # 32-byte hex string for inter-node RPC authentication
-  GARAGE_RPC_SECRET: "<openssl rand -hex 32>"
-  # admin API bearer token
-  GARAGE_ADMIN_TOKEN: "<openssl rand -hex 32>"
-  # S3 key ID: must start with 'GK' + 24 hex chars (12 bytes)
-  GARAGE_S3_KEY_ID: "GK<openssl rand -hex 12>"
-  # S3 secret key: 64 hex chars (32 bytes)
-  GARAGE_S3_SECRET_KEY: "<openssl rand -hex 32>"
-```
+| Variable | Format | Used by |
+|---|---|---|
+| `GARAGE_RPC_SECRET` | 64 hex chars (`openssl rand -hex 32`) | Garage inter-node RPC |
+| `GARAGE_ADMIN_TOKEN` | 64 hex chars | Garage admin API |
+| `GARAGE_S3_KEY_ID` | `GK` + 24 hex chars (`GK$(openssl rand -hex 12)`) | Garage key binding |
+| `GARAGE_S3_SECRET_KEY` | 64 hex chars | Garage key binding |
+| `LOKI_S3_KEY_ID` | Same value as `GARAGE_S3_KEY_ID` | Loki S3 storage config |
+| `LOKI_S3_SECRET_KEY` | Same value as `GARAGE_S3_SECRET_KEY` | Loki S3 storage config |
 
-### 2. Loki Secret — `kubernetes/apps/o11y/loki/app/secret.sops.yaml`
-
-Must contain the **same S3 key pair** as the Garage secret above.
-
-```yaml
-apiVersion: v1
-kind: Secret
-metadata:
-  name: loki-secret
-stringData:
-  LOKI_S3_KEY_ID: "<same GK... value as GARAGE_S3_KEY_ID>"
-  LOKI_S3_SECRET_KEY: "<same value as GARAGE_S3_SECRET_KEY>"
-```
-
-### Quick generation script
-
-```bash
-RPC=$(openssl rand -hex 32)
-ADMIN=$(openssl rand -hex 32)
-KEY_ID="GK$(openssl rand -hex 12)"
-SECRET_KEY=$(openssl rand -hex 32)
-
-echo "GARAGE_RPC_SECRET: $RPC"
-echo "GARAGE_ADMIN_TOKEN: $ADMIN"
-echo "GARAGE_S3_KEY_ID: $KEY_ID"
-echo "GARAGE_S3_SECRET_KEY: $SECRET_KEY"
-echo "LOKI_S3_KEY_ID: $KEY_ID"
-echo "LOKI_S3_SECRET_KEY: $SECRET_KEY"
-```
+To rotate: decrypt `cluster-secrets.sops.yaml`, update the values,
+re-encrypt, commit. Both Garage and Loki will pick up the new values
+on the next Flux reconciliation.
 
 ---
 
@@ -733,73 +687,139 @@ new schema.
 
 ---
 
-### Tradeoffs to Revisit
+### Active Tradeoffs (updated 2026-05-07)
 
-These are deliberate compromises made to stabilize the system. They should
-be re-evaluated once things are running smoothly.
+These are deliberate compromises in the current configuration. Each is
+documented here so the rationale is preserved.
 
-#### `read_from: end` — We Skip Logs on Restart
+#### `read_from: end` — Brief Log Gaps on Restart
 
-With `read_from: end`, if a Vector pod restarts (OOM, node drain, upgrade),
-any logs written to pod log files while Vector was down are **silently
-skipped**. For a homelab this is acceptable, but it means:
-- Brief log gaps after every Vector restart or node reboot
-- No backfill capability
+With `read_from: end`, when Vector discovers a file it hasn't seen before
+(no checkpoint), it starts reading from the current end instead of the
+beginning. This prevents the OOM cascade described in §5 above. The
+tradeoff:
 
-**To revisit:** Once the system is stable and no longer OOMing, consider
-switching back to `read_from: beginning` (the default) and relying on the
-disk buffer + `ignore_older_secs` to handle backfill safely. The key
-prerequisite is that the OOM cycle must be truly broken first.
+- **Normal operation:** No data loss. Vector tracks file positions via
+  checkpoints on the hostPath (`/var/lib/vector`). Known files resume
+  from where they left off.
+- **After a crash:** The ~2s restart window may miss a few log lines.
+  Acceptable for a homelab.
+- **After checkpoint wipe:** All existing log content is skipped. Only new
+  writes from that point forward are captured. This is a deliberate
+  break-glass action — checkpoints should only be wiped when Vector is
+  stuck in a crash loop.
 
-#### Vector Memory at 1Gi (vs. Planned ~64 MB)
+**Why not switch back to `read_from: beginning`:** We tried this. Even
+with disk buffers, the combination of stale checkpoint replay + 429 retries
++ adaptive concurrency consistently OOMed pods on nodes with 30+ pods.
+The `kubernetes_logs` source uses ~15–30 MB per pod just for metadata and
+file readers — there isn't enough memory headroom for large replay buffers.
+Keep `read_from: end` until Vector improves memory efficiency for this
+source.
 
-The original plan estimated ~64 MB per Vector Agent pod. The actual limit
-is now 1Gi — a 16x increase. Typical steady-state usage should be well
-under this (probably ~100–200 MB), but the high limit is there as a safety
-net against burst ingestion.
+#### Memory Buffer (Agent) vs. Disk Buffer (Syslog)
 
-**To revisit:** Monitor `container_memory_working_set_bytes` for Vector
-pods over a few days. If steady-state is consistently under 256 MB, lower
-the limit to 512 MB to reclaim headroom and catch regressions earlier.
+The Agent uses `buffer.type: memory` while syslog uses `buffer.type: disk`.
+This is intentional, not an oversight:
 
-#### Disk Buffer Minimum Size (256 MB)
+| | Agent (DaemonSet) | Syslog (Deployment) |
+|---|---|---|
+| **Source type** | File-based (reads pod logs) | Push-based (receives UDP) |
+| **Replay risk** | High — disk buffer replays stale log data on restart, causing OOM | None — syslog doesn't replay |
+| **Data loss on restart** | Logs continue being written to files; Vector catches up via checkpoints | UDP datagrams sent during downtime are lost regardless of buffer type |
+| **Buffer choice** | Memory (5000 events, ~5 MB) — drops cleanly under pressure | Disk (256 MB) — survives restarts, replays to Loki |
 
-The Vector Loki sink disk buffer is set to 268435488 bytes (~256 MB),
-which is the minimum allowed by Vector. This is small — a burst of logs
-at 5 MB/s would fill it in under a minute, at which point `drop_newest`
-kicks in and logs are lost.
+#### Vector Agent Memory Limit at 2 Gi
 
-**To revisit:** Consider increasing to 1–2 GB. The iSCSI PVCs have room.
-This gives more runway during Loki maintenance windows or temporary
-rate-limit hits.
+Measured steady-state ranges from 634 Mi (15 pods) to 1215 Mi (41 pods).
+The 2 Gi limit gives ~800 Mi headroom on the busiest node. This is
+intentionally generous because:
+- DaemonSet limits are uniform across nodes — must accommodate the worst case
+- Pod count fluctuates (e.g., CronJobs, Volsync, rolling deployments)
+- Burst log volume (e.g., a pod dumping a stack trace) causes transient spikes
+
+Against the cluster's 96 GB total, 3 × 2 Gi = 6 Gi worst-case for Vector
+Agents is ~6.25% — acceptable.
 
 #### Loki Rate Limits Are Generous
 
-The current limits (`ingestion_rate_mb: 16`, `per_stream_rate_limit: 5MB`)
-are well above what a homelab should produce in steady state. They were
-raised to survive the initial log backfill flood.
+Current limits (`ingestion_rate_mb: 16`, `per_stream_rate_limit: 5MB`)
+are well above steady-state needs. They were raised to handle the initial
+backfill flood and are kept high because:
+- Single-tenant homelab — there's no noisy-neighbor risk to protect against
+- Tight limits cause 429s → Vector retries → memory pressure → OOM
+- The downside of high limits (Loki using more memory) is bounded by the
+  1 Gi memory limit on the Loki pod
 
-**To revisit:** After a week of steady-state operation, check Loki's
-`loki_distributor_bytes_received_total` rate in Prometheus. If sustained
-ingestion is under 1 MB/s, consider tightening limits back to defaults to
-catch runaway log producers (e.g., a debug-logging app filling a stream).
+**To revisit:** After a month of steady-state, check
+`loki_distributor_bytes_received_total` in Prometheus. If sustained
+ingestion is well under 1 MB/s, consider tightening to catch runaway log
+producers (e.g., a debug-logging app).
 
-#### Resource Budget Outdated
+### Continued Troubleshooting (2026-05-07)
 
-The "Resource Budget" table above reflects original estimates, not actual
-deployed values. Key differences:
-- Vector Agent: 64 MB planned → 1Gi actual limit (128Mi request)
-- Loki: added `persistence.storageClass: iscsi` and `persistence.size: 5Gi`
-- Total cluster RAM impact is closer to ~4 GB worst-case (3 × 1Gi Vector +
-  1Gi Loki) vs. the planned ~1.35 GB
+The OOM crash loop persisted after the initial fixes from 2026-05-06.
+Further investigation revealed two compounding issues.
 
-#### Secrets Section Outdated
+#### 10. Stale Checkpoint Replay
 
-The "SOPS Secrets" section above still describes per-app secrets
-(`garage-secret`, `loki-secret`). The actual implementation consolidated
-all credentials into `cluster-secrets` at
-`kubernetes/components/sops/cluster-secrets.sops.yaml`. The per-app
-secret files were deleted.
+The `read_from: end` setting only applies to files **without** a checkpoint.
+Files that Vector has previously seen resume from their checkpoint position
+(stored on the hostPath at `/var/lib/vector`). After adding `read_from: end`,
+the existing checkpoint data from before the fix was still on the host
+filesystem, so Vector continued replaying from old positions.
+
+**Fix:** Deployed busybox pods to each node to `rm -rf /var/lib/vector/*`,
+then restarted the DaemonSet. This gave Vector a clean start where all
+files are treated as "new" and start from the end.
+
+**Operational note:** If Vector gets stuck in a crash loop in the future,
+the recovery procedure is:
+1. Scale the DaemonSet to 0 (or delete the crashing pod)
+2. Run a cleanup pod on the affected node to wipe `/var/lib/vector/*`
+3. Restart the DaemonSet
+4. Accept that existing log content is skipped (only new writes captured)
+
+#### 11. Disk Buffer Replay Cascade
+
+Even after clearing checkpoints, OOMs continued. The disk buffer
+(`buffer.type: disk`) was the culprit: on each crash, Vector wrote
+pending events to the disk buffer. On restart, it replayed the buffer
+contents AND read new log files simultaneously, spiking memory. The
+replay itself could trigger 429s, which caused more buffering, creating
+a self-reinforcing OOM loop.
+
+**Fix:** Switched the Agent's Loki sink to `buffer.type: memory` with
+`max_events: 5000` and `when_full: drop_newest`. This means:
+- No stale data to replay on restart
+- Memory usage for the buffer is bounded (~5 MB for 5000 events)
+- Under Loki backpressure, new events are dropped instead of queued
+
+The syslog Deployment keeps `buffer.type: disk` because it's push-based
+and doesn't have the replay problem.
+
+#### 12. Vector Memory Scales with Pod Count
+
+With disk buffer and checkpoint issues resolved, Vector pods finally
+stabilized but at much higher memory than expected. Measured steady-state:
+- aurinax (15 pods): 634 Mi
+- miirym (30 pods): 666 Mi
+- palarandusk (41 pods): 1215 Mi
+
+This is ~15–30 MB per pod on the node. The `kubernetes_logs` source
+maintains a Kubernetes API watch, per-pod metadata, and a file reader
+per active container log file. Vector's advertised "30–50 MB" footprint
+is for the bare process without the k8s source.
+
+Memory limit raised from 512 Mi → 2 Gi to accommodate the busiest node
+with headroom. Request raised from 128 Mi → 256 Mi.
+
+#### Alert: KubeDaemonSetRolloutStuck
+
+The Vector DaemonSet crash loop triggered a `KubeDaemonSetRolloutStuck`
+alert. The alert's labels showed `pod: kube-state-metrics` (the metric
+source) which was misleading — the actual stuck resource was
+`DaemonSet o11y/vector`. Auto-resolved after stabilization.
 
 ---
 

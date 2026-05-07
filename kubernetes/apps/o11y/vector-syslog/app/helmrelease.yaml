@@ -58,6 +58,9 @@ spec:
             type: disk
             max_size: 268435488
             when_full: drop_newest
+          request:
+            concurrency: 2
+            retry_max_duration_secs: 30
           encoding:
             codec: json
           labels:
