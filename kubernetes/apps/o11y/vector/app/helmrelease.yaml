@@ -32,8 +32,8 @@ spec:
             del(.kubernetes)
             del(.file)
             parsed, err = parse_json(.message)
-            if err == null {
-              . = merge(., parsed)
+            if err == null && is_object(parsed) {
+              . = merge!(., parsed)
               del(.message)
             }
       sinks:
