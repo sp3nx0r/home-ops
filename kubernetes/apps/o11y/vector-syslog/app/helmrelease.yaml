@@ -37,13 +37,14 @@ spec:
             del(.msgid)
             del(.version)
             # UniFi sends CEF with timestamp as hostname -- extract device name
-            if contains(to_string(.message) ?? "", "CEF:") {
-              cef_parts, err = split(to_string(.message) ?? "", "|")
-              if err == null && length(cef_parts) >= 6 {
-                .app = get!(cef_parts, [1])
-                .cef_event = get!(cef_parts, [5])
+            msg_str = to_string(.message) ?? ""
+            if contains(msg_str, "CEF:") {
+              cef_parts = split(msg_str, "|")
+              if length(cef_parts) >= 6 {
+                .app = cef_parts[1]
+                .cef_event = cef_parts[5]
               }
-              device_name, err = parse_regex(to_string(.message) ?? "", r'UNIFIdeviceName=(?P<name>[^\s]+(?:\s[^\s]+)*?)\sUNIFIdeviceModel')
+              device_name, err = parse_regex(msg_str, r'UNIFIdeviceName=(?P<name>.+?)\sUNIFIdeviceModel')
               if err == null {
                 .host = device_name.name
               }
