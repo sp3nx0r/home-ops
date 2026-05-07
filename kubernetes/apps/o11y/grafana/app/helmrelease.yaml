@@ -265,10 +265,10 @@ spec:
             - name: DS_PROMETHEUS
               value: Prometheus
       logs:
-        loki-quick-search:
-          # renovate: depName="Loki Dashboard quick search"
-          gnetId: 12019
-          revision: 2
+        loki-logs:
+          # renovate: depName="Logging Dashboard via Loki v3"
+          gnetId: 24574
+          revision: 1
           datasource:
             - name: DS_LOKI
               value: Loki
