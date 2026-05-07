@@ -77,6 +77,9 @@ spec:
       limits:
         memory: 1Gi
 
+    podMonitor:
+      enabled: true
+
     tolerations:
       - effect: NoSchedule
         operator: Exists

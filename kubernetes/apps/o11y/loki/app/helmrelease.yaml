@@ -91,3 +91,11 @@ spec:
 
     test:
       enabled: false
+
+    monitoring:
+      serviceMonitor:
+        enabled: true
+      selfMonitoring:
+        enabled: false
+        grafanaAgent:
+          installOperator: false
