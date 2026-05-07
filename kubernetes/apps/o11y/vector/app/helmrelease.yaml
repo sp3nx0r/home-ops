@@ -31,6 +31,11 @@ spec:
             .node = .kubernetes.pod_node_name
             del(.kubernetes)
             del(.file)
+            parsed, err = parse_json(.message)
+            if err == null {
+              . = merge(., parsed)
+              del(.message)
+            }
       sinks:
         loki:
           type: loki
