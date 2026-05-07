@@ -56,6 +56,13 @@ spec:
             type: disk
             max_size: 268435488
             when_full: drop_newest
+          request:
+            concurrency: 2
+            rate_limit_num: 5
+            rate_limit_duration_secs: 1
+          batch:
+            max_bytes: 524288
+            timeout_secs: 5
           encoding:
             codec: json
           labels:
