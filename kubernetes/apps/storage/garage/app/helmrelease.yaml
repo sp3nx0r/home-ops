@@ -56,6 +56,8 @@ spec:
       layout:
         enabled: true
         zone: dc1
+      # Key format: keyId = "GK" + 24 hex chars (openssl rand -hex 12)
+      # Secret format: 64 hex chars / 32 bytes (openssl rand -hex 32)
       keys:
         loki:
           keyId: "${GARAGE_S3_KEY_ID}"
