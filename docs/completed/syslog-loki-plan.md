@@ -602,17 +602,7 @@ that look like they control bucket permissions:
 **Fix:** Moved permission grants to `clusterConfig.keys.loki.buckets[]`
 with explicit `read: true, write: true` for each bucket.
 
-#### 4. Loki PVC Stuck Pending
-
-The Loki chart's `singleBinary` mode creates a PVC but doesn't set a
-`storageClass` by default, so it used the cluster default (none configured),
-leaving the PVC pending.
-
-**Fix:** Added `persistence.storageClass: iscsi` and `persistence.size: 5Gi`
-to the Loki HelmRelease. Had to delete the old StatefulSet and PVC to force
-recreation since StatefulSet PVC templates are immutable.
-
-#### 5. Vector OOM Cycle (the big one)
+#### 4. Vector OOM Cycle (the big one)
 
 This was a cascading failure that took multiple iterations to resolve:
 
@@ -641,49 +631,6 @@ This was a cascading failure that took multiple iterations to resolve:
 opens, not which *lines* it reads. Pod log files are still actively written
 to (they contain both old and new lines), so Vector opens them and reads
 from the beginning regardless of the setting.
-
-#### 6. VRL Transform Refinements
-
-- `parse_json` on `.message` was double-encoding JSON logs (JSON inside
-  JSON). Fixed by merging parsed fields into the top-level event with
-  `merge!` and deleting the original `.message`.
-- Some apps use `.msg` instead of `.message`. Added normalization:
-  `if exists(.msg) && !exists(.message) { .message = del(.msg) }`
-- VRL's `??` operator threw "unnecessary error coalescing" on expressions
-  it deemed infallible. Replaced with explicit `if exists()` checks.
-
-#### 7. UniFi CEF Syslog Parsing
-
-UniFi UDM sends CEF-formatted syslog with the timestamp stuffed into the
-`hostname` field, so `.host` was a timestamp string instead of a device
-name. Added VRL regex extraction:
-
-```
-device_name, err = parse_regex(msg_str, r'UNIFIdeviceName=(?P<name>.+?)\sUNIFIdeviceModel')
-```
-
-This pulls the actual device name from the CEF payload.
-
-#### 8. TrueNAS Syslog API Change
-
-TrueNAS SCALE 25.10 deprecated the flat `syslogserver` / `syslog_transport`
-fields. The new API uses a `syslogservers` array:
-
-```json
-{"sysloglevel": "F_INFO", "syslogservers": [{"host": "192.168.5.24", "transport": "UDP"}]}
-```
-
-Updated the Ansible playbook to use `system.advanced.update` with the
-new schema.
-
-#### 9. Dashboard Issues
-
-- **Loki Quick Search (gnetId 12019)** was broken with Loki 3.x — uses
-  legacy matchers like `{job=~".*"}` which are now rejected. Replaced
-  with "Logging Dashboard via Loki v3" (gnetId 24574).
-- **New dashboards showed no data** because Prometheus wasn't scraping
-  Loki or Vector metrics. Fixed by enabling `monitoring.serviceMonitor`
-  on Loki and `podMonitor.enabled: true` on both Vector instances.
 
 ---
 
@@ -728,18 +675,6 @@ This is intentional, not an oversight:
 | **Replay risk** | High — disk buffer replays stale log data on restart, causing OOM | None — syslog doesn't replay |
 | **Data loss on restart** | Logs continue being written to files; Vector catches up via checkpoints | UDP datagrams sent during downtime are lost regardless of buffer type |
 | **Buffer choice** | Memory (5000 events, ~5 MB) — drops cleanly under pressure | Disk (256 MB) — survives restarts, replays to Loki |
-
-#### Vector Agent Memory Limit at 2 Gi
-
-Measured steady-state ranges from 634 Mi (15 pods) to 1215 Mi (41 pods).
-The 2 Gi limit gives ~800 Mi headroom on the busiest node. This is
-intentionally generous because:
-- DaemonSet limits are uniform across nodes — must accommodate the worst case
-- Pod count fluctuates (e.g., CronJobs, Volsync, rolling deployments)
-- Burst log volume (e.g., a pod dumping a stack trace) causes transient spikes
-
-Against the cluster's 96 GB total, 3 × 2 Gi = 6 Gi worst-case for Vector
-Agents is ~6.25% — acceptable.
 
 #### Loki Rate Limits Are Generous
 
@@ -813,13 +748,6 @@ is for the bare process without the k8s source.
 
 Memory limit raised from 512 Mi → 2 Gi to accommodate the busiest node
 with headroom. Request raised from 128 Mi → 256 Mi.
-
-#### Alert: KubeDaemonSetRolloutStuck
-
-The Vector DaemonSet crash loop triggered a `KubeDaemonSetRolloutStuck`
-alert. The alert's labels showed `pod: kube-state-metrics` (the metric
-source) which was misleading — the actual stuck resource was
-`DaemonSet o11y/vector`. Auto-resolved after stabilization.
 
 ---
 

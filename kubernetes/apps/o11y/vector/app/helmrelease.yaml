@@ -21,6 +21,8 @@ spec:
         kubernetes_logs:
           type: kubernetes_logs
           read_from: end
+        internal_metrics:
+          type: internal_metrics
       transforms:
         kube_parse:
           type: remap
@@ -32,6 +34,8 @@ spec:
             .node = .kubernetes.pod_node_name
             del(.kubernetes)
             del(.file)
+            del(.source_type)
+
             parsed, err = parse_json(.message)
             if err == null && is_object(parsed) {
               raw = del(.message)
@@ -46,10 +50,35 @@ spec:
                 del(.msg)
               }
             }
+
+            if !exists(.level) && exists(.severity) {
+              .level = del(.severity)
+            }
+            if !exists(.level) {
+              msg = to_string(.message) ?? ""
+              if starts_with(msg, "E") || contains(msg, " [error]") || contains(msg, "\"level\":\"error\"") || contains(msg, "level=error") {
+                .level = "error"
+              } else if starts_with(msg, "W") || contains(msg, " [warn") || contains(msg, "\"level\":\"warn") || contains(msg, "level=warn") {
+                .level = "warn"
+              } else if starts_with(msg, "I") || contains(msg, " [info]") || contains(msg, "\"level\":\"info\"") || contains(msg, "level=info") {
+                .level = "info"
+              } else if starts_with(msg, "D") || contains(msg, " [debug]") || contains(msg, "\"level\":\"debug\"") || contains(msg, "level=debug") {
+                .level = "debug"
+              }
+            }
+            if exists(.level) {
+              .level = downcase!(to_string!(.level))
+            }
+        kube_filter:
+          type: filter
+          inputs: ["kube_parse"]
+          condition: |
+            msg = to_string(.message) ?? ""
+            !contains(msg, "kube-probe") && !contains(msg, "Gatus/1.0")
       sinks:
         loki:
           type: loki
-          inputs: ["kube_parse"]
+          inputs: ["kube_filter"]
           endpoint: http://loki-gateway.o11y.svc.cluster.local
           buffer:
             type: memory
@@ -72,6 +101,10 @@ spec:
             node: '{{ "{{ node }}" }}'
             source: kubernetes
           out_of_order_action: accept
+        prometheus_exporter:
+          type: prometheus_exporter
+          inputs: ["internal_metrics"]
+          address: 0.0.0.0:9090
 
     securityContext:
       allowPrivilegeEscalation: false
@@ -82,7 +115,7 @@ spec:
     resources:
       requests:
         cpu: 25m
-        memory: 256Mi
+        memory: 512Mi
       limits:
         memory: 2Gi
 

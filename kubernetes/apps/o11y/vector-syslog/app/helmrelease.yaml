@@ -24,6 +24,8 @@ spec:
           type: syslog
           address: 0.0.0.0:5140
           mode: udp
+        internal_metrics:
+          type: internal_metrics
       transforms:
         syslog_parse:
           type: remap
@@ -70,6 +72,10 @@ spec:
             app: '{{ "{{ app }}" }}'
             source: syslog
           out_of_order_action: accept
+        prometheus_exporter:
+          type: prometheus_exporter
+          inputs: ["internal_metrics"]
+          address: 0.0.0.0:9090
 
     service:
       enabled: true

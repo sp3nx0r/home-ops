@@ -268,7 +268,7 @@ spec:
         loki-logs:
           # renovate: depName="Logging Dashboard via Loki v3"
           gnetId: 24574
-          revision: 1
+          revision: 2
           datasource:
             - name: DS_LOKI
               value: Loki
@@ -280,12 +280,14 @@ spec:
             - name: DS_PROMETHEUS
               value: Prometheus
         vector:
-          # renovate: depName="Vector"
-          gnetId: 17045
+          # renovate: depName="Vector Monitoring"
+          gnetId: 19649
           revision: 1
           datasource:
-            - name: DS_PROMETHEUS
+            - name: DS_MIMIR
               value: Prometheus
+            - name: DS_LOKI
+              value: Loki
       unifi:
         unifi-pdu:
           # renovate: depName="UniFi-Poller: USW PDU Insight"
