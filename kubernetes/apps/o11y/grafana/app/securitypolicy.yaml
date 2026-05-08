@@ -1,0 +1,31 @@
+---
+# yaml-language-server: $schema=https://kubernetes-schemas.pages.dev/gateway.envoyproxy.io/securitypolicy_v1alpha1.json
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: SecurityPolicy
+metadata:
+  name: grafana-oidc
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: grafana
+  oidc:
+    provider:
+      issuer: "https://id.${SECRET_DOMAIN}"
+    clientID: "${GRAFANA_OIDC_CLIENT_ID}"
+    clientSecret:
+      name: grafana-oidc-secret
+    redirectURL: "https://grafana.${SECRET_DOMAIN}/oauth2/callback"
+    logoutPath: "/logout"
+    cookieDomain: "${SECRET_DOMAIN}"
+    cookieNameOverrides:
+      - name: IdToken
+        value: grafana-id-token
+      - name: AccessToken
+        value: grafana-access-token
+    forwardAccessToken: true
+    scopes:
+      - openid
+      - profile
+      - email
+      - groups
