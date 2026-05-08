@@ -8,6 +8,7 @@ spec:
   dependsOn:
     - name: kube-prometheus-stack
     - name: pocket-id
+      namespace: security
   interval: 1h
   path: ./kubernetes/apps/o11y/grafana/app
   postBuild:
