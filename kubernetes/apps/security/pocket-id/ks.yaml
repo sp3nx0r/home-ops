@@ -8,6 +8,9 @@ spec:
   interval: 1h
   path: ./kubernetes/apps/security/pocket-id/app
   postBuild:
+    substitute:
+      APP: pocket-id
+      VOLSYNC_CAPACITY: "2Gi"
     substituteFrom:
       - name: cluster-secrets
         kind: Secret
@@ -18,3 +21,6 @@ spec:
     namespace: flux-system
   targetNamespace: security
   wait: true
+  dependsOn:
+    - name: volsync
+      namespace: volsync-system
