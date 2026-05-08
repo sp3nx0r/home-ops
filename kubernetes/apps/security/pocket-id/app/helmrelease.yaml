@@ -29,6 +29,13 @@ spec:
               OTEL_METRICS_EXPORTER: "prometheus"
               OTEL_EXPORTER_PROMETHEUS_HOST: "0.0.0.0"
               OTEL_EXPORTER_PROMETHEUS_PORT: "9464"
+              FILE_BACKEND: "s3"
+              S3_BUCKET: "pocket-id"
+              S3_REGION: "garage"
+              S3_ENDPOINT: "http://garage.storage.svc.cluster.local:3900"
+              S3_ACCESS_KEY_ID: "${POCKET_ID_S3_KEY_ID}"
+              S3_SECRET_ACCESS_KEY: "${POCKET_ID_S3_SECRET_KEY}"
+              S3_FORCE_PATH_STYLE: "true"
             envFrom:
               - secretRef:
                   name: pocket-id-secret

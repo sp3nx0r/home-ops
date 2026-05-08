@@ -67,6 +67,13 @@ spec:
             - name: loki-ruler
               read: true
               write: true
+        pocket-id:
+          keyId: "${POCKET_ID_S3_KEY_ID}"
+          secretKey: "${POCKET_ID_S3_SECRET_KEY}"
+          buckets:
+            - name: pocket-id
+              read: true
+              write: true
       buckets:
         - name: loki-chunks
           keys:
@@ -75,6 +82,10 @@ spec:
         - name: loki-ruler
           keys:
             - name: loki
+              permissions: ["read", "write"]
+        - name: pocket-id
+          keys:
+            - name: pocket-id
               permissions: ["read", "write"]
 
     monitoring:
