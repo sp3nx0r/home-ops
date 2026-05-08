@@ -8,7 +8,10 @@ ansible_python_interpreter: /usr/bin/python3
 # -- Network ----------------------------------------------------------------
 ms_s1_host_ip: 192.168.5.70
 ms_s1_gateway: 192.168.5.1
+ms_s1_dns: 192.168.5.1
 ms_s1_domain: securimancy.com
+ms_s1_sfp_mac: "24:8a:07:f7:1f:50"
+ms_s1_sfp_interface: enp101s0
 
 # -- Realtek NIC PCI info (for recovery script) ----------------------------
 ms_s1_realtek_pci_id: "10ec:8127"
@@ -29,7 +32,7 @@ ms_s1_ssh_pubkey_path: ~/.ssh/personal.pub
 
 # -- Ollama -----------------------------------------------------------------
 # renovate: datasource=github-releases depName=ollama/ollama
-ollama_version: v0.23.0
+ollama_version: v0.23.2
 ollama_host: 127.0.0.1
 ollama_port: 11434
 ollama_keep_alive: 24h
@@ -39,10 +42,9 @@ ollama_load_timeout: 30m
 ollama_flash_attention: true
 ollama_api_key: "{{ vault_ollama_api_key }}"
 ollama_models:
-  - huihui_ai/qwen3-abliterated:latest
-  - gabegoodhart/minimax-m2.1:latest
-  - qwen3:32b
-  - qwen3-coder:latest
+  - qwen3-coder:30b
+  - qwen3.5:35b
+  - gemma4:e4b
 
 # -- Nginx API proxy (optional) --------------------------------------------
 ollama_nginx_proxy: true

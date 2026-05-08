@@ -215,6 +215,40 @@
       failed_when: _kfd_check.rc != 0
       tags: [gpu]
 
+    # ===== Network — SFP+ (Mellanox ConnectX-3) ================================
+
+    - name: Configure netplan for SFP+ interface
+      ansible.builtin.copy:
+        dest: /etc/netplan/10-sfp.yaml
+        mode: "0600"
+        content: |
+          network:
+            version: 2
+            ethernets:
+              {{ ms_s1_sfp_interface }}:
+                addresses:
+                  - {{ ms_s1_host_ip }}/24
+                routes:
+                  - to: default
+                    via: {{ ms_s1_gateway }}
+                nameservers:
+                  addresses:
+                    - {{ ms_s1_dns }}
+                  search:
+                    - {{ ms_s1_domain }}
+                match:
+                  macaddress: "{{ ms_s1_sfp_mac }}"
+                set-name: {{ ms_s1_sfp_interface }}
+      notify: apply netplan
+      tags: [network]
+
+    - name: Remove installer netplan config
+      ansible.builtin.file:
+        path: /etc/netplan/00-installer-config.yaml
+        state: absent
+      notify: apply netplan
+      tags: [network]
+
     # ===== PCIe NIC recovery service ==========================================
 
     - name: Install PCIe NIC recovery script
@@ -525,17 +559,17 @@
         mode: "0755"
       when: >-
         _ollama_version.rc != 0 or
-        ollama_version not in (_ollama_version.stdout | default(''))
+        (ollama_version | regex_replace('^v', '')) not in (_ollama_version.stdout | default(''))
       tags: [ollama]
 
     - name: Run Ollama install script
       ansible.builtin.command:
         cmd: /tmp/ollama-install.sh
       environment:
-        OLLAMA_VERSION: "{{ ollama_version }}"
+        OLLAMA_VERSION: "{{ ollama_version | regex_replace('^v', '') }}"
       when: >-
         _ollama_version.rc != 0 or
-        ollama_version not in (_ollama_version.stdout | default(''))
+        (ollama_version | regex_replace('^v', '')) not in (_ollama_version.stdout | default(''))
       timeout: 300
       changed_when: true
       notify: restart ollama
@@ -728,33 +762,6 @@
       changed_when: true
       tags: [models]
 
-    - name: Check if nothink variant exists
-      ansible.builtin.command:
-        cmd: ollama show minimax-m2.1-nothink --modelfile
-      register: _nothink_exists
-      changed_when: false
-      failed_when: false
-      tags: [models]
-
-    - name: Create nothink modelfile
-      ansible.builtin.copy:
-        dest: /tmp/nothink.modelfile
-        mode: "0644"
-        content: |
-          FROM gabegoodhart/minimax-m2.1:latest
-          SYSTEM "You must NEVER use <think> tags. Do not include <think> or </think> in your responses. Respond directly without any thinking blocks."
-          PARAMETER num_ctx 65536
-      when: _nothink_exists.rc != 0
-      tags: [models]
-
-    - name: Create minimax-m2.1-nothink model variant
-      ansible.builtin.command:
-        cmd: ollama create minimax-m2.1-nothink -f /tmp/nothink.modelfile
-      when: _nothink_exists.rc != 0
-      timeout: 120
-      changed_when: true
-      tags: [models]
-
     # ===== Validation =========================================================
 
     - name: Verify Ollama API responds
@@ -856,3 +863,9 @@
         name: systemd-journald
         state: restarted
       listen: restart journald
+
+    - name: Apply netplan
+      ansible.builtin.command:
+        cmd: netplan apply
+      changed_when: true
+      listen: apply netplan
