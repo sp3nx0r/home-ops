@@ -22,8 +22,13 @@ spec:
             env:
               APP_URL: "https://id.${SECRET_DOMAIN}"
               TRUST_PROXY: "true"
-              MAXMIND_LICENSE_KEY: ""
-              DB_CONNECTION_STRING: "data/pocket-id.db"
+              DB_CONNECTION_STRING: "/app/data/pocket-id.db"
+              ANALYTICS_DISABLED: "true"
+              VERSION_CHECK_DISABLED: "true"
+              METRICS_ENABLED: "true"
+              OTEL_METRICS_EXPORTER: "prometheus"
+              OTEL_EXPORTER_PROMETHEUS_HOST: "0.0.0.0"
+              OTEL_EXPORTER_PROMETHEUS_PORT: "9464"
             envFrom:
               - secretRef:
                   name: pocket-id-secret
@@ -62,6 +67,8 @@ spec:
         ports:
           http:
             port: *port
+          metrics:
+            port: 9464
     route:
       app:
         hostnames:
@@ -74,6 +81,15 @@ spec:
           - backendRefs:
               - identifier: app
                 port: *port
+    serviceMonitor:
+      app:
+        serviceName: pocket-id
+        endpoints:
+          - port: metrics
+            scheme: http
+            path: /metrics
+            interval: 1m
+            scrapeTimeout: 10s
     persistence:
       data:
         existingClaim: pocket-id
