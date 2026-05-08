@@ -18,11 +18,9 @@ spec:
     redirectURL: "https://grafana.${SECRET_DOMAIN}/oauth2/callback"
     logoutPath: "/logout"
     cookieDomain: "${SECRET_DOMAIN}"
-    cookieNameOverrides:
-      - name: IdToken
-        value: grafana-id-token
-      - name: AccessToken
-        value: grafana-access-token
+    cookieNames:
+      idToken: grafana-id-token
+      accessToken: grafana-access-token
     forwardAccessToken: true
     scopes:
       - openid
