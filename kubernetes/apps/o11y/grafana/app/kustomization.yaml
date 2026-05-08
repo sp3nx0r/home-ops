@@ -6,7 +6,8 @@ resources:
   - ./helmrelease.yaml
   - ./ocirepository.yaml
   - ./secret.sops.yaml
-  - ./securitypolicy.yaml
+  # - ./oidc-secret.sops.yaml
+  # - ./securitypolicy.yaml
 configMapGenerator:
   - name: grafana-dashboard-ollama
     files:
