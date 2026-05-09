@@ -25,6 +25,7 @@ spec:
           name: headlamp-oidc
       extraArgs:
         - -oidc-callback-url=https://headlamp.securimancy.com/oidc-callback
+        - -oidc-use-pkce=false
     clusterRoleBinding:
       create: true
       clusterRoleName: view
