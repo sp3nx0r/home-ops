@@ -252,13 +252,6 @@ spec:
           datasource:
             - name: DS_PROMETHEUS
               value: Prometheus
-        spegel:
-          # renovate: depName="Spegel Monitoring Dashboard"
-          gnetId: 22104
-          revision: 1
-          datasource:
-            - name: DS_PROMETHEUS
-              value: Prometheus
       system:
         node-exporter-full:
           # renovate: depName="Node Exporter Full"
