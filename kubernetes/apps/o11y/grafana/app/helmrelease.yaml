@@ -46,7 +46,7 @@ spec:
         use_pkce: false
         allow_sign_up: true
         auto_login: true
-        role_attribute_path: contains(groups[*], 'admin') && 'GrafanaAdmin' || 'Viewer'
+        role_attribute_path: contains(groups[*], 'grafana_admin') && 'GrafanaAdmin' || 'Viewer'
     datasources:
       datasources.yaml:
         apiVersion: 1
