@@ -16,11 +16,5 @@ spec:
     service:
       registry:
         hostPort: 29999
-    grafanaDashboard:
-      enabled: true
-      labels:
-        grafana_dashboard: "1"
-      annotations:
-        grafana_folder: Kubernetes
     serviceMonitor:
       enabled: true

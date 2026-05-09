@@ -252,6 +252,11 @@ spec:
           datasource:
             - name: DS_PROMETHEUS
               value: Prometheus
+        spegel:
+          url: https://raw.githubusercontent.com/spegel-org/spegel/main/charts/spegel/monitoring/grafana-dashboard.json
+          datasource:
+            - name: DS_PROMETHEUS
+              value: Prometheus
       system:
         node-exporter-full:
           # renovate: depName="Node Exporter Full"
