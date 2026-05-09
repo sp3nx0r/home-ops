@@ -349,6 +349,11 @@ truenas_cloudsync_tasks:
     hour: "0"
     minute: "30"
 
+# -- Syslog -------------------------------------------------------------------
+truenas_syslog_remote: "192.168.5.24"
+truenas_syslog_transport: UDP
+truenas_syslog_level: F_INFO
+
 # -- Config Backup -------------------------------------------------------------
 truenas_config_backup_path: "/mnt/{{ truenas_pool }}/backups/truenas-config"
 truenas_config_backup_retain_days: 14

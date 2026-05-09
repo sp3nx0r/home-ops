@@ -21,8 +21,10 @@ env:
 includes:
   ansible: .taskfiles/ansible
   bootstrap: .taskfiles/bootstrap
+  kubernetes: .taskfiles/kubernetes
   pre-commit: .taskfiles/pre-commit
   talos: .taskfiles/talos
+  volsync: .taskfiles/volsync
 
 tasks:
 

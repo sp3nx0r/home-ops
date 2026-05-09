@@ -107,6 +107,35 @@
       changed_when: true
       tags: [system]
 
+    # ----- Syslog (TrueNAS 25.10+) --------------------------------------------
+
+    - name: Get current syslog config
+      ansible.builtin.command:
+        cmd: midclt call system.advanced.config
+      register: _syslog_config
+      changed_when: false
+      check_mode: false
+      tags: [syslog]
+
+    - name: Configure remote syslog
+      ansible.builtin.command:
+        cmd: >-
+          midclt call system.advanced.update '{{ _payload | to_json }}'
+      vars:
+        _current_servers: "{{ (_syslog_config.stdout | from_json).syslogservers | default([]) }}"
+        _desired_servers:
+          - host: "{{ truenas_syslog_remote }}"
+            transport: "{{ truenas_syslog_transport }}"
+        _payload:
+          sysloglevel: "{{ truenas_syslog_level }}"
+          syslogservers: "{{ _desired_servers }}"
+      when: >-
+        _current_servers | length == 0 or
+        _current_servers[0].host | default('') != truenas_syslog_remote or
+        _current_servers[0].transport | default('') != truenas_syslog_transport
+      changed_when: true
+      tags: [syslog]
+
     # ----- NTP ---------------------------------------------------------------
 
     - name: Query existing NTP servers

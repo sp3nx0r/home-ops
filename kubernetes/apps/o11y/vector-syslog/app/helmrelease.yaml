@@ -1,0 +1,112 @@
+---
+# yaml-language-server: $schema=https://kubernetes-schemas.pages.dev/helm.toolkit.fluxcd.io/helmrelease_v2.json
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: vector-syslog
+spec:
+  chartRef:
+    kind: OCIRepository
+    name: vector-syslog
+  interval: 1h
+  values:
+    role: Stateless-Aggregator
+
+    replicas: 1
+
+    customConfig:
+      data_dir: /vector-data-dir
+      api:
+        enabled: true
+        address: 0.0.0.0:8686
+      sources:
+        syslog:
+          type: syslog
+          address: 0.0.0.0:5140
+          mode: udp
+        internal_metrics:
+          type: internal_metrics
+      transforms:
+        syslog_parse:
+          type: remap
+          inputs: ["syslog"]
+          source: |
+            .host = del(.hostname)
+            .severity = del(.severity)
+            .facility = del(.facility)
+            .app = del(.appname)
+            del(.procid)
+            del(.msgid)
+            del(.version)
+            # UniFi sends CEF with timestamp as hostname -- extract device name
+            msg_str = to_string(.message) ?? ""
+            if contains(msg_str, "CEF:") {
+              cef_parts = split(msg_str, "|")
+              if length(cef_parts) >= 6 {
+                .app = cef_parts[1]
+                .cef_event = cef_parts[5]
+              }
+              device_name, err = parse_regex(msg_str, r'UNIFIdeviceName=(?P<name>.+?)\sUNIFIdeviceModel')
+              if err == null {
+                .host = device_name.name
+              }
+            }
+      sinks:
+        loki:
+          type: loki
+          inputs: ["syslog_parse"]
+          endpoint: http://loki-gateway.o11y.svc.cluster.local
+          buffer:
+            type: disk
+            max_size: 268435488
+            when_full: drop_newest
+          request:
+            concurrency: 2
+            retry_max_duration_secs: 30
+          encoding:
+            codec: json
+          labels:
+            host: '{{ "{{ host }}" }}'
+            severity: '{{ "{{ severity }}" }}'
+            facility: '{{ "{{ facility }}" }}'
+            app: '{{ "{{ app }}" }}'
+            source: syslog
+          out_of_order_action: accept
+        prometheus_exporter:
+          type: prometheus_exporter
+          inputs: ["internal_metrics"]
+          address: 0.0.0.0:9090
+
+    service:
+      enabled: true
+      type: LoadBalancer
+      annotations:
+        lbipam.cilium.io/ips: "192.168.5.24"
+      ports:
+        - name: syslog
+          port: 514
+          protocol: UDP
+          targetPort: 5140
+
+    podSecurityContext:
+      runAsNonRoot: true
+      runAsUser: 65534
+      runAsGroup: 65534
+      fsGroup: 65534
+      fsGroupChangePolicy: OnRootMismatch
+
+    securityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop: ["ALL"]
+
+    podMonitor:
+      enabled: true
+
+    resources:
+      requests:
+        cpu: 25m
+        memory: 64Mi
+      limits:
+        memory: 256Mi

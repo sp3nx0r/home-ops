@@ -1,0 +1,81 @@
+---
+# yaml-language-server: $schema=https://raw.githubusercontent.com/bjw-s-labs/helm-charts/main/charts/other/app-template/schemas/helmrelease-helm-v2.schema.json
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: agregarr
+spec:
+  chartRef:
+    kind: OCIRepository
+    name: agregarr
+  interval: 1h
+  values:
+    controllers:
+      agregarr:
+        containers:
+          app:
+            image:
+              repository: ghcr.io/agregarr/agregarr
+              tag: v2.4.2
+            env:
+              PORT: &port 80
+              TZ: America/Chicago
+            probes:
+              liveness: &probes
+                enabled: true
+                custom: true
+                spec:
+                  httpGet:
+                    path: /api/v1/status
+                    port: *port
+                  initialDelaySeconds: 0
+                  periodSeconds: 10
+                  timeoutSeconds: 5
+                  failureThreshold: 3
+              readiness: *probes
+            resources:
+              requests:
+                cpu: 10m
+              limits:
+                memory: 1Gi
+            securityContext:
+              allowPrivilegeEscalation: false
+              readOnlyRootFilesystem: true
+              capabilities: {drop: ["ALL"]}
+    defaultPodOptions:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
+    service:
+      app:
+        ports:
+          http:
+            port: *port
+    route:
+      app:
+        hostnames:
+          - "agregarr.${SECRET_DOMAIN}"
+        parentRefs:
+          - name: envoy-internal
+            namespace: network
+        rules:
+          - backendRefs:
+              - identifier: app
+                port: *port
+    persistence:
+      config:
+        existingClaim: agregarr
+        globalMounts:
+          - path: /app/config
+      tmpfs:
+        type: emptyDir
+        advancedMounts:
+          agregarr:
+            app:
+              - path: /app/config/logs
+                subPath: logs
+              - path: /tmp
+                subPath: tmp

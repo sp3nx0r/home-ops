@@ -1,0 +1,127 @@
+---
+# yaml-language-server: $schema=https://kubernetes-schemas.pages.dev/helm.toolkit.fluxcd.io/helmrelease_v2.json
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: vector
+spec:
+  chartRef:
+    kind: OCIRepository
+    name: vector
+  interval: 1h
+  values:
+    role: Agent
+
+    customConfig:
+      data_dir: /vector-data-dir
+      api:
+        enabled: true
+        address: 0.0.0.0:8686
+      sources:
+        kubernetes_logs:
+          type: kubernetes_logs
+          read_from: end
+        internal_metrics:
+          type: internal_metrics
+      transforms:
+        kube_parse:
+          type: remap
+          inputs: ["kubernetes_logs"]
+          source: |
+            .namespace = .kubernetes.pod_namespace
+            .pod = .kubernetes.pod_name
+            .container = .kubernetes.container_name
+            .node = .kubernetes.pod_node_name
+            del(.kubernetes)
+            del(.file)
+            del(.source_type)
+
+            parsed, err = parse_json(.message)
+            if err == null && is_object(parsed) {
+              raw = del(.message)
+              . = merge!(., parsed)
+              if exists(.msg) && !exists(.message) {
+                .message = del(.msg)
+              }
+              if !exists(.message) {
+                .message = raw
+              }
+              if exists(.msg) {
+                del(.msg)
+              }
+            }
+
+            if !exists(.level) && exists(.severity) {
+              .level = del(.severity)
+            }
+            if !exists(.level) {
+              msg = to_string(.message) ?? ""
+              if starts_with(msg, "E") || contains(msg, " [error]") || contains(msg, "\"level\":\"error\"") || contains(msg, "level=error") {
+                .level = "error"
+              } else if starts_with(msg, "W") || contains(msg, " [warn") || contains(msg, "\"level\":\"warn") || contains(msg, "level=warn") {
+                .level = "warn"
+              } else if starts_with(msg, "I") || contains(msg, " [info]") || contains(msg, "\"level\":\"info\"") || contains(msg, "level=info") {
+                .level = "info"
+              } else if starts_with(msg, "D") || contains(msg, " [debug]") || contains(msg, "\"level\":\"debug\"") || contains(msg, "level=debug") {
+                .level = "debug"
+              }
+            }
+            if exists(.level) {
+              .level = downcase!(to_string!(.level))
+            }
+        kube_filter:
+          type: filter
+          inputs: ["kube_parse"]
+          condition: |
+            msg = to_string(.message) ?? ""
+            !contains(msg, "kube-probe") && !contains(msg, "Gatus/1.0")
+      sinks:
+        loki:
+          type: loki
+          inputs: ["kube_filter"]
+          endpoint: http://loki-gateway.o11y.svc.cluster.local
+          buffer:
+            type: memory
+            max_events: 5000
+            when_full: drop_newest
+          request:
+            concurrency: 2
+            rate_limit_num: 10
+            rate_limit_duration_secs: 1
+            retry_max_duration_secs: 30
+          batch:
+            max_bytes: 524288
+            timeout_secs: 5
+          encoding:
+            codec: json
+          labels:
+            namespace: '{{ "{{ namespace }}" }}'
+            pod: '{{ "{{ pod }}" }}'
+            container: '{{ "{{ container }}" }}'
+            node: '{{ "{{ node }}" }}'
+            source: kubernetes
+          out_of_order_action: accept
+        prometheus_exporter:
+          type: prometheus_exporter
+          inputs: ["internal_metrics"]
+          address: 0.0.0.0:9090
+
+    securityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop: ["ALL"]
+
+    resources:
+      requests:
+        cpu: 25m
+        memory: 512Mi
+      limits:
+        memory: 2Gi
+
+    podMonitor:
+      enabled: true
+
+    tolerations:
+      - effect: NoSchedule
+        operator: Exists

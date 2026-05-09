@@ -99,12 +99,41 @@
 
 #### Adding Volsync to a new app
 
+> **CRITICAL: All apps share a single Kopia repository on NFS.** Every
+> `volsync-secret` must use the **same** `KOPIA_PASSWORD`. Do NOT generate
+> a new password — copy it from an existing app's secret. A mismatched
+> password will cause `invalid repository password` errors on both backup
+> and restore jobs.
+
 1. Add the volsync Kustomize component to the app's `kustomization.yaml`:
    ```yaml
    components:
      - ../../../../components/volsync
    ```
-2. Create a SOPS-encrypted secret named `${APP}-volsync-secret` with `KOPIA_PASSWORD` and `KOPIA_REPOSITORY: filesystem:///mnt/repository`
+
+2. **Copy** the volsync secret from an existing app (do NOT generate a new password):
+   ```bash
+   # Decrypt an existing working secret to get the shared KOPIA_PASSWORD
+   sops --decrypt kubernetes/apps/media/autobrr/app/volsync-secret.sops.yaml
+
+   # Create the new secret with the SAME password, only changing the name
+   cat > kubernetes/apps/<namespace>/<app>/app/volsync-secret.sops.yaml <<EOF
+   apiVersion: v1
+   kind: Secret
+   metadata:
+     name: <app>-volsync-secret
+   type: Opaque
+   stringData:
+     KOPIA_PASSWORD: <paste the shared password here>
+     KOPIA_REPOSITORY: "filesystem:///mnt/repository"
+   EOF
+
+   # Encrypt it
+   sops --encrypt --age age1j8auc0sy76etmugnrnqv7j0v9de5l9ffswnqj7ndrzqndh5rdpjq5atgj8 \
+     --encrypted-regex '^(data|stringData)$' \
+     --in-place kubernetes/apps/<namespace>/<app>/app/volsync-secret.sops.yaml
+   ```
+
 3. Set `postBuild.substitute` in the app's Flux Kustomization:
    ```yaml
    postBuild:
@@ -114,7 +143,15 @@
        VOLSYNC_UID: "1000"
        VOLSYNC_GID: "1000"
    ```
-4. The PVC must be named `${APP}` to match the ReplicationSource's `sourcePVC` reference
+
+4. Add `dependsOn` for volsync in the app's Flux Kustomization:
+   ```yaml
+   dependsOn:
+     - name: volsync
+       namespace: volsync-system
+   ```
+
+5. The PVC must be named `${APP}` to match the ReplicationSource's `sourcePVC` reference
 
 ### Level 4: Kubernetes VolumeSnapshots (iSCSI point-in-time recovery)
 

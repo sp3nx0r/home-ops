@@ -1,0 +1,75 @@
+---
+connectivity:
+  checker:
+    interval: 1m
+    target: 1.1.1.1:53
+
+endpoints:
+  - conditions:
+      - "[CONNECTED] == true"
+    group: connectivity
+    interval: 1m
+    name: Cloudflare
+    url: icmp://1.1.1.1
+
+  - conditions:
+      - "[CONNECTED] == true"
+    group: connectivity
+    interval: 1m
+    name: Google
+    url: icmp://8.8.8.8
+
+  - conditions:
+      - "[CONNECTED] == true"
+    group: connectivity
+    interval: 1m
+    name: Quad9
+    url: icmp://9.9.9.9
+
+  - conditions:
+      - "[CONNECTED] == true"
+    group: infrastructure
+    interval: 1m
+    name: Unifi Gateway
+    url: tcp://192.168.5.1:443
+
+  - client:
+    conditions:
+      - "[STATUS] == 200"
+      - "[RESPONSE_TIME] < 5000"
+      - "[CERTIFICATE_EXPIRATION] > 48h"
+    group: infrastructure
+    interval: 1m
+    name: TrueNAS
+    url: https://nas.securimancy.com
+
+  - conditions:
+      - "[STATUS] == 200"
+      - "[RESPONSE_TIME] < 5000"
+      - "[CERTIFICATE_EXPIRATION] > 48h"
+    group: external
+    interval: 5m
+    name: Blog
+    url: https://www.securimancy.com
+
+metrics: true
+
+storage:
+  caching: true
+  path: ${GATUS_CONFIG_PATH}/gatus.db
+  type: sqlite
+
+ui:
+  buttons:
+    - name: GitHub
+      link: https://github.com/sp3nx0r
+    - name: Homelab
+      link: https://github.com/sp3nx0r/home-ops
+  default-sort-by: group
+  header: Status
+  title: Status | Securimancy Homelab
+  link: https://github.com/sp3nx0r/home-ops
+  logo: https://avatars.githubusercontent.com/u/10695887
+
+web:
+  port: ${GATUS_WEB_PORT}

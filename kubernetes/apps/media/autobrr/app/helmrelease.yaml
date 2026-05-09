@@ -1,0 +1,95 @@
+---
+# yaml-language-server: $schema=https://raw.githubusercontent.com/bjw-s-labs/helm-charts/main/charts/other/app-template/schemas/helmrelease-helm-v2.schema.json
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: autobrr
+spec:
+  chartRef:
+    kind: OCIRepository
+    name: autobrr
+  interval: 1h
+  values:
+    controllers:
+      autobrr:
+        annotations:
+          reloader.stakater.com/auto: "true"
+        containers:
+          app:
+            image:
+              repository: ghcr.io/autobrr/autobrr
+              tag: v1.77.1
+            env:
+              AUTOBRR__HOST: 0.0.0.0
+              AUTOBRR__PORT: &port 80
+              AUTOBRR__CHECK_FOR_UPDATES: false
+              AUTOBRR__LOG_LEVEL: INFO
+              TZ: America/Chicago
+            envFrom:
+              - secretRef:
+                  name: autobrr-secret
+            probes:
+              liveness:
+                enabled: true
+                custom: true
+                spec:
+                  httpGet:
+                    path: /api/healthz/liveness
+                    port: *port
+                  initialDelaySeconds: 0
+                  periodSeconds: 10
+                  timeoutSeconds: 5
+                  failureThreshold: 3
+              readiness:
+                enabled: true
+                custom: true
+                spec:
+                  httpGet:
+                    path: /api/healthz/readiness
+                    port: *port
+                  initialDelaySeconds: 0
+                  periodSeconds: 10
+                  timeoutSeconds: 5
+                  failureThreshold: 3
+            resources:
+              requests:
+                cpu: 10m
+              limits:
+                memory: 256Mi
+            securityContext:
+              allowPrivilegeEscalation: false
+              readOnlyRootFilesystem: true
+              capabilities: {drop: ["ALL"]}
+    defaultPodOptions:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
+    service:
+      app:
+        ports:
+          http:
+            port: *port
+    route:
+      app:
+        hostnames:
+          - "autobrr.${SECRET_DOMAIN}"
+        parentRefs:
+          - name: envoy-internal
+            namespace: network
+        rules:
+          - backendRefs:
+              - identifier: app
+                port: *port
+    persistence:
+      config:
+        existingClaim: autobrr
+      tmpfs:
+        type: emptyDir
+        advancedMounts:
+          autobrr:
+            app:
+              - path: /tmp
+                subPath: tmp

@@ -16,6 +16,9 @@ spec:
       route:
         main:
           enabled: true
+          annotations:
+            gatus.home-operations.com/endpoint: |
+              name: alertmanager
           hostnames:
             - alertmanager.securimancy.com
           parentRefs:
@@ -89,6 +92,9 @@ spec:
       route:
         main:
           enabled: true
+          annotations:
+            gatus.home-operations.com/endpoint: |
+              name: prometheus
           hostnames:
             - prometheus.securimancy.com
           parentRefs:
@@ -100,6 +106,22 @@ spec:
         podMonitorSelectorNilUsesHelmValues: false
         probeSelectorNilUsesHelmValues: false
         scrapeConfigSelectorNilUsesHelmValues: false
+        additionalScrapeConfigs:
+          - job_name: sardior-node
+            static_configs:
+              - targets: ["192.168.5.70:9100"]
+                labels:
+                  instance: sardior
+          - job_name: sardior-ollama
+            static_configs:
+              - targets: ["192.168.5.70:8000"]
+                labels:
+                  instance: sardior
+          - job_name: sardior-nginx
+            static_configs:
+              - targets: ["192.168.5.70:9113"]
+                labels:
+                  instance: sardior
         enableAdminAPI: true
         walCompression: true
         enableFeatures:

@@ -1,0 +1,118 @@
+---
+# yaml-language-server: $schema=https://kubernetes-schemas.pages.dev/helm.toolkit.fluxcd.io/helmrelease_v2.json
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: garage
+spec:
+  chart:
+    spec:
+      chart: garage
+      version: 0.6.0
+      sourceRef:
+        kind: HelmRepository
+        name: garage
+  interval: 1h
+  values:
+    image:
+      repository: dxflrs/garage
+      tag: v2.3.0
+
+    deployment:
+      kind: StatefulSet
+      replicaCount: 1
+
+    garage:
+      replicationFactor: "1"
+      consistencyMode: consistent
+      dbEngine: lmdb
+      compressionLevel: "1"
+      blockSize: "1048576"
+      s3:
+        api:
+          region: garage
+          rootDomain: ".s3.garage.local"
+        web:
+          rootDomain: ".web.garage.local"
+      secret:
+        create: true
+        rpcSecret: "${GARAGE_RPC_SECRET}"
+        adminToken: "${GARAGE_ADMIN_TOKEN}"
+
+    persistence:
+      enabled: true
+      meta:
+        size: 1Gi
+        storageClass: iscsi
+      data:
+        size: 50Gi
+        storageClass: iscsi
+
+    service:
+      type: ClusterIP
+
+    clusterConfig:
+      enabled: true
+      layout:
+        enabled: true
+        zone: dc1
+      # Key format: keyId = "GK" + 24 hex chars (openssl rand -hex 12)
+      # Secret format: 64 hex chars / 32 bytes (openssl rand -hex 32)
+      keys:
+        loki:
+          keyId: "${GARAGE_S3_KEY_ID}"
+          secretKey: "${GARAGE_S3_SECRET_KEY}"
+          buckets:
+            - name: loki-chunks
+              read: true
+              write: true
+            - name: loki-ruler
+              read: true
+              write: true
+        pocket-id:
+          keyId: "${POCKET_ID_S3_KEY_ID}"
+          secretKey: "${POCKET_ID_S3_SECRET_KEY}"
+          buckets:
+            - name: pocket-id
+              read: true
+              write: true
+      buckets:
+        - name: loki-chunks
+          keys:
+            - name: loki
+              permissions: ["read", "write"]
+        - name: loki-ruler
+          keys:
+            - name: loki
+              permissions: ["read", "write"]
+        - name: pocket-id
+          keys:
+            - name: pocket-id
+              permissions: ["read", "write"]
+
+    monitoring:
+      metrics:
+        enabled: true
+        serviceMonitor:
+          enabled: true
+          interval: 30s
+
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        memory: 256Mi
+
+    podSecurityContext:
+      runAsNonRoot: true
+      runAsUser: 1000
+      runAsGroup: 1000
+      fsGroup: 1000
+      fsGroupChangePolicy: OnRootMismatch
+
+    securityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop: ["ALL"]
