@@ -126,6 +126,7 @@ Add this to the `ReplicationDestination` spec so Volsync can find the correct Ko
 | Symptom | Cause | Fix |
 |---------|-------|-----|
 | `secret should have fields: [KOPIA_REPOSITORY KOPIA_PASSWORD]` | Missing or malformed volsync secret | Check `<app>-volsync-secret` has both fields |
+| `invalid repository password` | `KOPIA_PASSWORD` doesn't match the shared repo | All apps share one Kopia repo — copy the password from an existing working secret (e.g. `sops --decrypt kubernetes/apps/media/autobrr/app/volsync-secret.sops.yaml`). Do NOT generate a new password. |
 | Mover pod stuck in `ContainerCreating` | PVC still attached to running app pod | Scale down the app first |
 | `No repository configuration found` | `KOPIA_REPOSITORY` format wrong | Must be `filesystem:///mnt/repository` |
 | Restore completes but PVC is empty | Wrong snapshot identity | Check `sourceIdentity` or list snapshots in Kopia |

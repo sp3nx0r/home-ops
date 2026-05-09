@@ -2,6 +2,10 @@
 # yaml-language-server: $schema=https://json.schemastore.org/kustomization
 apiVersion: kustomize.config.k8s.io/v1alpha1
 kind: Component
+# IMPORTANT: All apps share a single Kopia repository on NFS.
+# Each app's ${APP}-volsync-secret MUST use the SAME KOPIA_PASSWORD.
+# Copy the password from an existing secret — do NOT generate a new one.
+# See: docs/backup-and-recovery/backup-strategy.md
 resources:
   - ./replicationsource.yaml
   - ./replicationdestination.yaml
