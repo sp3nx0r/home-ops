@@ -25,15 +25,6 @@ spec:
               allowPrivilegeEscalation: false
               readOnlyRootFilesystem: true
               capabilities: {drop: ["ALL"]}
-          init-config:
-            image:
-              repository: docker.io/library/busybox
-              tag: "1.37.0"
-            command: ["cp", "/config-readonly/config.toml", "/data/zeroclaw-data/config.toml"]
-            securityContext:
-              allowPrivilegeEscalation: false
-              readOnlyRootFilesystem: true
-              capabilities: {drop: ["ALL"]}
         containers:
           app:
             image:
@@ -80,7 +71,7 @@ spec:
                 memory: 512Mi
             securityContext:
               allowPrivilegeEscalation: false
-              readOnlyRootFilesystem: false
+              readOnlyRootFilesystem: true
               capabilities: {drop: ["ALL"]}
               seccompProfile: {type: RuntimeDefault}
           signal-cli:
@@ -131,8 +122,6 @@ spec:
         existingClaim: zeroclaw
         advancedMounts:
           zeroclaw:
-            init-config:
-              - path: /data
             app:
               - path: /zeroclaw-data
                 subPath: zeroclaw-data
@@ -144,8 +133,9 @@ spec:
         name: zeroclaw-config
         advancedMounts:
           zeroclaw:
-            init-config:
-              - path: /config-readonly
+            app:
+              - path: /zeroclaw-data/config.toml
+                subPath: config.toml
                 readOnly: true
       persona-soul:
         type: secret

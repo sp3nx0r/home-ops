@@ -26,5 +26,8 @@ data:
     ]
     forbidden_commands = ["rm", "dd", "mkfs", "fdisk", "wget", "curl"]
 
+    [gateway]
+    require_pairing = false
+
     [identity]
     format = "markdown"
