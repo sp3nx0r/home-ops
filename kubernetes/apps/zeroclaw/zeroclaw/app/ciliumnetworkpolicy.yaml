@@ -28,12 +28,14 @@ spec:
             - port: "42617"
               protocol: TCP
   egress:
-    # Ollama LLM inference (external host via service proxy)
-    - toCIDR:
-        - 192.168.5.70/32
+    # Envoy Gateway (for Ollama via ollama.securimancy.com)
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: network
+            gateway.envoyproxy.io/owning-gateway-name: envoy-internal
       toPorts:
         - ports:
-            - port: "11435"
+            - port: "443"
               protocol: TCP
     # SearXNG web search
     - toEndpoints:
