@@ -21,16 +21,30 @@ Pod: zeroclaw
 ## Provider Configuration
 
 ZeroClaw talks to the local Ollama server through `ollama-proxy` (nginx reverse
-proxy on sardior at `192.168.5.70:11435`). The proxy requires Bearer token auth.
+proxy on ms-s1 at `192.168.5.70:11435`). The proxy requires Bearer token auth.
+
+### Model: `frob/qwen3.5-instruct:35b`
+
+Qwen3.5-35B-A3B — 35B total parameters, 3B active per token (MoE, 256 experts).
+The `frob/qwen3.5-instruct` variant uses a modified chat template that **removes
+the `<think>` tag**, disabling the model's hidden thinking chain. This is critical
+because:
+
+- With thinking: ~1,200 tokens per simple question (~1,000 hidden), 29+ seconds
+- Without thinking: ~60-270 tokens, 1-7 seconds, same quality
+
+The native Ollama `think=false` parameter only works via `/api/chat`, not the
+OpenAI-compatible `/v1/chat/completions` endpoint that ZeroClaw v0.7.5 uses with
+the `custom:` provider. The template-level fix bypasses this limitation.
 
 ### Key learnings (v0.7.5)
 
 | What | Detail |
 |------|--------|
 | `default_provider` | Must be a **built-in kind** or `custom:URL` shorthand — NOT an alias from `[providers.models.*]` |
-| Native `ollama` kind | **Ignores `api_key`** entirely — no auth header is sent |
-| `custom:` provider | Uses `AuthStyle::Bearer` but resolves credentials from `ZEROCLAW_API_KEY` env var (generic fallback), NOT from the `[providers.models.*]` table or `OLLAMA_API_KEY` |
-| `openai-compatible` kind | Works with `[providers.models.*]` table entries, but `default_provider` can't reference table aliases — causes "Unknown provider" |
+| Native `ollama` kind | Not supported in v0.7.5 — causes "Unknown provider" |
+| `custom:` provider | Uses `AuthStyle::Bearer`, resolves credentials from `ZEROCLAW_API_KEY` env var (generic fallback) |
+| Thinking control | v0.7.5 `custom:` provider can't pass `think=false`; use a no-think model variant instead |
 
 ### Working configuration
 
@@ -38,17 +52,23 @@ proxy on sardior at `192.168.5.70:11435`). The proxy requires Bearer token auth.
 
 ```toml
 schema_version = 2
+
+[providers]
 default_provider = "custom:http://ollama-proxy.default.svc.cluster.local:11435/v1"
-default_model = "qwen3.5:35b"
+fallback = "custom:http://ollama-proxy.default.svc.cluster.local:11435/v1"
+
+[providers.models."custom:http://ollama-proxy.default.svc.cluster.local:11435/v1"]
+model = "frob/qwen3.5-instruct:35b"
 
 [autonomy]
 level = "supervised"
 
+[runtime]
+kind = "native"
+reasoning_enabled = false
+
 [gateway]
 require_pairing = false
-
-[identity]
-format = "markdown"
 
 [channels.signal]
 account = "+14795518443"
@@ -64,6 +84,15 @@ searxng_instance_url = "http://searxng.default.svc.cluster.local:8080"
 > **Note**: ZeroClaw auto-expands `config.toml` with many default sections on first
 > run. The snippet above shows only the sections we explicitly configured. The full
 > file on the PVC is much larger.
+
+### Ollama server tuning (ms-s1)
+
+| Setting | Value | Rationale |
+|---------|-------|-----------|
+| `OLLAMA_CONTEXT_LENGTH` | `65536` | Full 64K context window |
+| `OLLAMA_NUM_PARALLEL` | `2` | Prevent request queuing with MoE's low active param count |
+| `OLLAMA_FLASH_ATTENTION` | `True` | Memory-efficient attention for large contexts |
+| `OLLAMA_KEEP_ALIVE` | `24h` | Keep model loaded (avoid 3-4s cold load) |
 
 **Environment variables** (set on the app container):
 

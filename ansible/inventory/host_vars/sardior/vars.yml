@@ -36,7 +36,7 @@ ollama_version: v0.23.2
 ollama_host: 127.0.0.1
 ollama_port: 11434
 ollama_keep_alive: 24h
-ollama_num_parallel: 1
+ollama_num_parallel: 2
 ollama_context_length: 65536
 ollama_load_timeout: 30m
 ollama_flash_attention: true
@@ -44,6 +44,7 @@ ollama_api_key: "{{ vault_ollama_api_key }}"
 ollama_models:
   - qwen3-coder:30b
   - qwen3.5:35b
+  - frob/qwen3.5-instruct:35b
   - gemma4:e4b
 
 # -- Nginx API proxy (optional) --------------------------------------------
