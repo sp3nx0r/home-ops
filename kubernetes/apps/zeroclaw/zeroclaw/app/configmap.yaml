@@ -10,8 +10,8 @@ data:
     default_model = "qwen3.5:35b"
 
     [providers.models.ollama]
-    kind = "ollama"
-    base_url = "http://ollama-proxy.default.svc.cluster.local:11435"
+    kind = "openai-compatible"
+    base_url = "http://ollama-proxy.default.svc.cluster.local:11435/v1"
     api_key = "${SECRET_OLLAMA_API_KEY}"
     model = "qwen3.5:35b"
     timeout_secs = 120
