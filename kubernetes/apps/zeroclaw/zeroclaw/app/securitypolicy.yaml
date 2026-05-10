@@ -18,11 +18,9 @@ spec:
     redirectURL: "https://zeroclaw.${SECRET_DOMAIN}/oauth2/callback"
     logoutPath: "/logout"
     cookieDomain: "${SECRET_DOMAIN}"
-    cookieNameOverrides:
-      - name: IdToken
-        value: zeroclaw-id-token
-      - name: AccessToken
-        value: zeroclaw-access-token
+    cookieNames:
+      idToken: zeroclaw-id-token
+      accessToken: zeroclaw-access-token
     forwardAccessToken: true
     scopes:
       - openid
