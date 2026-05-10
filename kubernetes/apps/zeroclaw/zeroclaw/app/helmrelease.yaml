@@ -38,6 +38,7 @@ spec:
               ZEROCLAW_WEB_DIST_DIR: /web-dist
               ZEROCLAW_ALLOW_PUBLIC_BIND: "true"
               ZEROCLAW_API_KEY: "${SECRET_OLLAMA_API_KEY}"
+              SHELL: /bin/bash
             envFrom:
               - secretRef:
                   name: zeroclaw-secret
@@ -80,6 +81,24 @@ spec:
             env:
               MODE: json-rpc
               SIGNAL_CLI_CONFIG_DIR: /signal-data
+            lifecycle:
+              postStart:
+                exec:
+                  command:
+                    - /bin/bash
+                    - -c
+                    - >-
+                      for i in $(seq 1 60); do
+                      if supervisorctl status signal-cli-json-rpc-1 2>/dev/null | grep -q RUNNING; then
+                      sleep 2;
+                      sed -i 's|daemon  --tcp \(.*\)|daemon --tcp \1 --http 127.0.0.1:6002|' /etc/supervisor/conf.d/signal-cli-json-rpc-1.conf;
+                      supervisorctl stop signal-cli-json-rpc-1;
+                      supervisorctl reread;
+                      supervisorctl update;
+                      break;
+                      fi;
+                      sleep 1;
+                      done
             resources:
               requests:
                 cpu: 10m
