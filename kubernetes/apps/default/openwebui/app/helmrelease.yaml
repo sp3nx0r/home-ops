@@ -18,7 +18,7 @@ spec:
           app:
             image:
               repository: docker.io/openwebui/open-webui
-              tag: 0.9.4
+              tag: 0.9.5
             env:
               OLLAMA_BASE_URL: "https://ollama.${SECRET_DOMAIN}"
               ENABLE_OPENAI_API: "false"
