@@ -11,7 +11,7 @@ data:
 
     [providers.models.ollama]
     kind = "ollama"
-    base_url = "https://ollama.securimancy.com"
+    base_url = "http://ollama-proxy.default.svc.cluster.local:11435"
     model = "qwen3.5:35b"
     timeout_secs = 120
     tool_calling = "native"
@@ -21,7 +21,7 @@ data:
 
     [security]
     allowed_domains = [
-      "ollama.securimancy.com",
+      "ollama-proxy.default.svc.cluster.local",
       "searxng.default.svc.cluster.local",
     ]
     forbidden_commands = ["rm", "dd", "mkfs", "fdisk", "wget", "curl"]

@@ -37,6 +37,7 @@ spec:
               ZEROCLAW_GATEWAY_HOST: "0.0.0.0"
               ZEROCLAW_WEB_DIST_DIR: /web-dist
               ZEROCLAW_ALLOW_PUBLIC_BIND: "true"
+              OLLAMA_API_KEY: "${SECRET_OLLAMA_API_KEY}"
               WEB_SEARCH_PROVIDER: searxng
               SEARXNG_INSTANCE_URL: "http://searxng.default.svc.cluster.local:8080"
             envFrom:
