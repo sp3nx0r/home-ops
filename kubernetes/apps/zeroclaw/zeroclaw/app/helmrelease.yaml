@@ -64,6 +64,7 @@ spec:
               tag: "0.98"
             env:
               MODE: json-rpc
+              SIGNAL_CLI_CONFIG_DIR: /signal-data
             resources:
               requests:
                 cpu: 10m
@@ -71,9 +72,9 @@ spec:
               limits:
                 memory: 256Mi
             securityContext:
-              allowPrivilegeEscalation: false
+              runAsNonRoot: false
+              runAsUser: 0
               readOnlyRootFilesystem: false
-              capabilities: {drop: ["ALL"]}
               seccompProfile: {type: RuntimeDefault}
     defaultPodOptions:
       securityContext:
