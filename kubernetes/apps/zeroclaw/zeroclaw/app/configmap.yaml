@@ -6,11 +6,11 @@ metadata:
 data:
   config.toml: |
     workspace_dir = "/zeroclaw-data/workspace"
-
-    [providers]
-    fallback = "ollama"
+    default_provider = "ollama"
+    default_model = "qwen3.5:35b"
 
     [providers.models.ollama]
+    kind = "ollama"
     base_url = "http://ollama-proxy.default.svc.cluster.local:11435"
     model = "qwen3.5:35b"
     timeout_secs = 120

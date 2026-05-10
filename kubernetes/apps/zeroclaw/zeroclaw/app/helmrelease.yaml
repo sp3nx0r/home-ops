@@ -117,7 +117,7 @@ spec:
         advancedMounts:
           zeroclaw:
             app:
-              - path: /zeroclaw-data/.zeroclaw/config.toml
+              - path: /zeroclaw-data/config.toml
                 subPath: config.toml
                 readOnly: true
       persona-soul:
