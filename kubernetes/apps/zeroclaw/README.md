@@ -1,6 +1,6 @@
 # ZeroClaw — Kubernetes Deployment
 
-Personal AI assistant (Jarvis persona) running on the Securimancy homelab cluster.
+Personal AI assistant ("Wintermute" persona) running on the Securimancy homelab cluster.
 
 ## Architecture
 
@@ -14,8 +14,9 @@ Pod: zeroclaw
 - **Namespace**: `zeroclaw` (isolated from other workloads)
 - **Storage**: 5Gi iSCSI PVC with subPath mounts (`zeroclaw-data/`, `signal-data/`)
 - **Ingress**: Envoy Gateway HTTPRoute at `zeroclaw.${SECRET_DOMAIN}`
-- **Auth**: OIDC SecurityPolicy via PocketID — pairing is disabled
+- **Auth**: OIDC SecurityPolicy via PocketID — gateway pairing is disabled
 - **Backups**: VolSync + Kopia
+- **Persona files**: SOUL.md, IDENTITY.md, USER.md mounted read-only from `zeroclaw-persona` Secret
 
 ## Provider Configuration
 
@@ -49,10 +50,20 @@ require_pairing = false
 [identity]
 format = "markdown"
 
+[channels.signal]
+account = "+14795518443"
+allowed_from = ["+18323709367"]
+enabled = true
+http_url = "http://localhost:6002"
+
 [web_search]
 provider = "searxng"
 searxng_instance_url = "http://searxng.default.svc.cluster.local:8080"
 ```
+
+> **Note**: ZeroClaw auto-expands `config.toml` with many default sections on first
+> run. The snippet above shows only the sections we explicitly configured. The full
+> file on the PVC is much larger.
 
 **Environment variables** (set on the app container):
 
@@ -72,8 +83,59 @@ iSCSI PVC and is writable by ZeroClaw (required for schema migrations and
 `zeroclaw config set`). The initial seed was written manually; subsequent changes
 persist across restarts via the PVC.
 
-The `configmap.yaml` in this directory is vestigial and not mounted. It will be
-removed once the deployment is stable.
+## Signal Channel
+
+### Architecture
+
+The signal-cli sidecar runs in `json-rpc` mode by default, which starts signal-cli
+with `--tcp` on port 6001 (used by the REST API wrapper on port 8080). ZeroClaw
+requires the native signal-cli HTTP interface for SSE message streaming, which is
+only available via the `--http` flag.
+
+A **lifecycle postStart hook** on the signal-cli container patches the supervisord
+config after startup to add `--http 127.0.0.1:6002` alongside the existing
+`--tcp 127.0.0.1:6001`. This gives us both:
+
+- **Port 8080** — signal-cli-rest-api wrapper (admin tasks: profiles, registration)
+- **Port 6001** — signal-cli TCP JSON-RPC (internal, used by the REST API wrapper)
+- **Port 6002** — signal-cli native HTTP (SSE events + JSON-RPC over HTTP, used by ZeroClaw)
+
+### Registration
+
+The Signal account was registered via **SMS verification** (not QR code linking)
+because the number (+14795518443) is a Google Voice number. The registration flow:
+
+1. Generate a captcha token at `https://signalcaptchas.org/registration/generate.html`
+2. POST to `/v1/register/+14795518443` with the captcha token via the REST API wrapper
+3. Enter the SMS verification code via `/v1/register/+14795518443/verify/<code>`
+
+The Signal profile name is set to **Wintermute**.
+
+### Troubleshooting signal-cli
+
+```bash
+# Check registration status
+kubectl -n zeroclaw exec deploy/zeroclaw -c signal-cli -- \
+  curl -s http://localhost:8080/v1/accounts
+
+# Verify HTTP endpoint health (ZeroClaw's SSE source)
+kubectl -n zeroclaw exec deploy/zeroclaw -c signal-cli -- \
+  curl -s http://127.0.0.1:6002/api/v1/check
+
+# Send a test message via REST API wrapper
+kubectl -n zeroclaw exec deploy/zeroclaw -c signal-cli -- \
+  curl -s -X POST http://localhost:8080/v2/send \
+  -H 'Content-Type: application/json' \
+  -d '{"message": "test", "number": "+14795518443", "recipients": ["+18323709367"]}'
+
+# If HTTP endpoint is down, manually patch supervisord
+kubectl -n zeroclaw exec deploy/zeroclaw -c signal-cli -- bash -c '
+  supervisorctl stop signal-cli-json-rpc-1
+  sed -i "s|daemon  --tcp \(.*\)|daemon --tcp \1 --http 127.0.0.1:6002|" \
+    /etc/supervisor/conf.d/signal-cli-json-rpc-1.conf
+  supervisorctl reread
+  supervisorctl update'
+```
 
 ## Network Policy
 
@@ -87,9 +149,9 @@ removed once the deployment is stable.
 
 | Channel | Status | Notes |
 |---------|--------|-------|
-| Web Dashboard | Working | OIDC-protected via SecurityPolicy |
-| Signal | Pending | signal-cli sidecar running, needs device linking |
-| Discord | Pending | Bot token in secret, needs channel config |
+| Web Dashboard | Working | OIDC-protected via SecurityPolicy, pairing disabled |
+| Signal | Working | SMS-registered as Wintermute, SSE via native HTTP on port 6002 |
+| Discord | Pending | Bot token in secret, needs channel config in `config.toml` |
 
 ## Secrets
 
@@ -105,9 +167,18 @@ All `*.sops.yaml` files must be encrypted before commit:
 Currently using the `-debian` image tag for shell access (`bash`, `curl`, etc.).
 Switch back to the distroless tag (`v0.7.5`) once stable.
 
-Flux is **suspended** for iterative development:
 ```bash
-# Resume when ready
+# Check ZeroClaw status
+kubectl -n zeroclaw exec deploy/zeroclaw -c app -- zeroclaw status
+
+# View recent logs
+kubectl -n zeroclaw logs deploy/zeroclaw -c app --tail=50
+
+# Suspend Flux for iterative development
+flux suspend kustomization zeroclaw -n zeroclaw
+flux suspend helmrelease zeroclaw -n zeroclaw
+
+# Resume Flux
 flux resume kustomization zeroclaw -n zeroclaw
 flux resume helmrelease zeroclaw -n zeroclaw
 ```
