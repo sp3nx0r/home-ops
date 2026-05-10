@@ -28,7 +28,7 @@ spec:
             image:
               repository: ghcr.io/zeroclaw-labs/zeroclaw
               tag: v0.7.5-debian
-            command: ["cp", "-a", "/zeroclaw-data/web/dist/.", "/web-dist/"]
+            command: ["cp", "-r", "/zeroclaw-data/web/dist/.", "/web-dist/"]
             securityContext:
               allowPrivilegeEscalation: false
               readOnlyRootFilesystem: true
