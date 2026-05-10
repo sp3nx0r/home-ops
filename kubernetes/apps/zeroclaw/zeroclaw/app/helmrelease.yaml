@@ -15,6 +15,15 @@ spec:
         strategy: Recreate
         annotations:
           reloader.stakater.com/auto: "true"
+        initContainers:
+          init-dirs:
+            image:
+              repository: docker.io/library/busybox
+              tag: "1.37.0"
+            command: ["sh", "-c", "mkdir -p /data/zeroclaw-data/workspace/cron /data/signal-data && chown -R 1000:1000 /data"]
+            securityContext:
+              runAsNonRoot: false
+              runAsUser: 0
         containers:
           app:
             image:
@@ -111,6 +120,8 @@ spec:
         existingClaim: zeroclaw
         advancedMounts:
           zeroclaw:
+            init-dirs:
+              - path: /data
             app:
               - path: /zeroclaw-data
                 subPath: zeroclaw-data
