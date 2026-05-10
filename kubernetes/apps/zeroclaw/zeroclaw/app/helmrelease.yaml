@@ -24,6 +24,15 @@ spec:
             securityContext:
               runAsNonRoot: false
               runAsUser: 0
+          init-web:
+            image:
+              repository: ghcr.io/zeroclaw-labs/zeroclaw
+              tag: v0.7.5-debian
+            command: ["cp", "-a", "/zeroclaw-data/web/dist/.", "/web-dist/"]
+            securityContext:
+              allowPrivilegeEscalation: false
+              readOnlyRootFilesystem: true
+              capabilities: {drop: ["ALL"]}
         containers:
           app:
             image:
@@ -34,6 +43,7 @@ spec:
               ZEROCLAW_WORKSPACE: /zeroclaw-data
               ZEROCLAW_GATEWAY_PORT: "42617"
               ZEROCLAW_GATEWAY_HOST: "0.0.0.0"
+              ZEROCLAW_WEB_DIST_DIR: /web-dist
               ZEROCLAW_ALLOW_PUBLIC_BIND: "true"
               WEB_SEARCH_PROVIDER: searxng
               SEARXNG_INSTANCE_URL: "http://searxng.default.svc.cluster.local:8080"
@@ -163,6 +173,15 @@ spec:
             app:
               - path: /zeroclaw-data/workspace/USER.md
                 subPath: USER.md
+                readOnly: true
+      web-dist:
+        type: emptyDir
+        advancedMounts:
+          zeroclaw:
+            init-web:
+              - path: /web-dist
+            app:
+              - path: /web-dist
                 readOnly: true
       tmp:
         type: emptyDir
