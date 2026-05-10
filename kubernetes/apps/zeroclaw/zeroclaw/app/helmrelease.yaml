@@ -23,6 +23,11 @@ spec:
             args: ["daemon"]
             env:
               ZEROCLAW_WORKSPACE: /zeroclaw-data
+              ZEROCLAW_GATEWAY_PORT: "42617"
+              ZEROCLAW_GATEWAY_HOST: "0.0.0.0"
+              ZEROCLAW_ALLOW_PUBLIC_BIND: "true"
+              WEB_SEARCH_PROVIDER: searxng
+              SEARXNG_INSTANCE_URL: "http://searxng.default.svc.cluster.local:8080"
             envFrom:
               - secretRef:
                   name: zeroclaw-secret
@@ -110,7 +115,7 @@ spec:
               - path: /zeroclaw-data
                 subPath: zeroclaw-data
             signal-cli:
-              - path: /home/.local/share/signal-cli
+              - path: /signal-data
                 subPath: signal-data
       config:
         type: configMap
