@@ -85,7 +85,7 @@ spec:
           signal-cli:
             image:
               repository: docker.io/bbernhard/signal-cli-rest-api
-              tag: "0.98"
+              tag: "0.99"
             env:
               MODE: json-rpc
               SIGNAL_CLI_CONFIG_DIR: /signal-data
