@@ -12,6 +12,7 @@ data:
     [providers.models.ollama]
     kind = "ollama"
     base_url = "http://ollama-proxy.default.svc.cluster.local:11435"
+    api_key = "${SECRET_OLLAMA_API_KEY}"
     model = "qwen3.5:35b"
     timeout_secs = 120
     tool_calling = "native"
