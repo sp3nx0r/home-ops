@@ -12,6 +12,7 @@ spec:
   values:
     controllers:
       qbittorrent-gluetun:
+        strategy: Recreate
         initContainers:
           init-config:
             image:
@@ -33,6 +34,10 @@ spec:
             image:
               repository: ghcr.io/qdm12/gluetun
               tag: v3.41.1
+            lifecycle:
+              postStart:
+                exec:
+                  command: ["/bin/sh", "-c", "(ip rule del table 51820; ip -6 rule del table 51820) || true"]
             env:
               VPN_SERVICE_PROVIDER: custom
               VPN_TYPE: wireguard
