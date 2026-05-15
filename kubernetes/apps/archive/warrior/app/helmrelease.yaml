@@ -51,7 +51,7 @@ spec:
                 memory: 128Mi
                 ephemeral-storage: 1Gi
               limits:
-                memory: 512Mi
+                memory: 1Gi
                 ephemeral-storage: 60Gi
     defaultPodOptions:
       automountServiceAccountToken: false
