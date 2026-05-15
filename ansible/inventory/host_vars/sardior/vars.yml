@@ -32,7 +32,7 @@ ms_s1_ssh_pubkey_path: ~/.ssh/personal.pub
 
 # -- Ollama -----------------------------------------------------------------
 # renovate: datasource=github-releases depName=ollama/ollama
-ollama_version: v0.23.2
+ollama_version: v0.24.0
 ollama_host: 127.0.0.1
 ollama_port: 11434
 ollama_keep_alive: 24h
