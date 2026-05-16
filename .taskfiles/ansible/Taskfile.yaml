@@ -72,4 +72,7 @@ tasks:
   unlock:
     desc: Unlock encrypted datasets after reboot
     interactive: true
-    cmd: '{{.ROOT_DIR}}/.taskfiles/ansible/scripts/unlock-datasets.sh'
+    dir: '{{.ANSIBLE_DIR}}'
+    cmd: '{{.ANSIBLE_VENV}}/bin/ansible-playbook playbooks/truenas-unlock.yml {{.CLI_ARGS}}'
+    preconditions:
+      - test -f {{.ANSIBLE_VENV}}/bin/ansible-playbook

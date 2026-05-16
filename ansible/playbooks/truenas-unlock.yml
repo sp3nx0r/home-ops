@@ -1,0 +1,119 @@
+---
+# Unlock encrypted ZFS datasets after a TrueNAS reboot.
+# Expects a single passphrase shared across all top-level encrypted datasets.
+#
+# Usage:
+#   task ansible:unlock
+#
+- name: Unlock TrueNAS encrypted datasets
+  hosts: hl8
+  become: true
+  gather_facts: false
+
+  vars:
+    truenas_encrypted_datasets:
+      - tank/backups
+      - tank/homelab
+      - tank/media
+      - tank/scratch
+
+  tasks:
+    - name: Query locked datasets
+      ansible.builtin.command:
+        cmd: >-
+          midclt call pool.dataset.query '[["locked", "=", true]]' '{"select": ["name", "locked"]}'
+      register: _locked_query
+      changed_when: false
+
+    - name: Identify datasets needing unlock
+      ansible.builtin.set_fact:
+        _locked_names: "{{ _locked_query.stdout | from_json | map(attribute='name') | list }}"
+
+    - name: Display locked datasets
+      ansible.builtin.debug:
+        msg: "Locked datasets: {{ _locked_names }}"
+
+    - name: End play if nothing is locked
+      ansible.builtin.meta: end_play
+      when: _locked_names | length == 0
+
+    - name: Prompt for encryption passphrase
+      ansible.builtin.pause:
+        prompt: "Enter encryption passphrase for datasets"
+        echo: false
+      register: _passphrase_prompt
+
+    - name: Fail if passphrase is empty
+      ansible.builtin.fail:
+        msg: "Passphrase cannot be empty"
+      when: _passphrase_prompt.user_input | length == 0
+
+    - name: Build dataset list for unlock
+      ansible.builtin.set_fact:
+        _dataset_entries: "{{ _dataset_entries | default([]) + [{'name': item, 'passphrase': _passphrase_prompt.user_input}] }}"
+      loop: "{{ truenas_encrypted_datasets }}"
+      no_log: true
+
+    - name: Build unlock payload
+      ansible.builtin.set_fact:
+        _unlock_payload:
+          datasets: "{{ _dataset_entries }}"
+          recursive: true
+      no_log: true
+
+    - name: Unlock pool datasets
+      ansible.builtin.command:
+        cmd: "midclt call pool.dataset.unlock tank '{{ _unlock_payload | to_json }}'"
+      register: _unlock_job
+      changed_when: true
+
+    - name: Wait for unlock job to complete
+      ansible.builtin.command:
+        cmd: "midclt call core.job_wait {{ _unlock_job.stdout }}"
+      register: _job_wait
+      changed_when: false
+      failed_when: false
+
+    - name: Get job result
+      ansible.builtin.command:
+        cmd: "midclt call core.get_jobs '[[ \"id\", \"=\", {{ _unlock_job.stdout }} ]]'"
+      register: _job_result
+      changed_when: false
+
+    - name: Parse unlock results
+      ansible.builtin.set_fact:
+        _result: "{{ (_job_result.stdout | from_json | first).result }}"
+
+    - name: Report unlocked datasets
+      ansible.builtin.debug:
+        msg: "Unlocked: {{ _result.unlocked | default([]) }}"
+      when: (_result.unlocked | default([])) | length > 0
+
+    - name: Report failed datasets
+      ansible.builtin.fail:
+        msg: "Failed to unlock: {{ _result.failed | default({}) }}"
+      when: (_result.failed | default({})) | length > 0
+
+    - name: Verify all target datasets are now unlocked
+      ansible.builtin.command:
+        cmd: >-
+          midclt call pool.dataset.query '[["locked", "=", true]]' '{"select": ["name"]}'
+      register: _verify
+      changed_when: false
+      failed_when: >-
+        (_verify.stdout | from_json | map(attribute='name')
+         | intersect(truenas_encrypted_datasets)) | length > 0
+
+    - name: Restart NFS service (shares depend on unlocked datasets)
+      ansible.builtin.command:
+        cmd: midclt call service.restart nfs
+      changed_when: true
+
+    - name: Restart iSCSI service
+      ansible.builtin.command:
+        cmd: midclt call service.restart iscsitarget
+      changed_when: true
+
+    - name: Unlock complete
+      ansible.builtin.debug:
+        msg: "All datasets unlocked and services restarted successfully."
