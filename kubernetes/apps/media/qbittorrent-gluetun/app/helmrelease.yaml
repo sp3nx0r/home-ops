@@ -116,6 +116,7 @@ spec:
               readOnlyRootFilesystem: true
               capabilities: {drop: ["ALL"]}
     defaultPodOptions:
+      terminationGracePeriodSeconds: 120
       securityContext:
         runAsNonRoot: false
         runAsUser: 1000

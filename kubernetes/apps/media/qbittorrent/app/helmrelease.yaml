@@ -12,6 +12,19 @@ spec:
   values:
     controllers:
       qbittorrent:
+        initContainers:
+          remove-lockfile:
+            image:
+              repository: docker.io/library/busybox
+              tag: latest
+            command:
+              - /bin/sh
+              - -c
+              - rm -f /config/qBittorrent/lockfile
+            securityContext:
+              allowPrivilegeEscalation: false
+              readOnlyRootFilesystem: true
+              capabilities: {drop: ["ALL"]}
         containers:
           app:
             image:
@@ -50,6 +63,7 @@ spec:
               readOnlyRootFilesystem: true
               capabilities: {drop: ["ALL"]}
     defaultPodOptions:
+      terminationGracePeriodSeconds: 120
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
