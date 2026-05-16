@@ -244,14 +244,6 @@ truenas_snapshot_tasks:
     minute: "0"
     hour: "2"
 
-  - dataset: "{{ truenas_pool }}/homelab/k8s-iscsi"
-    name_format: "hourly-%Y-%m-%d_%H:%M"
-    recursive: true
-    lifetime_value: 24
-    lifetime_unit: hours
-    minute: "0"
-    hour: "*"
-
   - dataset: "{{ truenas_pool }}/media"
     name_format: "daily-%Y-%m-%d_%H:%M"
     recursive: true
