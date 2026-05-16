@@ -1,0 +1,24 @@
+---
+# yaml-language-server: $schema=https://kubernetes-schemas.pages.dev/monitoring.coreos.com/prometheusrule_v1.json
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: iscsi-storage
+spec:
+  groups:
+    - name: iscsi-storage.rules
+      rules:
+        - alert: ISCSIVolumeReadOnly
+          expr: |-
+            node_filesystem_readonly{mountpoint=~"/var/lib/kubelet/plugins/kubernetes.io/csi/org.democratic-csi.*", fstype="ext4"} == 1
+          for: 2m
+          annotations:
+            summary: >-
+              iSCSI volume {{ $labels.mountpoint }} on {{ $labels.instance }} is read-only (emergency_ro)
+            description: >-
+              The ext4 filesystem on {{ $labels.device }} ({{ $labels.mountpoint }}) has been remounted
+              read-only, likely due to iSCSI connection errors. Affected node requires a reboot to
+              recover the filesystem.
+            runbook_url: https://github.com/sp3nx0r/home-ops/blob/main/docs/runbooks/runbook-iscsi-readonly.md
+          labels:
+            severity: critical
