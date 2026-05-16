@@ -1,0 +1,67 @@
+---
+# yaml-language-server: $schema=https://kubernetes-schemas.pages.dev/monitoring.coreos.com/prometheusrule_v1.json
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: volsync
+spec:
+  groups:
+    - name: volsync.backup
+      rules:
+        - alert: VolSyncVolumeOutOfSync
+          expr: volsync_volume_out_of_sync == 1
+          for: 10m
+          labels:
+            severity: critical
+          annotations:
+            summary: >-
+              VolSync {{ $labels.obj_namespace }}/{{ $labels.obj_name }} is out of sync
+            description: >-
+              ReplicationSource {{ $labels.obj_name }} in {{ $labels.obj_namespace }} has not completed
+              a successful sync. Check the mover pod and ReplicationSource status.
+        - alert: VolSyncMissedIntervals
+          expr: increase(volsync_missed_intervals_total[2h]) > 0
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: >-
+              VolSync {{ $labels.obj_namespace }}/{{ $labels.obj_name }} is missing scheduled backups
+            description: >-
+              ReplicationSource {{ $labels.obj_name }} in {{ $labels.obj_namespace }} has missed one
+              or more scheduled sync intervals. A previous sync may still be running, the mover pod
+              may be unable to schedule, or the PVC snapshot may be failing.
+        - alert: VolSyncSnapshotCreationFailure
+          expr: increase(volsync_kopia_snapshot_creation_failure_total[1h]) > 0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: >-
+              VolSync Kopia snapshot failed for {{ $labels.obj_namespace }}/{{ $labels.obj_name }}
+            description: >-
+              Kopia snapshot creation has failed for {{ $labels.obj_name }} in
+              {{ $labels.obj_namespace }}. Check the volsync mover pod logs.
+        - alert: VolSyncRepositoryUnreachable
+          expr: volsync_kopia_repository_connectivity == 0
+          for: 10m
+          labels:
+            severity: critical
+          annotations:
+            summary: >-
+              VolSync Kopia repository unreachable for {{ $labels.obj_namespace }}/{{ $labels.obj_name }}
+            description: >-
+              The Kopia backup repository for {{ $labels.obj_name }} in {{ $labels.obj_namespace }}
+              is not reachable. Verify NFS connectivity to the TrueNAS Kopia share.
+    - name: volsync.health
+      rules:
+        - alert: VolSyncControllerAbsent
+          expr: absent(up{job="volsync-metrics"} == 1)
+          for: 10m
+          labels:
+            severity: critical
+          annotations:
+            summary: VolSync controller is not reporting metrics
+            description: >-
+              No volsync-metrics target has been up for 10 minutes. The VolSync controller
+              may be down or the ServiceMonitor may be misconfigured.
