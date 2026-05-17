@@ -29,7 +29,10 @@ spec:
               DIFFICULTY: normal
               LEVEL_NAME: "Bedrock World"
               MAX_PLAYERS: "10"
-              ONLINE_MODE: "false"
+              ONLINE_MODE: "true"
+              WHITE_LIST: "true"
+              WHITE_LIST_USERS: "sp3nx0r5064"
+              OPS: "2535444580469909"
               SERVER_PORT: &port "19132"
               VIEW_DISTANCE: "16"
               TICK_DISTANCE: "6"
