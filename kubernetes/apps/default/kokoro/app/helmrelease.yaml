@@ -15,47 +15,34 @@ spec:
         containers:
           app:
             image:
-              repository: docker.io/hwdsl2/kokoro-server
-              tag: latest
-            env:
-              KOKORO_LOCAL_ONLY: "true"
+              repository: ghcr.io/remsky/kokoro-fastapi-cpu
+              tag: v0.3.0
             probes:
               liveness: &probes
                 enabled: true
                 custom: true
                 spec:
                   httpGet:
-                    path: /v1/models
+                    path: /v1/audio/voices
                     port: &port 8880
                   initialDelaySeconds: 30
                   periodSeconds: 30
                   timeoutSeconds: 5
                   failureThreshold: 3
               readiness: *probes
-            securityContext:
-              allowPrivilegeEscalation: false
-              readOnlyRootFilesystem: false
-              capabilities: {drop: ["ALL"]}
             resources:
               requests:
-                cpu: 100m
-                memory: 512Mi
-              limits:
+                cpu: 10m
                 memory: 2Gi
-    defaultPodOptions:
-      securityContext:
-        runAsNonRoot: true
-        runAsUser: 1000
-        runAsGroup: 1000
-        fsGroup: 1000
-        fsGroupChangePolicy: OnRootMismatch
+              limits:
+                memory: 4Gi
     service:
       app:
         ports:
           http:
             port: *port
     persistence:
-      data:
+      cache:
         existingClaim: kokoro
         globalMounts:
-          - path: /var/lib/kokoro
+          - path: /app/cache
