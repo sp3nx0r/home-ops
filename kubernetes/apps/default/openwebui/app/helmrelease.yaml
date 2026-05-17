@@ -24,17 +24,32 @@ spec:
               ENABLE_OPENAI_API: "false"
               ENABLE_PERSISTENT_CONFIG: "false"
               WEBUI_NAME: "securimancy"
-              ENABLE_SIGNUP: "true"
+              WEBUI_URL: "https://chat.${SECRET_DOMAIN}"
+              ENABLE_SIGNUP: "false"
+              ENABLE_OAUTH_SIGNUP: "true"
               ENABLE_COMMUNITY_SHARING: "false"
               ENABLE_WEB_SEARCH: "true"
               WEB_SEARCH_ENGINE: "searxng"
               SEARXNG_QUERY_URL: "http://searxng.default.svc.cluster.local:8080/search?q=<query>"
               AIOHTTP_CLIENT_TIMEOUT: "300"
+              OAUTH_PROVIDER_NAME: "PocketID"
+              OPENID_PROVIDER_URL: "https://id.${SECRET_DOMAIN}/.well-known/openid-configuration"
+              OAUTH_SCOPES: "openid email profile"
               WEBUI_SECRET_KEY:
                 valueFrom:
                   secretKeyRef:
                     name: openwebui-secret
                     key: WEBUI_SECRET_KEY
+              OAUTH_CLIENT_ID:
+                valueFrom:
+                  secretKeyRef:
+                    name: openwebui-secret
+                    key: OAUTH_CLIENT_ID
+              OAUTH_CLIENT_SECRET:
+                valueFrom:
+                  secretKeyRef:
+                    name: openwebui-secret
+                    key: OAUTH_CLIENT_SECRET
             probes:
               liveness: &probes
                 enabled: true
