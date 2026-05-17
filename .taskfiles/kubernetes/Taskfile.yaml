@@ -6,14 +6,16 @@ tasks:
   browse-pvc:
     desc: Mount a PVC to a temp container [NS={{.NS}}] [CLAIM=required]
     interactive: true
-    cmd: kubectl browse-pvc --namespace {{.NS}} --image docker.io/library/alpine:latest {{.CLAIM}}
+    cmd: >-
+      kubectl run -n {{.NS}} browse-pvc-{{.CLAIM}} -it --rm --restart=Never
+      --image=docker.io/library/alpine:latest
+      --overrides='{"spec":{"containers":[{"name":"browse-pvc-{{.CLAIM}}","image":"docker.io/library/alpine:latest","stdin":true,"tty":true,"command":["/bin/sh"],"workingDir":"/mnt","volumeMounts":[{"mountPath":"/mnt","name":"data"}]}],"volumes":[{"name":"data","persistentVolumeClaim":{"claimName":"{{.CLAIM}}"}}]}}'
     vars:
       NS: '{{.NS | default "default"}}'
     requires:
       vars: [CLAIM]
     preconditions:
       - kubectl --namespace {{.NS}} get persistentvolumeclaims {{.CLAIM}}
-      - kubectl browse-pvc --version
       - which kubectl
 
   node-shell:
