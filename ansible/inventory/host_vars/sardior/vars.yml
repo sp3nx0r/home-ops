@@ -46,6 +46,7 @@ ollama_models:
   - qwen3.5:35b
   - frob/qwen3.5-instruct:35b
   - gemma4:e4b
+  - gemma3:27b
 
 # -- Nginx API proxy (optional) --------------------------------------------
 ollama_nginx_proxy: true

@@ -10,6 +10,7 @@ components:
 resources:
   - ./namespace.yaml
   - ./it-tools/ks.yaml
+  - ./kokoro/ks.yaml
   - ./ollama-proxy/ks.yaml
   - ./openwebui/ks.yaml
   - ./searxng/ks.yaml
