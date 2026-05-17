@@ -103,7 +103,7 @@ This follows the same pattern as other apps (e.g. `kubernetes/apps/o11y/grafana/
 ```yaml
 # kubernetes/apps/security/pocket-id/ks.yaml
 ---
-# yaml-language-server: $schema=https://kubernetes-schemas.pages.dev/kustomize.toolkit.fluxcd.io/kustomization_v1.json
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/kustomize.toolkit.fluxcd.io/kustomization_v1.json
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
 metadata:
@@ -148,7 +148,7 @@ Check an existing app for the exact OCI repository URL and tag pattern. For exam
 ```yaml
 # kubernetes/apps/security/pocket-id/app/ocirepository.yaml
 ---
-# yaml-language-server: $schema=https://kubernetes-schemas.pages.dev/source.toolkit.fluxcd.io/ocirepository_v1beta2.json
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/source.toolkit.fluxcd.io/ocirepository_v1beta2.json
 apiVersion: source.toolkit.fluxcd.io/v1beta2
 kind: OCIRepository
 metadata:
@@ -505,7 +505,7 @@ This SecurityPolicy targets the Grafana HTTPRoute specifically (not the entire G
 ```yaml
 # kubernetes/apps/o11y/grafana/app/securitypolicy.yaml
 ---
-# yaml-language-server: $schema=https://kubernetes-schemas.pages.dev/gateway.envoyproxy.io/securitypolicy_v1alpha1.json
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/gateway.envoyproxy.io/securitypolicy_v1alpha1.json
 apiVersion: gateway.envoyproxy.io/v1alpha1
 kind: SecurityPolicy
 metadata:
@@ -735,7 +735,7 @@ Update `kubernetes/apps/security/pocket-id/ks.yaml` to add the VolSync dependenc
 
 ```yaml
 ---
-# yaml-language-server: $schema=https://kubernetes-schemas.pages.dev/kustomize.toolkit.fluxcd.io/kustomization_v1.json
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/kustomize.toolkit.fluxcd.io/kustomization_v1.json
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
 metadata:
