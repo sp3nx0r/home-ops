@@ -1,0 +1,105 @@
+---
+# yaml-language-server: $schema=https://raw.githubusercontent.com/bjw-s-labs/helm-charts/main/charts/other/app-template/schemas/helmrelease-helm-v2.schema.json
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: minecraft-bedrock
+spec:
+  chartRef:
+    kind: OCIRepository
+    name: minecraft-bedrock
+  interval: 1h
+  values:
+    controllers:
+      minecraft-bedrock:
+        containers:
+          app:
+            image:
+              repository: itzg/minecraft-bedrock-server
+              tag: 2026.3.1
+            env:
+              TZ: America/Chicago
+              UID: "1000"
+              GID: "1000"
+              EULA: "TRUE"
+              ALLOW_CHEATS: "true"
+              VERSION: LATEST
+              SERVER_NAME: "Securimancy Realm"
+              GAMEMODE: survival
+              DIFFICULTY: normal
+              LEVEL_NAME: "Bedrock World"
+              MAX_PLAYERS: "10"
+              ONLINE_MODE: "false"
+              SERVER_PORT: &port "19132"
+              VIEW_DISTANCE: "16"
+              TICK_DISTANCE: "6"
+              PLAYER_IDLE_TIMEOUT: "30"
+              MAX_THREADS: "0"
+            probes:
+              liveness:
+                enabled: true
+                custom: true
+                spec:
+                  exec: &probeCommand
+                    command:
+                      - mc-monitor
+                      - status-bedrock
+                      - --host
+                      - 127.0.0.1
+                      - --port
+                      - *port
+                  initialDelaySeconds: 10
+                  periodSeconds: 10
+                  timeoutSeconds: 5
+                  failureThreshold: 3
+              readiness:
+                enabled: true
+                custom: true
+                spec:
+                  exec: *probeCommand
+                  initialDelaySeconds: 10
+                  periodSeconds: 5
+                  timeoutSeconds: 5
+                  failureThreshold: 3
+              startup:
+                enabled: true
+                custom: true
+                spec:
+                  exec: *probeCommand
+                  initialDelaySeconds: 10
+                  periodSeconds: 10
+                  timeoutSeconds: 5
+                  failureThreshold: 12
+            securityContext:
+              allowPrivilegeEscalation: false
+              readOnlyRootFilesystem: true
+              capabilities: {drop: ["ALL"]}
+            resources:
+              requests:
+                cpu: 200m
+                memory: 512Mi
+              limits:
+                memory: 2Gi
+    defaultPodOptions:
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        runAsNonRoot: true
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+    service:
+      app:
+        type: LoadBalancer
+        annotations:
+          lbipam.cilium.io/ips: "192.168.5.25"
+        ports:
+          game:
+            port: *port
+            protocol: UDP
+    persistence:
+      data:
+        existingClaim: minecraft-bedrock-data
+      tmp:
+        type: emptyDir
+        medium: Memory
