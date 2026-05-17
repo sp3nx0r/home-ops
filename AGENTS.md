@@ -125,11 +125,19 @@ Tools are version-pinned in `.mise.toml` and installed via mise (aqua backend). 
 - `talosctl` / `talhelper` — Talos node management
 - `sops` / `age` — Secret encryption
 - `kubeconform` — YAML schema validation
+- `gh` — GitHub CLI for issues, PRs, checks, and releases
 
 Run `task` (no args) to list available commands. Common tasks:
 - `task reconcile` — Force Flux to pull latest changes
 - `task talos:*` — Talos node operations
 - `task volsync:*` — Backup/restore operations
+
+### Agent integrations
+
+When automating or investigating from this repo, prefer local CLI and cluster access over MCP servers:
+
+- **GitHub** — Use `gh` for all github.com interactions (issues, PRs, checks, releases, API queries). Do not use the GitHub MCP server.
+- **Grafana** — Query and explore via local access (e.g. `kubectl port-forward`, the in-cluster Grafana URL, or direct HTTP to the homelab instance). Do not use the Grafana MCP server.
 
 ## Style and Conventions
 
