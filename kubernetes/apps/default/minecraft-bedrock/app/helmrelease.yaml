@@ -31,7 +31,7 @@ spec:
               MAX_PLAYERS: "10"
               ONLINE_MODE: "true"
               WHITE_LIST: "true"
-              WHITE_LIST_USERS: "sp3nx0r5064"
+              WHITE_LIST_USERS: "sp3nx0r5064,b1rdbud"
               OPS: "2535444580469909"
               SERVER_PORT: &port "19132"
               VIEW_DISTANCE: "16"
