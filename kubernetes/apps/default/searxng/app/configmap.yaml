@@ -7,7 +7,7 @@ data:
   settings.yml: |
     use_default_settings: true
     general:
-      instance_name: "SearXNG"
+      instance_name: "securimancy search"
       privacypolicy_url: false
       donation_url: false
       contact_url: false
@@ -21,20 +21,92 @@ data:
       default_theme: simple
       theme_args:
         simple_style: dark
+      default_locale: en
+      query_in_title: true
     search:
       safe_search: 1
-      autocomplete: "google"
+      autocomplete: "duckduckgo"
+      default_lang: en-US
       formats:
         - html
         - json
+    enabled_plugins:
+      - Hash plugin
+      - Basic Calculator
+      - Unit converter
+    categories_as_tabs:
+      general:
+      images:
+      videos:
+      news:
+      maps:
+      music:
+      it:
+      science:
     engines:
+      # -- General (privacy-preserving) --
       - name: brave
         disabled: false
       - name: duckduckgo
         disabled: false
-      - name: google
-        disabled: false
       - name: startpage
         disabled: false
+      - name: mojeek
+        disabled: false
+      # -- Reference --
       - name: wikipedia
         disabled: false
+      - name: wiktionary
+        disabled: false
+      - name: wolfram alpha
+        disabled: false
+      - name: currency convert
+        disabled: false
+      # -- Tech --
+      - name: stackoverflow
+        disabled: false
+      - name: github
+        disabled: false
+      - name: mdn
+        disabled: false
+      - name: arch linux wiki
+        disabled: false
+      # -- News --
+      - name: brave.news
+        disabled: false
+      - name: duckduckgo news
+        disabled: false
+      - name: wikinews
+        disabled: false
+      # -- Media --
+      - name: youtube
+        disabled: false
+      - name: reddit
+        disabled: false
+      - name: brave.images
+        disabled: false
+      - name: duckduckgo images
+        disabled: false
+      - name: brave.videos
+        disabled: false
+      - name: duckduckgo videos
+        disabled: false
+      # -- Science --
+      - name: google scholar
+        disabled: false
+      - name: pubmed
+        disabled: false
+      # -- Disable Google direct (use Startpage proxy instead) --
+      - name: google
+        disabled: true
+      # -- Disable file/torrent engines --
+      - name: piratebay
+        disabled: true
+      - name: nyaa
+        disabled: true
+      - name: 1337x
+        disabled: true
+      - name: kickass
+        disabled: true
+      - name: solidtorrents
+        disabled: true
