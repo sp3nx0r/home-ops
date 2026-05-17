@@ -16,7 +16,7 @@ spec:
     clientSecret:
       name: qui-oidc-secret
     redirectURL: "https://qui.${SECRET_DOMAIN}/oauth2/callback"
-    logoutPath: "/logout"
+    logoutPath: "/api/auth/logout"
     cookieDomain: "${SECRET_DOMAIN}"
     cookieNames:
       idToken: qui-id-token
