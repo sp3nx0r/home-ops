@@ -35,6 +35,7 @@ spec:
               OAUTH_PROVIDER_NAME: "PocketID"
               OPENID_PROVIDER_URL: "https://id.${SECRET_DOMAIN}/.well-known/openid-configuration"
               OAUTH_SCOPES: "openid email profile"
+              OAUTH_MERGE_ACCOUNTS_BY_EMAIL: "true"
               WEBUI_SECRET_KEY:
                 valueFrom:
                   secretKeyRef:
