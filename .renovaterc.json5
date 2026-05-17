@@ -140,7 +140,20 @@
       matchDatasources: ["github-releases"],
       addLabels: ["renovate/github-release"],
     },
+    {
+      matchDatasources: ["custom.talos-factory"],
+      addLabels: ["renovate/talos"],
+      semanticCommitScope: "container",
+      commitMessageTopic: "{{depName}}",
+    },
   ],
+  customDatasources: {
+    "talos-factory": {
+      defaultRegistryUrlTemplate: "https://factory.talos.dev/versions",
+      format: "json",
+      transformTemplates: ['{"releases": [$.{"version": $}]}'],
+    },
+  },
   customManagers: [
     {
       description: "Process annotated dependencies",
@@ -174,6 +187,17 @@
         "oci://(?<depName>[^:]+):(?<currentValue>\\S+)",
       ],
       datasourceTemplate: "docker",
+    },
+    {
+      customType: "regex",
+      description: "Process Talos Factory installer images",
+      managerFilePatterns: ["/talos\\/.*\\.ya?ml(?:\\.j2)?$/"],
+      matchStrings: [
+        "factory\\.talos\\.dev\\/[^/]+\\/[^:]+:(?<currentValue>v\\S+)",
+      ],
+      datasourceTemplate: "custom.talos-factory",
+      versioningTemplate: "semver",
+      depNameTemplate: "siderolabs/talos",
     },
   ],
 }
