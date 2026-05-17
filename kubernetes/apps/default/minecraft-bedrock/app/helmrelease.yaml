@@ -16,7 +16,7 @@ spec:
           app:
             image:
               repository: itzg/minecraft-bedrock-server
-              tag: 2026.3.1
+              tag: 2026.5.2
             env:
               TZ: America/Chicago
               UID: "1000"
@@ -35,6 +35,8 @@ spec:
               TICK_DISTANCE: "6"
               PLAYER_IDLE_TIMEOUT: "30"
               MAX_THREADS: "0"
+              TEXTUREPACK_REQUIRED: "true"
+              CONTENT_LOG_CONSOLE_OUTPUT_ENABLED: "true"
             probes:
               liveness:
                 enabled: true
@@ -100,6 +102,14 @@ spec:
     persistence:
       data:
         existingClaim: minecraft-bedrock-data
+      pack-configs:
+        type: configMap
+        name: minecraft-pack-configs
+        globalMounts:
+          - path: /data/worlds/Bedrock World/world_resource_packs.json
+            subPath: world_resource_packs.json
+          - path: /data/worlds/Bedrock World/world_behavior_packs.json
+            subPath: world_behavior_packs.json
       tmp:
         type: emptyDir
         medium: Memory

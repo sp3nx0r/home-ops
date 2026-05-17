@@ -6,3 +6,10 @@ resources:
   - ./helmrelease.yaml
   - ./ocirepository.yaml
   - ./pvc.yaml
+configMapGenerator:
+  - name: minecraft-pack-configs
+    files:
+      - ./addons/world_resource_packs.json
+      - ./addons/world_behavior_packs.json
+generatorOptions:
+  disableNameSuffixHash: true
