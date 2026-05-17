@@ -19,6 +19,10 @@ spec:
       recordType: A
       targets:
         - 192.168.5.24
+    - dnsName: minecraft.securimancy.com
+      recordType: A
+      targets:
+        - 192.168.5.25
     - dnsName: tor-relay.securimancy.com
       recordType: A
       targets:
