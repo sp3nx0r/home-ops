@@ -12,6 +12,8 @@ spec:
   values:
     controllers:
       kopia:
+        annotations:
+          reloader.stakater.com/auto: "true"
         initContainers:
           init-repo:
             image:
