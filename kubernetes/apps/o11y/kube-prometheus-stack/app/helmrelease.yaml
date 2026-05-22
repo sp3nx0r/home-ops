@@ -58,8 +58,6 @@ spec:
 
                   **Since:** {{ .StartsAt.Format "Jan 02 15:04 MST" }}{{ if .Annotations.runbook_url }} | **Runbook:** [link]({{ .Annotations.runbook_url }}){{ end }}
 
-                  ---
-
                   {{- end }}
           - name: zeroclaw
             webhook_configs:
