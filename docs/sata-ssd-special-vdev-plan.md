@@ -4,17 +4,26 @@
 > Target: 45Drives HL8 NAS (themberchaud) — TrueNAS SCALE
 > Purpose: Mirrored ZFS special vdev for metadata + small block acceleration
 
-## Status: Pending Physical Fit Check
+## Status: Waiting on Replacement Drive
 
-**Blocker:** Need 2.5" to 3.5" adapter brackets for the HL8's hot-swap bays.
+**2025-05-22:** Hot-slotted both original SSDs into HL8 bays (no adapter brackets
+needed — drives seated directly in the 3.5" hot-swap trays).
 
-- **Drive height: 7mm** — WD Blue SATA SSDs (SA510, 3D NAND, all generations)
-  are 7mm. Get 7mm-compatible adapters.
-- 2.5" to 3.5" adapter brackets (~$5–8 each)
-- Some hot-swap cages accept 2.5" drives with bottom-mount screw holes — check
-  if the HL8 trays have these before buying adapters
-- The HL8 motherboard may have an internal SATA header or M.2 SATA slot — if so,
-  one or both SSDs could mount internally without using a bay
+- **SSD #1 (sdf):** WDC WDS500G2B0A (serial 20155P442510) — detected on `ata8`,
+  SMART healthy, 5,255 power-on hours, 0 reallocated sectors, 14% write endurance
+  used. Has old Proxmox/TrueNAS boot partitions — needs wipe before use.
+- **SSD #2 (original):** Dead — SATA PHY links up but drive controller fails to
+  respond to IDENTIFY command across two different bays (ata7, ata9). Repeated
+  timeouts at both 6.0 and 3.0 Gbps. Likely the failed half of the old Proxmox
+  root mirror.
+- **Replacement ordered:** WDS500G3B0A (WD Blue SA510 500GB, current gen).
+  Expected delivery this weekend (2025-05-24/25).
+
+**Next steps when replacement arrives:**
+1. Hot-slot replacement into an empty bay
+2. Verify detection (`lsblk`) and run SMART check (`smartctl -a /dev/sdX`)
+3. Wipe old partitions on sdf (`wipefs -a /dev/sdf`)
+4. Add mirrored special vdev to tank (see Setup section below)
 
 ## What Is a Special VDEV
 
