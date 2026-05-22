@@ -25,6 +25,15 @@ spec:
               allowPrivilegeEscalation: false
               readOnlyRootFilesystem: true
               capabilities: {drop: ["ALL"]}
+          init-kubectl:
+            image:
+              repository: docker.io/bitnami/kubectl
+              tag: "1.36"
+            command: ["cp", "/opt/bitnami/kubectl/bin/kubectl", "/kubectl-bin/kubectl"]
+            securityContext:
+              allowPrivilegeEscalation: false
+              readOnlyRootFilesystem: true
+              capabilities: {drop: ["ALL"]}
         containers:
           app:
             image:
@@ -39,6 +48,7 @@ spec:
               ZEROCLAW_ALLOW_PUBLIC_BIND: "true"
               ZEROCLAW_API_KEY: "${SECRET_OLLAMA_API_KEY}"
               SHELL: /bin/bash
+              PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/kubectl-bin
             envFrom:
               - secretRef:
                   name: zeroclaw-secret
@@ -190,3 +200,24 @@ spec:
               - path: /tmp
             signal-cli:
               - path: /tmp
+      kubectl-bin:
+        type: emptyDir
+        advancedMounts:
+          zeroclaw:
+            init-kubectl:
+              - path: /kubectl-bin
+            app:
+              - path: /kubectl-bin
+                readOnly: true
+      k8s-rca-skill:
+        type: configMap
+        name: zeroclaw-k8s-rca-skill
+        advancedMounts:
+          zeroclaw:
+            app:
+              - path: /zeroclaw-data/workspace/skills/k8s-rca/SKILL.md
+                subPath: SKILL.md
+                readOnly: true
+              - path: /zeroclaw-data/workspace/skills/k8s-rca/SKILL.toml
+                subPath: SKILL.toml
+                readOnly: true

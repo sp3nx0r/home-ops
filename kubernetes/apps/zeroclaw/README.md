@@ -7,6 +7,7 @@ Personal AI assistant ("Wintermute" persona) running on the Securimancy homelab 
 ```
 Pod: zeroclaw
 ├── init: init-web       — copies web UI assets from image to emptyDir
+├── init: init-kubectl   — copies kubectl binary to shared emptyDir
 ├── container: app       — zeroclaw v0.7.5-debian (gateway + agent runtime)
 └── container: signal-cli — signal-cli-rest-api v0.99 (Signal bridge sidecar)
 ```
@@ -75,6 +76,14 @@ account = "+14795518443"
 allowed_from = ["+18323709367"]
 enabled = true
 http_url = "http://localhost:6002"
+
+[channels.discord]
+enabled = true
+bot_token = "<plaintext token from zeroclaw-secret>"
+allowed_guilds = ["909189816338481162"]
+allowed_users = []
+reply_to_mentions_only = false
+draft_update_interval_ms = 1000
 
 [web_search]
 provider = "searxng"
@@ -180,7 +189,53 @@ kubectl -n zeroclaw exec deploy/zeroclaw -c signal-cli -- bash -c '
 |---------|--------|-------|
 | Web Dashboard | Working | OIDC-protected via SecurityPolicy, pairing disabled |
 | Signal | Working | SMS-registered as Wintermute, SSE via native HTTP on port 6002 |
-| Discord | Pending | Bot token in secret, needs channel config in `config.toml` |
+| Discord | Working | Bot in `sp3nx0r's homelab` guild, `#zeroclaw` channel — see token caveat below |
+| Webhook | Working | Alertmanager → `alert-to-zeroclaw` adapter → ZeroClaw webhook |
+
+### Discord token encryption bug (v0.7.x)
+
+ZeroClaw's `secrets.encrypt = true` (default) causes a **silent authentication
+failure** for Discord channel tokens. This is a known issue
+([#3175](https://github.com/zeroclaw-labs/zeroclaw/issues/3175)) that was only
+partially fixed (Feishu only, PR #3355).
+
+**Symptoms:**
+- Logs show `Discord: connected and identified` followed immediately by
+  `Channel discord exited unexpectedly; restarting` in a tight loop (~2s)
+- No error is logged at any level (even `RUST_LOG=trace`)
+- The "connected and identified" message is misleading — it prints after
+  *sending* IDENTIFY, not after receiving Discord's response
+
+**Root cause:** `Config::save()` encrypts `channels.discord.bot_token` to
+`enc2:...`, but `Config::load()` does not decrypt it for channel credentials.
+ZeroClaw sends the garbled decryption output to Discord, which responds with
+close code 4004 (Authentication failed). The close code is never logged
+(silent `break` in the select loop at `Message::Close(_)`).
+
+**Workaround (current):**
+1. Set `secrets.encrypt = false` under `[secrets]` in `config.toml`
+2. Use the plaintext bot token directly in `bot_token = "..."`
+3. The token value comes from `zeroclaw-secret` (injected via `envFrom`)
+
+**Proper fix:** Upgrade to v0.8.0+ which introduces schema V3 with env-var
+grammar (`ZEROCLAW_CHANNELS__DISCORD__BOT_TOKEN`) that bypasses the
+encrypt/decrypt cycle. v0.8.0-beta-1 was released 2026-05-21. Wait for stable
+before upgrading — it's a major breaking release (multi-agent, config V3
+migration).
+
+**If the token gets re-encrypted** (e.g., ZeroClaw auto-saves config and
+`encrypt` gets reset to `true`):
+```bash
+# Scale down
+kubectl -n zeroclaw scale deploy/zeroclaw --replicas=0
+# Fix the config on the PVC
+kubectl -n zeroclaw run fix-token --rm -i --restart=Never --image=alpine \
+  --overrides='{"spec":{"volumes":[{"name":"data","persistentVolumeClaim":{"claimName":"zeroclaw"}}],"containers":[{"name":"fix","image":"alpine","volumeMounts":[{"name":"data","mountPath":"/data"}],"command":["sh","-c","sed -i \"s/encrypt = true/encrypt = false/\" /data/zeroclaw-data/config.toml && echo done"]}]}}'
+# Then replace enc2:... token with plaintext from the secret:
+#   kubectl -n zeroclaw get secret zeroclaw-secret -o jsonpath='{.data.DISCORD_BOT_TOKEN}' | base64 -d
+# Scale back up
+kubectl -n zeroclaw scale deploy/zeroclaw --replicas=1
+```
 
 ## Secrets
 

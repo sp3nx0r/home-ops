@@ -8,6 +8,8 @@ resources:
   - ./helmrelease.yaml
   - ./ocirepository.yaml
   - ./pvc.yaml
+  - ./rbac.yaml
+  - ./skills
   - ./persona-secret.sops.yaml
   - ./secret.sops.yaml
   - ./oidc-secret.sops.yaml

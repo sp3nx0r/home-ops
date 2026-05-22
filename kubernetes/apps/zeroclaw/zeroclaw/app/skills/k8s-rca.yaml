@@ -1,0 +1,133 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: zeroclaw-k8s-rca-skill
+data:
+  SKILL.toml: |
+    name = "k8s-rca"
+    version = "1.0.0"
+    description = "Kubernetes alert investigation and root cause analysis"
+    author = "securimancer"
+    triggers = ["ALERT INVESTIGATION REQUEST"]
+    suggested_tools = ["shell", "channel_send"]
+  SKILL.md: |
+    # Kubernetes Alert Investigation & Root Cause Analysis
+
+    ## Purpose
+
+    Investigate Kubernetes alerts received via webhook, determine root cause, and report findings to Discord.
+
+    ## Trigger
+
+    This skill activates when you receive a message containing "ALERT INVESTIGATION REQUEST".
+
+    ## Environment
+
+    - You are running inside a Kubernetes cluster (Talos Linux, 3 control-plane nodes)
+    - kubectl is available at /kubectl-bin/kubectl and uses in-cluster service account credentials
+    - You have read-only access to: pods, logs, events, deployments, statefulsets, jobs, PVCs, nodes, volsync resources, flux resources
+    - Storage: iSCSI PVCs via Democratic-CSI, NFS from TrueNAS at 192.168.5.40
+    - CNI: Cilium with eBPF
+
+    ## Investigation Procedure
+
+    ### Step 1: Identify Affected Resources
+
+    Extract from the alert: alertname, namespace, pod, node, severity.
+
+    ```bash
+    kubectl get pods -n <namespace> --field-selector=status.phase!=Running 2>/dev/null | head -20
+    kubectl get events -n <namespace> --sort-by='.lastTimestamp' | tail -20
+    ```
+
+    ### Step 2: Pod-Level Investigation
+
+    For pod-related alerts:
+
+    ```bash
+    kubectl describe pod <pod> -n <namespace> | grep -A5 "State:\|Conditions:\|Events:"
+    kubectl logs <pod> -n <namespace> --tail=50
+    kubectl logs <pod> -n <namespace> --previous --tail=30 2>/dev/null
+    ```
+
+    ### Step 3: Volume Investigation
+
+    If logs mention disk I/O, mount errors, or if PVC-related:
+
+    ```bash
+    kubectl get pvc -n <namespace>
+    kubectl describe pvc <pvc> -n <namespace> | grep -A3 "Status\|Events"
+    kubectl get replicationsources -n <namespace> 2>/dev/null
+    ```
+
+    Common volume issues:
+    - iSCSI disconnect -> SQLite WAL/SHM corruption -> delete .sqlite-wal and .sqlite-shm
+    - Kopia cache corruption -> delete the volsync cache PVC
+    - NFS stale handle -> pod restart usually resolves
+
+    ### Step 4: Node Investigation
+
+    If node-related or if pods are stuck in Pending/Unknown:
+
+    ```bash
+    kubectl get nodes -o wide
+    kubectl describe node <node> | grep -A5 "Conditions:"
+    kubectl top nodes
+    ```
+
+    ### Step 5: Flux/Deployment Status
+
+    If the alert concerns a workload not recovering:
+
+    ```bash
+    kubectl get helmrelease -n <namespace>
+    kubectl get kustomization -A | grep -i <app>
+    ```
+
+    ### Step 6: Volsync-Specific
+
+    For volsync/backup alerts:
+
+    ```bash
+    kubectl get replicationsources -A
+    kubectl get jobs -n <namespace> | grep volsync
+    kubectl logs job/<job-name> -n <namespace> --tail=30
+    ```
+
+    ## Root Cause Categories
+
+    | Symptom | Likely Cause | Self-Resolving? |
+    |---------|-------------|-----------------|
+    | CrashLoopBackOff + disk I/O | iSCSI reconnect corrupted DB files | No - needs WAL cleanup |
+    | Pod Pending + no events | Node resource pressure or scheduling | Maybe - check node capacity |
+    | Volsync job failed + mmap error | Kopia cache corruption | No - delete cache PVC |
+    | Pod Unknown + node NotReady | Node kernel panic or network partition | Usually - wait 5min |
+    | OOMKilled | Memory limit too low or leak | No - needs limit increase |
+    | ImagePullBackOff | Registry unreachable or tag missing | Maybe - transient network |
+
+    ## Reporting Format
+
+    After investigation, report via Discord channel_send tool. Format:
+
+    ```
+    **Alert:** <alertname> (<severity>)
+    **Namespace:** <namespace> | **Pod:** <pod>
+
+    **Root Cause:** <1-2 sentence explanation>
+
+    **Evidence:**
+    - <key finding 1>
+    - <key finding 2>
+
+    **Status:** <Self-resolving / Needs intervention>
+    **Recommended Action:** <what to do, or "monitoring - expect recovery within X minutes">
+    ```
+
+    ## Important Notes
+
+    - Never modify or delete resources - you are read-only
+    - If kubectl returns permission denied, report that the SA lacks access
+    - If investigation is inconclusive after 3 tool calls, report what you found and suggest manual investigation areas
+    - Always check events first - they often reveal the answer immediately
+    - For repeated alerts on the same resource, note the pattern (e.g., "3rd occurrence this week")
