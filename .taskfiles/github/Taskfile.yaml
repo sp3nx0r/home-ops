@@ -1,0 +1,17 @@
+---
+version: '3'
+
+tasks:
+  merge:
+    desc: Approve and merge a pull request by number
+    summary: |
+      Approves a PR with gh pr review --approve, then merges it with
+      gh pr merge --squash --delete-branch --auto.
+    requires:
+      vars: [pr]
+    cmds:
+      - for: { var: pr, split: ',' }
+        cmd: gh pr review {{.ITEM}} --approve && (gh pr merge {{.ITEM}} --squash --delete-branch || gh pr merge {{.ITEM}} --squash --delete-branch --auto)
+    preconditions:
+      - which gh
+      - gh auth status
