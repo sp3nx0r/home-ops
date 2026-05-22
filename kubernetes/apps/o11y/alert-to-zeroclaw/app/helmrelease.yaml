@@ -16,7 +16,7 @@ spec:
           app:
             image:
               repository: docker.io/python
-              tag: 3.12-alpine
+              tag: 3.14-alpine
             command: ["python", "/app/adapter.py"]
             env:
               ZEROCLAW_URL: http://zeroclaw.zeroclaw.svc.cluster.local:42617/webhook
