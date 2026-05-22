@@ -1,0 +1,64 @@
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/helm.toolkit.fluxcd.io/helmrelease_v2.json
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: alert-to-zeroclaw
+spec:
+  chartRef:
+    kind: OCIRepository
+    name: alert-to-zeroclaw
+  interval: 1h
+  values:
+    controllers:
+      alert-to-zeroclaw:
+        containers:
+          app:
+            image:
+              repository: docker.io/python
+              tag: 3.12-alpine
+            command: ["python", "/app/adapter.py"]
+            env:
+              ZEROCLAW_URL: http://zeroclaw.zeroclaw.svc.cluster.local:42617/webhook
+              ZEROCLAW_TOKEN: "${SECRET_OLLAMA_API_KEY}"
+              LISTEN_PORT: "8080"
+            probes:
+              liveness: &probes
+                enabled: true
+                custom: true
+                spec:
+                  httpGet:
+                    path: /healthz
+                    port: &port 8080
+                  initialDelaySeconds: 5
+                  periodSeconds: 30
+                  timeoutSeconds: 5
+                  failureThreshold: 3
+              readiness: *probes
+            securityContext:
+              allowPrivilegeEscalation: false
+              readOnlyRootFilesystem: true
+              capabilities: {drop: ["ALL"]}
+            resources:
+              requests:
+                cpu: 5m
+                memory: 32Mi
+              limits:
+                memory: 64Mi
+    defaultPodOptions:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+    persistence:
+      script:
+        type: configMap
+        name: alert-to-zeroclaw-script
+        globalMounts:
+          - path: /app
+            readOnly: true
+    service:
+      app:
+        ports:
+          http:
+            port: *port

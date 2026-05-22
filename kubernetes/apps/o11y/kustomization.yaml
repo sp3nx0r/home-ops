@@ -9,6 +9,7 @@ components:
 
 resources:
   - ./namespace.yaml
+  - ./alert-to-zeroclaw/ks.yaml
   - ./gatus/ks.yaml
   - ./grafana/ks.yaml
   - ./headlamp/ks.yaml

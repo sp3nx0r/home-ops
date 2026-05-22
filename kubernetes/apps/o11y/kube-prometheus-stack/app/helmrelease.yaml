@@ -61,6 +61,10 @@ spec:
                   ---
 
                   {{- end }}
+          - name: zeroclaw
+            webhook_configs:
+              - url: http://alert-to-zeroclaw.o11y.svc.cluster.local:8080/alert
+                send_resolved: false
         route:
           receiver: discord
           group_by:
@@ -80,6 +84,12 @@ spec:
               matchers:
                 - severity = critical
               group_wait: 30s
+              continue: true
+            - receiver: zeroclaw
+              matchers:
+                - severity =~ critical|warning
+              group_wait: 2m
+              repeat_interval: 24h
 
     kubeEtcd:
       service:
