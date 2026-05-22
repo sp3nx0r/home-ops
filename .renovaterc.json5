@@ -104,9 +104,14 @@
       commitMessageTopic: "release {{depName}}",
     },
     {
+      description: "Group all mise tool updates",
+      groupName: "mise tools",
       matchManagers: ["mise"],
       semanticCommitScope: "mise",
       commitMessageTopic: "tool {{depName}}",
+      group: {
+        commitMessageTopic: "{{{groupName}}} group",
+      },
     },
     {
       matchUpdateTypes: ["major"],
