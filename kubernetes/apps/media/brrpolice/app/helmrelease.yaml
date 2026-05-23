@@ -20,7 +20,7 @@ spec:
             env:
               BRRPOLICE_HTTP__PORT: &port 80
               BRRPOLICE_LOGGING__LEVEL: info
-              BRRPOLICE_QBITTORRENT__BASE_URL: http://qbittorrent-vpn.media.svc.cluster.local
+              BRRPOLICE_QBITTORRENT__BASE_URL: http://qbittorrent-gluetun.media.svc.cluster.local
               TZ: America/Chicago
             probes:
               liveness:
