@@ -80,11 +80,6 @@ spec:
             - receiver: blackhole
               matchers:
                 - alertname = Watchdog
-            - receiver: zeroclaw
-              matchers:
-                - alertname = ZeroClawWatchdog
-              group_wait: 30s
-              repeat_interval: 1h
             - receiver: discord
               matchers:
                 - severity = critical
@@ -136,6 +131,11 @@ spec:
           - job_name: sardior-nginx
             static_configs:
               - targets: ["192.168.5.70:9113"]
+                labels:
+                  instance: sardior
+          - job_name: sardior-stt
+            static_configs:
+              - targets: ["192.168.5.70:8201"]
                 labels:
                   instance: sardior
         enableAdminAPI: true
