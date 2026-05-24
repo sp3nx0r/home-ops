@@ -27,17 +27,39 @@ tasks:
     preconditions:
       - test -f {{.ANSIBLE_VENV}}/bin/ansible-lint
 
-  configure:
-    desc: Run TrueNAS configuration playbook
+  all:
+    desc: Run all infrastructure configuration playbooks
+    cmds:
+      - task: nas
+      - task: ms-s1
+      - task: backblaze
+
+  all:dry-run:
+    desc: Dry run all infrastructure configuration playbooks
+    cmds:
+      - task: nas:dry-run
+      - task: ms-s1:dry-run
+      - task: backblaze:dry-run
+
+  nas:
+    desc: Run TrueNAS NAS (hl8) configuration playbook
     dir: '{{.ANSIBLE_DIR}}'
     cmd: '{{.ANSIBLE_VENV}}/bin/ansible-playbook playbooks/truenas-configure.yml {{.CLI_ARGS}}'
     preconditions:
       - test -f {{.ANSIBLE_VENV}}/bin/ansible-playbook
 
-  configure:dry-run:
-    desc: Dry run TrueNAS configuration playbook
+  nas:dry-run:
+    desc: Dry run TrueNAS NAS (hl8) configuration playbook
     dir: '{{.ANSIBLE_DIR}}'
     cmd: '{{.ANSIBLE_VENV}}/bin/ansible-playbook playbooks/truenas-configure.yml --check --diff {{.CLI_ARGS}}'
+    preconditions:
+      - test -f {{.ANSIBLE_VENV}}/bin/ansible-playbook
+
+  nas:unlock:
+    desc: Unlock encrypted datasets after reboot
+    interactive: true
+    dir: '{{.ANSIBLE_DIR}}'
+    cmd: '{{.ANSIBLE_VENV}}/bin/ansible-playbook playbooks/truenas-unlock.yml {{.CLI_ARGS}}'
     preconditions:
       - test -f {{.ANSIBLE_VENV}}/bin/ansible-playbook
 
@@ -69,10 +91,3 @@ tasks:
     preconditions:
       - test -f {{.ANSIBLE_VENV}}/bin/ansible-playbook
 
-  unlock:
-    desc: Unlock encrypted datasets after reboot
-    interactive: true
-    dir: '{{.ANSIBLE_DIR}}'
-    cmd: '{{.ANSIBLE_VENV}}/bin/ansible-playbook playbooks/truenas-unlock.yml {{.CLI_ARGS}}'
-    preconditions:
-      - test -f {{.ANSIBLE_VENV}}/bin/ansible-playbook

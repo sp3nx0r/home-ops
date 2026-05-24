@@ -315,6 +315,9 @@ truenas_cloudsync_credential_name: Backblaze B2
 truenas_cloudsync_bucket: sp3nx0r-truenas
 truenas_cloudsync_encryption_password: "{{ vault_truenas_b2_encryption_password }}"
 truenas_cloudsync_encryption_salt: "{{ vault_truenas_b2_encryption_salt }}"
+truenas_cloudsync_bwlimit:
+  - time: "00:00"
+    bandwidth: 60000000
 
 truenas_cloudsync_tasks:
   - description: "B2 - backups"

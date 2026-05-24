@@ -893,6 +893,7 @@
           filename_encryption: false
           encryption_password: "{{ truenas_cloudsync_encryption_password }}"
           encryption_salt: "{{ truenas_cloudsync_encryption_salt }}"
+          bwlimit: "{{ truenas_cloudsync_bwlimit }}"
           transfers: 4
           follow_symlinks: true
           create_empty_src_dirs: false
@@ -900,6 +901,23 @@
       loop_control:
         label: "{{ item.description }}"
       when: item.description not in (_cloudsync_tasks.stdout | from_json | map(attribute='description') | list)
+      changed_when: true
+      tags: [cloudsync]
+
+    - name: Update cloud sync bandwidth limits
+      ansible.builtin.command:
+        cmd: >-
+          midclt call cloudsync.update {{ _task_id }}
+          '{"bwlimit": {{ truenas_cloudsync_bwlimit | to_json }}}'
+      vars:
+        _existing: "{{ _cloudsync_tasks.stdout | from_json | selectattr('description', 'equalto', item.description) | first }}"
+        _task_id: "{{ _existing.id }}"
+      loop: "{{ truenas_cloudsync_tasks }}"
+      loop_control:
+        label: "{{ item.description }}"
+      when:
+        - item.description in (_cloudsync_tasks.stdout | from_json | map(attribute='description') | list)
+        - (_existing.bwlimit | default([])) != truenas_cloudsync_bwlimit
       changed_when: true
       tags: [cloudsync]
 
