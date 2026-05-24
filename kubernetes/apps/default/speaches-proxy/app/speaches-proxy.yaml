@@ -1,0 +1,50 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: speaches-proxy
+spec:
+  ports:
+    - name: http
+      port: 11436
+      targetPort: 11436
+---
+apiVersion: discovery.k8s.io/v1
+kind: EndpointSlice
+metadata:
+  name: speaches-proxy
+  labels:
+    kubernetes.io/service-name: speaches-proxy
+addressType: IPv4
+ports:
+  - name: http
+    port: 11436
+    protocol: TCP
+endpoints:
+  - addresses:
+      - 192.168.5.70
+    conditions:
+      ready: true
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/gateway.networking.k8s.io/httproute_v1.json
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: speaches-proxy
+spec:
+  hostnames:
+    - whisper.${SECRET_DOMAIN}
+  parentRefs:
+    - name: envoy-internal
+      namespace: network
+      sectionName: https
+  rules:
+    - filters:
+        - type: RequestHeaderModifier
+          requestHeaderModifier:
+            set:
+              - name: Authorization
+                value: "Bearer ${SECRET_SPEACHES_API_KEY}"
+      backendRefs:
+        - name: speaches-proxy
+          port: 11436
