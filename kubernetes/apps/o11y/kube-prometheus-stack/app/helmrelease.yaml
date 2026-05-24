@@ -80,6 +80,11 @@ spec:
             - receiver: blackhole
               matchers:
                 - alertname = Watchdog
+            - receiver: zeroclaw
+              matchers:
+                - alertname = ZeroClawWatchdog
+              group_wait: 30s
+              repeat_interval: 1h
             - receiver: discord
               matchers:
                 - severity = critical

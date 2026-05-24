@@ -1,0 +1,23 @@
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/monitoring.coreos.com/prometheusrule_v1.json
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: zeroclaw-watchdog
+spec:
+  groups:
+    - name: zeroclaw-watchdog
+      interval: 5m
+      rules:
+        - alert: ZeroClawWatchdog
+          expr: vector(1)
+          for: 0m
+          labels:
+            severity: none
+            watchdog: zeroclaw
+          annotations:
+            summary: "ZeroClaw end-to-end watchdog"
+            description: >-
+              This alert fires continuously to verify the full alerting pipeline:
+              Prometheus → Alertmanager → alert-to-zeroclaw → ZeroClaw.
+              If ZeroClaw stops receiving this alert, the pipeline is broken.
