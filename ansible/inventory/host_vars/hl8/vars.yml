@@ -94,6 +94,11 @@ truenas_sysctls:
 
 # -- Network ----------------------------------------------------------------
 truenas_network: 192.168.5.0/24
+truenas_nfs_allowed_hosts:
+  - 192.168.5.50  # miirym (k8s control-plane)
+  - 192.168.5.51  # palarandusk (k8s control-plane)
+  - 192.168.5.52  # aurinax (k8s control-plane)
+  - 192.168.5.70  # sardior (MS-S1 inference server)
 
 # -- Users ------------------------------------------------------------------
 truenas_users:
@@ -192,29 +197,25 @@ truenas_datasets_phase2:
 truenas_nfs_shares:
   - name: k8s-exports
     path: "/mnt/{{ truenas_pool }}/homelab/k8s-exports"
-    networks:
-      - "{{ truenas_network }}"
+    hosts: "{{ truenas_nfs_allowed_hosts }}"
     maproot_user: root
     maproot_group: wheel
 
   - name: kopia
     path: "/mnt/{{ truenas_pool }}/homelab/kopia"
-    networks:
-      - "{{ truenas_network }}"
+    hosts: "{{ truenas_nfs_allowed_hosts }}"
     maproot_user: root
     maproot_group: wheel
 
   - name: media
     path: "/mnt/{{ truenas_pool }}/media"
-    networks:
-      - "{{ truenas_network }}"
+    hosts: "{{ truenas_nfs_allowed_hosts }}"
     maproot_user: root
     maproot_group: wheel
 
   - name: backups
     path: "/mnt/{{ truenas_pool }}/backups"
-    networks:
-      - "{{ truenas_network }}"
+    hosts: "{{ truenas_nfs_allowed_hosts }}"
     maproot_user: root
     maproot_group: wheel
 
