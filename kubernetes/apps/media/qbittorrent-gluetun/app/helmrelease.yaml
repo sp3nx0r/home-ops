@@ -54,13 +54,20 @@ spec:
               SHADOWSOCKS: off
               TZ: America/Chicago
             probes:
+              startup:
+                enabled: true
+                custom: true
+                spec:
+                  exec:
+                    command: ["/bin/sh", "-c", "test -s /tmp/gluetun/forwarded_port && wget -q -O /dev/null http://localhost:9999"]
+                  periodSeconds: 10
+                  failureThreshold: 30
               liveness:
                 enabled: true
                 custom: true
                 spec:
-                  httpGet:
-                    path: /
-                    port: 9999
+                  exec:
+                    command: ["/bin/sh", "-c", "test -s /tmp/gluetun/forwarded_port && wget -q -O /dev/null http://localhost:9999"]
                   periodSeconds: 30
                   failureThreshold: 3
             resources:
