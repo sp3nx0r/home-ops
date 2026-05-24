@@ -22,3 +22,51 @@ spec:
             runbook_url: https://github.com/sp3nx0r/home-ops/blob/main/docs/runbooks/runbook-iscsi-readonly.md
           labels:
             severity: critical
+    - name: sardior-ollama.rules
+      rules:
+        - alert: OllamaBackendDown
+          expr: ollama_up == 0
+          for: 3m
+          annotations:
+            summary: >-
+              Ollama on {{ $labels.instance }} is not responding
+            description: >-
+              The Ollama API on sardior has been unreachable for more than 3 minutes.
+              LLM inference will be unavailable.
+          labels:
+            severity: warning
+        - alert: OllamaExporterAbsent
+          expr: absent(ollama_up{job="sardior-ollama"})
+          for: 5m
+          annotations:
+            summary: >-
+              Ollama exporter on {{ $labels.instance }} is not being scraped
+            description: >-
+              Prometheus has not received any ollama_up metric from sardior in 5 minutes.
+              The exporter service may be down or unreachable.
+          labels:
+            severity: warning
+    - name: sardior-stt.rules
+      rules:
+        - alert: STTBackendDown
+          expr: stt_up == 0
+          for: 3m
+          annotations:
+            summary: >-
+              STT backend on {{ $labels.instance }} is not responding
+            description: >-
+              The active STT service (Speaches or whisper.cpp) on sardior has been unreachable
+              for more than 3 minutes. Transcription via Whispering will fail.
+          labels:
+            severity: warning
+        - alert: STTExporterAbsent
+          expr: absent(stt_up{job="sardior-stt"})
+          for: 5m
+          annotations:
+            summary: >-
+              STT exporter on {{ $labels.instance }} is not being scraped
+            description: >-
+              Prometheus has not received any stt_up metric from sardior in 5 minutes.
+              The exporter service may be down or unreachable.
+          labels:
+            severity: warning
