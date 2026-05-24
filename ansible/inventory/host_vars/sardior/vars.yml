@@ -53,7 +53,7 @@ ollama_nginx_proxy: true
 ollama_proxy_listen: "{{ ms_s1_host_ip }}:11435"
 
 # -- STT Backend (Speaches / whisper.cpp) -----------------------------------
-stt_backend: speaches  # "speaches" or "whisper-cpp"
+stt_backend: whisper-cpp  # "speaches" or "whisper-cpp"
 
 # Speaches (active by default)
 # renovate: datasource=github-releases depName=speaches-ai/speaches

@@ -756,6 +756,8 @@
         create_home: true
         home: "/home/{{ speaches_user }}"
         shell: /usr/sbin/nologin
+        groups: [render, video]
+        append: true
       tags: [stt, speaches]
 
     - name: Install uv package manager  # noqa: command-instead-of-module risky-shell-pipe
@@ -915,6 +917,8 @@
             -DGGML_LTO=ON
           cmake --build build --config Release -j$(nproc)
           cp build/bin/whisper-server {{ whisper_cpp_bin_path }}/whisper-server
+          cp build/src/libwhisper.so {{ whisper_cpp_bin_path }}/ 2>/dev/null || true
+          cp build/ggml/src/libggml*.so {{ whisper_cpp_bin_path }}/
         chdir: /opt/whisper-cpp/src
       become: true
       become_user: "{{ speaches_user }}"
@@ -969,6 +973,8 @@
           Type=simple
           User={{ speaches_user }}
           Group={{ speaches_user }}
+          WorkingDirectory=/tmp
+          Environment=LD_LIBRARY_PATH={{ whisper_cpp_bin_path }}
           ExecStart={{ whisper_cpp_bin_path }}/whisper-server \
             --model {{ whisper_cpp_model_path }}/ggml-{{ whisper_cpp_model }}.bin \
             --host {{ speaches_host }} \
@@ -1059,6 +1065,11 @@
         dest: /etc/nginx/sites-available/speaches
         mode: "0644"
         content: |
+          map $http_upgrade $connection_upgrade {
+              default upgrade;
+              ''      '';
+          }
+
           server {
               listen {{ stt_proxy_listen }};
 
@@ -1075,8 +1086,9 @@
                   proxy_send_timeout 120s;
                   client_max_body_size 100m;
 
-                  proxy_set_header Connection "";
                   proxy_http_version 1.1;
+                  proxy_set_header Upgrade $http_upgrade;
+                  proxy_set_header Connection $connection_upgrade;
               }
           }
       when: stt_nginx_proxy
