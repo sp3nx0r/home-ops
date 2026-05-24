@@ -60,7 +60,7 @@ stt_backend: speaches  # "speaches" or "whisper-cpp"
 speaches_version: "v0.9.0-rc.3"
 speaches_host: 127.0.0.1
 speaches_port: 8200
-speaches_model: "Systran/faster-whisper-large-v3-turbo"
+speaches_model: "deepdml/faster-whisper-large-v3-turbo-ct2"
 speaches_device: cpu
 speaches_compute_type: int8
 speaches_install_path: /opt/speaches

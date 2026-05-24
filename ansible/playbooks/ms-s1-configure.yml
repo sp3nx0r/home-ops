@@ -775,6 +775,7 @@
       loop:
         - "{{ speaches_install_path }}"
         - "{{ speaches_install_path }}/hf-cache"
+        - "{{ speaches_install_path }}/hf-cache/hub"
       tags: [stt, speaches]
 
     - name: Clone Speaches repository
@@ -1112,6 +1113,17 @@
       tags: [stt]
 
     # ===== Model pulls ========================================================
+
+    - name: Pull Speaches whisper model
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ speaches_port }}/v1/models/{{ speaches_model }}"
+        method: POST
+        status_code: [200]
+        timeout: 600
+      register: _speaches_model_pull
+      changed_when: "'downloaded' in (_speaches_model_pull.content | default(''))"
+      when: stt_backend == 'speaches'
+      tags: [stt, speaches, models]
 
     - name: Pull Ollama models
       ansible.builtin.uri:
