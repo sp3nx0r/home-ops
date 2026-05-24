@@ -16,7 +16,7 @@ data:
     import os
     import sys
     import urllib.request
-    from http.server import BaseHTTPRequestHandler, HTTPServer
+    from http.server import BaseHTTPRequestHandler, HTTPServer, ThreadingHTTPServer
 
     ZEROCLAW_URL = os.environ.get(
         "ZEROCLAW_URL", "http://zeroclaw.zeroclaw.svc.cluster.local:42617/webhook"
@@ -105,7 +105,7 @@ data:
             method="POST",
         )
         try:
-            with urllib.request.urlopen(req, timeout=120) as resp:
+            with urllib.request.urlopen(req, timeout=30) as resp:
                 return resp.status, resp.read().decode(errors="replace")[:500]
         except urllib.error.HTTPError as e:
             return e.code, e.read().decode(errors="replace")[:500]
@@ -168,5 +168,5 @@ data:
         if not ZEROCLAW_TOKEN:
             print("[adapter] WARNING: ZEROCLAW_TOKEN not set, requests will fail auth", flush=True)
         print(f"[adapter] listening on :{LISTEN_PORT}, forwarding to {ZEROCLAW_URL}", flush=True)
-        server = HTTPServer(("0.0.0.0", LISTEN_PORT), Handler)
+        server = ThreadingHTTPServer(("0.0.0.0", LISTEN_PORT), Handler)
         server.serve_forever()
