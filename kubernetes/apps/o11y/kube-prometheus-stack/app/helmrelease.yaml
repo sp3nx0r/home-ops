@@ -13,6 +13,8 @@ spec:
     cleanPrometheusOperatorObjectNames: true
 
     alertmanager:
+      alertmanagerSpec:
+        externalUrl: https://alertmanager.securimancy.com
       route:
         main:
           enabled: true
@@ -109,6 +111,7 @@ spec:
             - name: envoy-internal
               namespace: network
       prometheusSpec:
+        externalUrl: https://prometheus.securimancy.com
         ruleSelectorNilUsesHelmValues: false
         serviceMonitorSelectorNilUsesHelmValues: false
         podMonitorSelectorNilUsesHelmValues: false
