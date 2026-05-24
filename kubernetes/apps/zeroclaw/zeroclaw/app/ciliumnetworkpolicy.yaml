@@ -27,6 +27,15 @@ spec:
         - ports:
             - port: "42617"
               protocol: TCP
+    # Alertmanager webhook adapter
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: o11y
+            app.kubernetes.io/name: alert-to-zeroclaw
+      toPorts:
+        - ports:
+            - port: "42617"
+              protocol: TCP
   egress:
     # Kubernetes API server (for kubectl investigation)
     - toEntities:

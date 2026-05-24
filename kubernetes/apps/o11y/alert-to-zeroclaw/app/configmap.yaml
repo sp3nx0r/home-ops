@@ -154,10 +154,13 @@ data:
             print(f"[adapter] forwarded alert group → ZeroClaw (status={status}, key={key[:8]}...)")
             sys.stdout.flush()
 
-            self.send_response(202 if status < 400 else 502)
-            self.send_header("Content-Type", "application/json")
-            self.end_headers()
-            self.wfile.write(json.dumps({"zeroclaw_status": status, "key": key}).encode())
+            try:
+                self.send_response(202 if status < 400 else 502)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(json.dumps({"zeroclaw_status": status, "key": key}).encode())
+            except BrokenPipeError:
+                pass
 
         def log_message(self, format, *args):
             print(f"[adapter] {args[0]}")
