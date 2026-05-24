@@ -1,0 +1,112 @@
+#!/usr/bin/env python3
+"""
+STT Prometheus exporter — no external dependencies.
+
+Queries the active STT backend (Speaches or whisper.cpp) and exposes
+health and metadata metrics in Prometheus format.
+
+Supports both backends via the same health-check pattern:
+  - Speaches: GET /health
+  - whisper.cpp: GET /
+"""
+
+import http.server
+import json
+import time
+import urllib.request
+
+STT_HOST = "http://127.0.0.1:{{ stt_local_port }}"
+STT_BACKEND = "{{ stt_backend }}"
+EXPORTER_PORT = {{ stt_exporter_port }}
+EXPORTER_VERSION = "1.0.0"
+
+{% raw %}
+
+def _health():
+    """Check if the STT backend is responding."""
+    endpoints = ["/health", "/"]
+    for ep in endpoints:
+        try:
+            url = f"{STT_HOST}{ep}"
+            with urllib.request.urlopen(url, timeout=5) as r:
+                if r.status == 200:
+                    return 1
+        except Exception:
+            continue
+    return 0
+
+
+def _get_models():
+    """Try to get model info from Speaches /v1/models endpoint."""
+    try:
+        url = f"{STT_HOST}/v1/models"
+        with urllib.request.urlopen(url, timeout=5) as r:
+            data = json.loads(r.read())
+            return data.get("data", [])
+    except Exception:
+        return []
+
+
+def generate_metrics():
+    t0 = time.monotonic()
+    m = []
+
+    m.append("# HELP stt_exporter_info Exporter metadata")
+    m.append("# TYPE stt_exporter_info gauge")
+    m.append(f'stt_exporter_info{{version="{EXPORTER_VERSION}"}} 1')
+
+    m.append("# HELP stt_backend_info Active STT backend")
+    m.append("# TYPE stt_backend_info gauge")
+    m.append(f'stt_backend_info{{backend="{STT_BACKEND}"}} 1')
+
+    health = _health()
+    m.append("# HELP stt_up Whether STT backend is responding")
+    m.append("# TYPE stt_up gauge")
+    m.append(f"stt_up {health}")
+
+    models = _get_models()
+    if models:
+        m.append("# HELP stt_models_available Models available in STT backend")
+        m.append("# TYPE stt_models_available gauge")
+        m.append(f"stt_models_available {len(models)}")
+
+        m.append("# HELP stt_model_info Model metadata")
+        m.append("# TYPE stt_model_info gauge")
+        for model in models:
+            model_id = model.get("id", "unknown")
+            m.append(f'stt_model_info{{model="{model_id}"}} 1')
+
+    elapsed = time.monotonic() - t0
+    m.append("# HELP stt_scrape_duration_seconds Time to collect metrics")
+    m.append("# TYPE stt_scrape_duration_seconds gauge")
+    m.append(f"stt_scrape_duration_seconds {elapsed:.4f}")
+
+    return "\n".join(m)
+
+
+class Handler(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path == "/metrics":
+            body = generate_metrics().encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(body)
+        elif self.path == "/health":
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain")
+            self.end_headers()
+            self.wfile.write(b"ok")
+        else:
+            self.send_response(404)
+            self.end_headers()
+
+    def log_message(self, format, *args):
+        pass
+
+
+if __name__ == "__main__":
+    srv = http.server.HTTPServer(("0.0.0.0", EXPORTER_PORT), Handler)
+    print(f"STT exporter v{EXPORTER_VERSION} on :{EXPORTER_PORT} (backend={STT_BACKEND})")
+    srv.serve_forever()
+{% endraw %}

@@ -747,6 +747,370 @@
         daemon_reload: true
       tags: [monitoring]
 
+    # ===== STT Backend (Speaches / whisper.cpp) ================================
+
+    - name: Create speaches system user
+      ansible.builtin.user:
+        name: "{{ speaches_user }}"
+        system: true
+        create_home: true
+        home: "/home/{{ speaches_user }}"
+        shell: /usr/sbin/nologin
+      tags: [stt, speaches]
+
+    - name: Install uv package manager  # noqa: command-instead-of-module risky-shell-pipe
+      ansible.builtin.shell:
+        cmd: set -o pipefail && curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/local/bin sh
+        creates: /usr/local/bin/uv
+        executable: /bin/bash
+      tags: [stt, speaches]
+
+    - name: Create speaches directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: "{{ speaches_user }}"
+        group: "{{ speaches_user }}"
+        mode: "0755"
+      loop:
+        - "{{ speaches_install_path }}"
+        - "{{ speaches_install_path }}/hf-cache"
+      tags: [stt, speaches]
+
+    - name: Clone Speaches repository
+      ansible.builtin.git:
+        repo: https://github.com/speaches-ai/speaches.git
+        dest: "{{ speaches_install_path }}/src"
+        version: "{{ speaches_version }}"
+        force: true
+      become: true
+      become_user: "{{ speaches_user }}"
+      notify: restart speaches
+      tags: [stt, speaches]
+
+    - name: Remove uv required-version pin from Speaches  # upstream pins ~=0.8.14 which is overly restrictive
+      ansible.builtin.lineinfile:
+        path: "{{ speaches_install_path }}/src/pyproject.toml"
+        regexp: '^required-version\s*='
+        state: absent
+      tags: [stt, speaches]
+
+    - name: Sync Speaches dependencies
+      ansible.builtin.command:
+        cmd: uv sync
+        chdir: "{{ speaches_install_path }}/src"
+      become: true
+      become_user: "{{ speaches_user }}"
+      environment:
+        HOME: "/home/{{ speaches_user }}"
+        UV_PYTHON_INSTALL_DIR: "{{ speaches_install_path }}/python"
+      register: _uv_sync
+      changed_when: "'Resolved' in _uv_sync.stderr or 'Installed' in _uv_sync.stderr"
+      notify: restart speaches
+      tags: [stt, speaches]
+
+    - name: Fix ctranslate2 execstack for kernel 6.x  # library ships with RWE GNU_STACK, blocked by modern kernels
+      ansible.builtin.shell:
+        cmd: find {{ speaches_install_path }}/src/.venv -name 'libctranslate2*.so*' -exec patchelf --clear-execstack {} \;
+      changed_when: false
+      tags: [stt, speaches]
+
+    - name: Deploy speaches systemd service
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/speaches.service
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=Speaches STT Server (faster-whisper, CPU)
+          After=network.target
+
+          [Service]
+          Type=simple
+          User={{ speaches_user }}
+          Group={{ speaches_user }}
+          WorkingDirectory={{ speaches_install_path }}/src
+          ExecStart={{ speaches_install_path }}/src/.venv/bin/uvicorn \
+            --factory \
+            --host {{ speaches_host }} \
+            --port {{ speaches_port }} \
+            speaches.main:create_app
+          Environment="WHISPER__MODEL={{ speaches_model }}"
+          Environment="WHISPER__DEVICE={{ speaches_device }}"
+          Environment="WHISPER__COMPUTE_TYPE={{ speaches_compute_type }}"
+          Environment="HF_HOME={{ speaches_install_path }}/hf-cache"
+          Restart=always
+          RestartSec=10
+          TimeoutStartSec=180
+          MemoryMax=16G
+          StandardOutput=journal
+          StandardError=journal
+          NoNewPrivileges=true
+          ProtectSystem=strict
+          ProtectHome=true
+          ReadWritePaths={{ speaches_install_path }}
+          PrivateTmp=true
+
+          [Install]
+          WantedBy=multi-user.target
+      notify: restart speaches
+      tags: [stt, speaches]
+
+    - name: Enable and start Speaches
+      ansible.builtin.systemd:
+        name: speaches
+        enabled: "{{ stt_backend == 'speaches' }}"
+        state: "{{ 'started' if stt_backend == 'speaches' else 'stopped' }}"
+        daemon_reload: true
+      tags: [stt, speaches]
+
+    # -- whisper.cpp (alternative backend, built from source — no Linux binaries in releases) --
+
+    - name: Create whisper-cpp directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: "{{ speaches_user }}"
+        group: "{{ speaches_user }}"
+        mode: "0755"
+      loop:
+        - "{{ whisper_cpp_bin_path }}"
+        - "{{ whisper_cpp_model_path }}"
+      tags: [stt, whisper-cpp]
+
+    - name: Install whisper.cpp build dependencies
+      ansible.builtin.apt:
+        name:
+          - cmake
+          - g++
+          - make
+          - libvulkan-dev
+          - glslc
+        state: present
+      tags: [stt, whisper-cpp]
+
+    - name: Clone whisper.cpp source
+      ansible.builtin.git:
+        repo: https://github.com/ggml-org/whisper.cpp.git
+        dest: /opt/whisper-cpp/src
+        version: "{{ whisper_cpp_version }}"
+        force: true
+      become: true
+      become_user: "{{ speaches_user }}"
+      register: _whisper_cpp_clone
+      tags: [stt, whisper-cpp]
+
+    - name: Check whisper-server binary exists
+      ansible.builtin.stat:
+        path: "{{ whisper_cpp_bin_path }}/whisper-server"
+      register: _whisper_cpp_bin
+      tags: [stt, whisper-cpp]
+
+    - name: Build whisper.cpp from source (AVX-512 native + Vulkan GPU)  # noqa: no-handler
+      ansible.builtin.shell:
+        cmd: |
+          cmake -B build -DCMAKE_BUILD_TYPE=Release \
+            -DGGML_NATIVE=ON \
+            -DGGML_VULKAN=ON \
+            -DGGML_LTO=ON
+          cmake --build build --config Release -j$(nproc)
+          cp build/bin/whisper-server {{ whisper_cpp_bin_path }}/whisper-server
+        chdir: /opt/whisper-cpp/src
+      become: true
+      become_user: "{{ speaches_user }}"
+      when: _whisper_cpp_clone.changed or not _whisper_cpp_bin.stat.exists
+      changed_when: true
+      notify: restart whisper-server
+      tags: [stt, whisper-cpp]
+
+    - name: Check whisper.cpp model exists
+      ansible.builtin.stat:
+        path: "{{ whisper_cpp_model_path }}/ggml-{{ whisper_cpp_model }}.bin"
+      register: _whisper_model_stat
+      tags: [stt, whisper-cpp]
+
+    - name: Download whisper.cpp GGML model # noqa: yaml[line-length]
+      ansible.builtin.get_url:
+        url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-{{ whisper_cpp_model }}.bin"
+        dest: "{{ whisper_cpp_model_path }}/ggml-{{ whisper_cpp_model }}.bin"
+        owner: "{{ speaches_user }}"
+        group: "{{ speaches_user }}"
+        mode: "0644"
+      when: not _whisper_model_stat.stat.exists
+      tags: [stt, whisper-cpp]
+
+    - name: Find old whisper.cpp models to clean up
+      ansible.builtin.find:
+        paths: "{{ whisper_cpp_model_path }}"
+        patterns: "ggml-*.bin"
+        excludes: "ggml-{{ whisper_cpp_model }}.bin"
+      register: _old_whisper_models
+      tags: [stt, whisper-cpp]
+
+    - name: Remove old whisper.cpp models
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: absent
+      loop: "{{ _old_whisper_models.files }}"
+      loop_control:
+        label: "{{ item.path | basename }}"
+      tags: [stt, whisper-cpp]
+
+    - name: Deploy whisper-server systemd service
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/whisper-server.service
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=whisper.cpp STT Server (GGML, Vulkan GPU + AVX-512)
+          After=network.target
+
+          [Service]
+          Type=simple
+          User={{ speaches_user }}
+          Group={{ speaches_user }}
+          ExecStart={{ whisper_cpp_bin_path }}/whisper-server \
+            --model {{ whisper_cpp_model_path }}/ggml-{{ whisper_cpp_model }}.bin \
+            --host {{ speaches_host }} \
+            --port {{ whisper_cpp_port }} \
+            --inference-path "/v1/audio/transcriptions" \
+            --threads {{ whisper_cpp_threads }} \
+            --convert
+          Restart=always
+          RestartSec=10
+          TimeoutStartSec=60
+          MemoryMax=16G
+          StandardOutput=journal
+          StandardError=journal
+          NoNewPrivileges=true
+          ProtectSystem=strict
+          ReadWritePaths={{ whisper_cpp_bin_path }} {{ whisper_cpp_model_path }}
+          PrivateTmp=true
+
+          [Install]
+          WantedBy=multi-user.target
+      notify: restart whisper-server
+      tags: [stt, whisper-cpp]
+
+    - name: Enable and start whisper-server
+      ansible.builtin.systemd:
+        name: whisper-server
+        enabled: "{{ stt_backend == 'whisper-cpp' }}"
+        state: "{{ 'started' if stt_backend == 'whisper-cpp' else 'stopped' }}"
+        daemon_reload: true
+      tags: [stt, whisper-cpp]
+
+    # -- STT exporter --
+
+    - name: Create STT exporter directory
+      ansible.builtin.file:
+        path: /opt/stt_exporter
+        state: directory
+        owner: "{{ speaches_user }}"
+        group: "{{ speaches_user }}"
+        mode: "0755"
+      tags: [stt, monitoring]
+
+    - name: Deploy STT exporter script
+      ansible.builtin.template:
+        src: speaches-exporter/speaches_exporter.py.j2
+        dest: /opt/stt_exporter/stt_exporter.py
+        owner: "{{ speaches_user }}"
+        group: "{{ speaches_user }}"
+        mode: "0755"
+      notify: restart stt-exporter
+      tags: [stt, monitoring]
+
+    - name: Deploy STT exporter systemd service
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/stt-exporter.service
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=STT Prometheus Exporter
+          After=network.target
+
+          [Service]
+          Type=simple
+          User={{ speaches_user }}
+          ExecStart=/usr/bin/python3 /opt/stt_exporter/stt_exporter.py
+          Restart=always
+          RestartSec=10
+          StandardOutput=journal
+          StandardError=journal
+
+          [Install]
+          WantedBy=multi-user.target
+      notify: restart stt-exporter
+      tags: [stt, monitoring]
+
+    - name: Enable and start STT exporter
+      ansible.builtin.systemd:
+        name: stt-exporter
+        enabled: true
+        state: started
+        daemon_reload: true
+      tags: [stt, monitoring]
+
+    # -- STT nginx proxy --
+
+    - name: Configure nginx STT proxy
+      ansible.builtin.copy:
+        dest: /etc/nginx/sites-available/speaches
+        mode: "0644"
+        content: |
+          server {
+              listen {{ stt_proxy_listen }};
+
+              location / {
+                  if ($http_authorization != "Bearer {{ speaches_api_key }}") {
+                      return 401 '{"error": "unauthorized"}';
+                  }
+
+                  proxy_pass http://127.0.0.1:{{ stt_local_port }};
+                  proxy_set_header Host 127.0.0.1;
+                  proxy_set_header X-Real-IP $remote_addr;
+                  proxy_buffering off;
+                  proxy_read_timeout 120s;
+                  proxy_send_timeout 120s;
+                  client_max_body_size 100m;
+
+                  proxy_set_header Connection "";
+                  proxy_http_version 1.1;
+              }
+          }
+      when: stt_nginx_proxy
+      notify: restart nginx
+      tags: [stt, nginx]
+
+    - name: Enable STT nginx site
+      ansible.builtin.file:
+        src: /etc/nginx/sites-available/speaches
+        dest: /etc/nginx/sites-enabled/speaches
+        state: link
+      when: stt_nginx_proxy
+      notify: restart nginx
+      tags: [stt, nginx]
+
+    - name: Reload nginx to pick up STT vhost
+      ansible.builtin.systemd:
+        name: nginx
+        state: reloaded
+      when: stt_nginx_proxy
+      tags: [stt, nginx]
+
+    # -- STT health check --
+
+    - name: Wait for STT backend to be ready
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ stt_local_port }}{{ '/health' if stt_backend == 'speaches' else '/' }}"
+        method: GET
+        status_code: 200
+      register: _stt_health
+      retries: 30
+      delay: 10
+      until: _stt_health.status == 200
+      tags: [stt]
+
     # ===== Model pulls ========================================================
 
     - name: Pull Ollama models
@@ -781,28 +1145,20 @@
       tags: [validate]
 
     - name: Print summary
+      vars:
+        _summary:
+          - "Host:          {{ ms_s1_host_ip }} (sardior.{{ ms_s1_domain }})"
+          - "OS:            Ubuntu 26.04 LTS"
+          - "GPU:           AMD Radeon 8060S (ROCm + Vulkan)"
+          - "Ollama:        http://{{ ms_s1_host_ip }}:{{ ollama_port }}{{ ' | proxy: http://' + ollama_proxy_listen if ollama_nginx_proxy else '' }}"
+          - "Models:        {{ ollama_models | join(', ') }}"
+          - "STT backend:   {{ stt_backend }}"
+          - "STT endpoint:  {{ 'http://' + stt_proxy_listen if stt_nginx_proxy else 'http://127.0.0.1:' + stt_local_port | string }}"
+          - "Exporters:     node(:{{ node_exporter_port }}) ollama(:{{ ollama_exporter_port }}) stt(:{{ stt_exporter_port }}) nginx(:{{ nginx_exporter_port }})"
+          - "NUT:           {{ nut_ups_name }}@{{ nut_server_host }} (secondary)"
+          - "Watchdog:      SP5100 TCO (30s)"
       ansible.builtin.debug:
-        msg: |
-          ============================================
-          MS-S1 configured — Ubuntu 26.04 + Ollama
-          ============================================
-          Host:           {{ ms_s1_host_ip }} (sardior.{{ ms_s1_domain }})
-          OS:             Ubuntu 26.04 LTS (Resolute Raccoon)
-          GPU:            AMD Radeon 8060S via ROCm
-          Ollama API:     http://{{ ms_s1_host_ip }}:{{ ollama_port }}
-          {% if ollama_nginx_proxy %}
-          Ollama (auth):  http://{{ ollama_proxy_listen }}
-          {% endif %}
-          Models:         {{ ollama_models | join(', ') }}
-          Monitoring:
-            - Node exporter:   http://{{ ms_s1_host_ip }}:{{ node_exporter_port }}/metrics
-            - Ollama exporter: http://{{ ms_s1_host_ip }}:{{ ollama_exporter_port }}/metrics
-            - Nginx exporter:  http://{{ ms_s1_host_ip }}:{{ nginx_exporter_port }}/metrics
-          NUT client:     {{ nut_ups_name }}@{{ nut_server_host }} (secondary)
-          TPM LUKS:       see docs/ms-s1-provisioning-plan.md for manual setup
-          Watchdog:       SP5100 TCO (30s timeout)
-          NIC recovery:   enabled (auto-resets on boot)
-          ============================================
+        msg: "{{ _summary }}"
       tags: [validate]
 
   handlers:
@@ -851,6 +1207,29 @@
         state: restarted
         daemon_reload: true
       listen: restart nginx-exporter
+
+    - name: Restart Speaches
+      ansible.builtin.systemd:
+        name: speaches
+        state: restarted
+        daemon_reload: true
+      listen: restart speaches
+      when: stt_backend == 'speaches'
+
+    - name: Restart whisper-server
+      ansible.builtin.systemd:
+        name: whisper-server
+        state: restarted
+        daemon_reload: true
+      listen: restart whisper-server
+      when: stt_backend == 'whisper-cpp'
+
+    - name: Restart STT exporter
+      ansible.builtin.systemd:
+        name: stt-exporter
+        state: restarted
+        daemon_reload: true
+      listen: restart stt-exporter
 
     - name: Restart sshd
       ansible.builtin.systemd:

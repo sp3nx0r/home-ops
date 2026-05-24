@@ -35,7 +35,7 @@ ms_s1_ssh_pubkey_path: ~/.ssh/personal.pub
 ollama_version: v0.24.0
 ollama_host: 127.0.0.1
 ollama_port: 11434
-ollama_keep_alive: 24h
+ollama_keep_alive: "-1"
 ollama_num_parallel: 2
 ollama_context_length: 65536
 ollama_load_timeout: 30m
@@ -51,6 +51,38 @@ ollama_models:
 # -- Nginx API proxy (optional) --------------------------------------------
 ollama_nginx_proxy: true
 ollama_proxy_listen: "{{ ms_s1_host_ip }}:11435"
+
+# -- STT Backend (Speaches / whisper.cpp) -----------------------------------
+stt_backend: speaches  # "speaches" or "whisper-cpp"
+
+# Speaches (active by default)
+# renovate: datasource=github-releases depName=speaches-ai/speaches
+speaches_version: "v0.9.0-rc.3"
+speaches_host: 127.0.0.1
+speaches_port: 8200
+speaches_model: "Systran/faster-whisper-large-v3-turbo"
+speaches_device: cpu
+speaches_compute_type: int8
+speaches_install_path: /opt/speaches
+speaches_user: speaches
+speaches_api_key: "{{ vault_speaches_api_key }}"
+
+# whisper.cpp (built with Vulkan GPU + AVX-512 native optimizations)
+# ROCm/HIP blocked by https://github.com/ggml-org/whisper.cpp/issues/3553
+# but Vulkan via Mesa RADV works fine on RDNA 4
+# renovate: datasource=github-releases depName=ggml-org/whisper.cpp
+whisper_cpp_version: "v1.8.4"
+whisper_cpp_model: large-v3-turbo
+whisper_cpp_model_path: /opt/whisper-cpp/models
+whisper_cpp_bin_path: /opt/whisper-cpp/bin
+whisper_cpp_port: 8200
+whisper_cpp_threads: 12
+
+# Shared STT config (backend-agnostic)
+stt_local_port: 8200
+stt_nginx_proxy: true
+stt_proxy_listen: "{{ ms_s1_host_ip }}:11436"
+stt_exporter_port: 8201
 
 # -- Host sysctls -----------------------------------------------------------
 ms_s1_sysctls:
@@ -147,11 +179,14 @@ nginx_exporter_version: "1.5.1"
 ms_s1_packages:
   - rocm
   - curl
+  - ffmpeg
   - nginx
+  - patchelf
   - pciutils
   - htop
   - tmux
   - vim
+  - git
   - nut-client
   - unattended-upgrades
   - apt-listchanges
