@@ -39,6 +39,8 @@ spec:
                 exec:
                   command: ["/bin/sh", "-c", "(ip rule del table 51820; ip -6 rule del table 51820) || true"]
             env:
+              PUID: "0"
+              PGID: "0"
               VPN_SERVICE_PROVIDER: custom
               VPN_TYPE: wireguard
               VPN_PORT_FORWARDING: "on"
