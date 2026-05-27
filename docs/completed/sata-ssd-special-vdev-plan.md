@@ -4,26 +4,26 @@
 > Target: 45Drives HL8 NAS (themberchaud) — TrueNAS SCALE
 > Purpose: Mirrored ZFS special vdev for metadata + small block acceleration
 
-## Status: Waiting on Replacement Drive
+## Status: Complete
 
-**2025-05-22:** Hot-slotted both original SSDs into HL8 bays (no adapter brackets
-needed — drives seated directly in the 3.5" hot-swap trays).
+**2026-05-22:** Hot-slotted both original SSDs into HL8 bays (no adapter brackets
+needed — drives seated directly in the 3.5" hot-swap trays). One of the two
+original WDS500G2B0A drives was dead (SATA PHY linked but controller failed to
+IDENTIFY — likely the failed half of the old Proxmox root mirror). Ordered
+replacement.
 
-- **SSD #1 (sdf):** WDC WDS500G2B0A (serial 20155P442510) — detected on `ata8`,
-  SMART healthy, 5,255 power-on hours, 0 reallocated sectors, 14% write endurance
-  used. Has old Proxmox/TrueNAS boot partitions — needs wipe before use.
-- **SSD #2 (original):** Dead — SATA PHY links up but drive controller fails to
-  respond to IDENTIFY command across two different bays (ata7, ata9). Repeated
-  timeouts at both 6.0 and 3.0 Gbps. Likely the failed half of the old Proxmox
-  root mirror.
-- **Replacement ordered:** WDS500G3B0A (WD Blue SA510 500GB, current gen).
-  Expected delivery this weekend (2025-05-24/25).
+**2026-05-27:** Replacement WD Blue SA510 500GB (WDS500G3B0A, serial
+25445Q800293) arrived and installed. Wiped old Proxmox boot partitions and ZFS
+`rpool` label from the surviving original drive, then added both as a mirrored
+special vdev to `tank`. Set `special_small_blocks=64K` on
+`tank/homelab/k8s-exports`.
 
-**Next steps when replacement arrives:**
-1. Hot-slot replacement into an empty bay
-2. Verify detection (`lsblk`) and run SMART check (`smartctl -a /dev/sdX`)
-3. Wipe old partitions on sdf (`wipefs -a /dev/sdf`)
-4. Add mirrored special vdev to tank (see Setup section below)
+### Final drive mapping
+
+| Role | Device | Model | Serial |
+|------|--------|-------|--------|
+| Special mirror | sdf | WDC WDS500G2B0A (2nd gen) | 20155P442510 |
+| Special mirror | sdg | WD Blue SA510 500GB (current gen) | 25445Q800293 |
 
 ## What Is a Special VDEV
 
