@@ -27,3 +27,21 @@ spec:
           annotations:
             summary: >-
               {{ $labels.obj_namespace }}/{{ $labels.obj_name }} volume is out of sync
+
+        - alert: KopiaMaintenanceStale
+          expr: |-
+            (
+              time() - volsync_kopiamaintenance_last_maintenance_time{
+                exported_namespace="volsync-system",
+                name="daily"
+              }
+            ) > 172800
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: >-
+              VolSync Kopia maintenance has not succeeded in the last 48 hours
+            description: >-
+              KopiaMaintenance {{ $labels.exported_namespace }}/{{ $labels.name }}
+              last reported a successful maintenance run more than 48 hours ago.

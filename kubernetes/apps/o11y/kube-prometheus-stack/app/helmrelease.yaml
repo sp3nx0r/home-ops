@@ -186,6 +186,11 @@ spec:
               - imagepolicies
               - imageupdateautomations
             verbs: ["list", "watch"]
+          - apiGroups:
+              - volsync.backube
+            resources:
+              - kopiamaintenances
+            verbs: ["list", "watch"]
       customResourceState:
         enabled: true
         config:
@@ -358,6 +363,42 @@ spec:
                       exported_namespace: [metadata, namespace]
                       ready: [status, conditions, "[type=Ready]", status]
                       suspended: [spec, suspend]
+              - groupVersionKind:
+                  group: volsync.backube
+                  version: v1alpha1
+                  kind: KopiaMaintenance
+                metricNamePrefix: volsync_kopiamaintenance
+                metrics:
+                  - name: "resource_info"
+                    help: "The current state of a VolSync KopiaMaintenance resource."
+                    each:
+                      type: Info
+                      info:
+                        labelsFromPath:
+                          name: [metadata, name]
+                    labelsFromPath:
+                      exported_namespace: [metadata, namespace]
+                      healthy: [status, conditions, "[type=MaintenanceHealthy]", status]
+                      ready: [status, conditions, "[type=Ready]", status]
+                      next_scheduled_maintenance: [status, nextScheduledMaintenance]
+                  - name: "last_maintenance_time"
+                    help: "Unix timestamp of the last successful Kopia maintenance run."
+                    each:
+                      type: Gauge
+                      gauge:
+                        path: [status, lastMaintenanceTime]
+                    labelsFromPath:
+                      exported_namespace: [metadata, namespace]
+                      name: [metadata, name]
+                  - name: "maintenance_failures"
+                    help: "Number of consecutive Kopia maintenance failures reported by the status."
+                    each:
+                      type: Gauge
+                      gauge:
+                        path: [status, maintenanceFailures]
+                    labelsFromPath:
+                      exported_namespace: [metadata, namespace]
+                      name: [metadata, name]
                       webhook_path: [status, webhookPath]
 
     grafana:
