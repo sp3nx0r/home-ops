@@ -69,8 +69,15 @@ spec:
                 custom: true
                 spec:
                   exec:
-                    command: ["/bin/sh", "-c", "test -s /tmp/gluetun/forwarded_port && wget -q -O /dev/null http://localhost:9999"]
+                    command:
+                      - /bin/sh
+                      - -c
+                      - |
+                        test -s /tmp/gluetun/forwarded_port &&
+                        wget -q -O /dev/null http://localhost:9999 &&
+                        wget -q --timeout=5 -O /dev/null http://cloudflare.com/cdn-cgi/trace
                   periodSeconds: 30
+                  timeoutSeconds: 10
                   failureThreshold: 3
             resources:
               requests:
@@ -95,7 +102,7 @@ spec:
               QBT_WEBUI_PORT: &port 80
               TZ: America/Chicago
             probes:
-              liveness: &probes
+              liveness:
                 enabled: true
                 custom: true
                 spec:
@@ -106,7 +113,18 @@ spec:
                   periodSeconds: 10
                   timeoutSeconds: 5
                   failureThreshold: 3
-              readiness: *probes
+              readiness:
+                enabled: true
+                custom: true
+                spec:
+                  exec:
+                    command:
+                      - /bin/sh
+                      - -c
+                      - 'wget -qO- http://127.0.0.1:80/api/v2/transfer/info | grep -q ''"connection_status":"connected"'''
+                  periodSeconds: 30
+                  timeoutSeconds: 10
+                  failureThreshold: 5
               startup:
                 enabled: true
                 spec:
