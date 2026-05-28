@@ -123,10 +123,10 @@ spec:
                       - /bin/sh
                       - -c
                       - 'wget -qO- http://127.0.0.1:80/api/v2/transfer/info | grep -q ''"connection_status":"connected"'''
-                  initialDelaySeconds: 300
+                  initialDelaySeconds: 120
                   periodSeconds: 30
                   timeoutSeconds: 10
-                  failureThreshold: 5
+                  failureThreshold: 10
               startup:
                 enabled: true
                 spec:
