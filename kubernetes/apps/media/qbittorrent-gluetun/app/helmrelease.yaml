@@ -69,17 +69,9 @@ spec:
                 custom: true
                 spec:
                   exec:
-                    command:
-                      - /bin/sh
-                      - -c
-                      - |
-                        test -s /tmp/gluetun/forwarded_port &&
-                        wget -q -O /dev/null http://localhost:9999 &&
-                        wget -q --timeout=5 -O /dev/null http://cloudflare.com/cdn-cgi/trace
-                  initialDelaySeconds: 90
+                    command: ["/bin/sh", "-c", "test -s /tmp/gluetun/forwarded_port && wget -q -O /dev/null http://localhost:9999"]
                   periodSeconds: 30
-                  timeoutSeconds: 10
-                  failureThreshold: 5
+                  failureThreshold: 3
             resources:
               requests:
                 cpu: 10m
@@ -107,29 +99,32 @@ spec:
                 enabled: true
                 custom: true
                 spec:
-                  httpGet:
-                    path: /api/v2/app/version
-                    port: *port
-                  initialDelaySeconds: 0
-                  periodSeconds: 10
-                  timeoutSeconds: 5
-                  failureThreshold: 3
-              readiness:
-                enabled: true
-                custom: true
-                spec:
                   exec:
                     command:
                       - /bin/sh
                       - -c
                       - 'wget -qO- http://127.0.0.1:80/api/v2/transfer/info | grep -q ''"connection_status":"connected"'''
-                  initialDelaySeconds: 120
-                  periodSeconds: 30
+                  initialDelaySeconds: 300
+                  periodSeconds: 60
                   timeoutSeconds: 10
-                  failureThreshold: 10
+                  failureThreshold: 30
+              readiness:
+                enabled: true
+                custom: true
+                spec:
+                  httpGet:
+                    path: /api/v2/app/version
+                    port: *port
+                  periodSeconds: 10
+                  timeoutSeconds: 5
+                  failureThreshold: 3
               startup:
                 enabled: true
+                custom: true
                 spec:
+                  httpGet:
+                    path: /api/v2/app/version
+                    port: *port
                   periodSeconds: 10
                   failureThreshold: 30
             resources:
