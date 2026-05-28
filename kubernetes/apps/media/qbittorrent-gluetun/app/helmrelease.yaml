@@ -76,10 +76,10 @@ spec:
                         test -s /tmp/gluetun/forwarded_port &&
                         wget -q -O /dev/null http://localhost:9999 &&
                         wget -q --timeout=5 -O /dev/null http://cloudflare.com/cdn-cgi/trace
-                  initialDelaySeconds: 60
+                  initialDelaySeconds: 90
                   periodSeconds: 30
                   timeoutSeconds: 10
-                  failureThreshold: 3
+                  failureThreshold: 5
             resources:
               requests:
                 cpu: 10m
