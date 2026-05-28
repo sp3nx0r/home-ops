@@ -82,7 +82,7 @@ spec:
                 - alertname = Watchdog
             - receiver: discord
               matchers:
-                - severity = critical
+                - severity =~ critical|warning
               group_wait: 30s
               continue: true
             - receiver: zeroclaw
