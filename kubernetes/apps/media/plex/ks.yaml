@@ -8,6 +8,9 @@ spec:
   interval: 1h
   path: ./kubernetes/apps/media/plex/app
   postBuild:
+    substitute:
+      APP: plex
+      VOLSYNC_CAPACITY: "50Gi"
     substituteFrom:
       - name: cluster-secrets
         kind: Secret
@@ -18,3 +21,6 @@ spec:
     namespace: flux-system
   targetNamespace: media
   wait: false
+  dependsOn:
+    - name: volsync
+      namespace: volsync-system
