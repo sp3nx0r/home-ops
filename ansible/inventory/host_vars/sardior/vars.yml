@@ -73,6 +73,7 @@ speaches_api_key: "{{ vault_speaches_api_key }}"
 # renovate: datasource=github-releases depName=ggml-org/whisper.cpp
 whisper_cpp_version: v1.8.5
 whisper_cpp_model: large-v3-turbo
+whisper_cpp_install_path: /opt/whisper-cpp
 whisper_cpp_model_path: /opt/whisper-cpp/models
 whisper_cpp_bin_path: /opt/whisper-cpp/bin
 whisper_cpp_port: 8200

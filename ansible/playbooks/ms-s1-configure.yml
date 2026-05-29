@@ -876,6 +876,7 @@
         group: "{{ speaches_user }}"
         mode: "0755"
       loop:
+        - "{{ whisper_cpp_install_path }}"
         - "{{ whisper_cpp_bin_path }}"
         - "{{ whisper_cpp_model_path }}"
       tags: [stt, whisper-cpp]
@@ -911,6 +912,7 @@
     - name: Build whisper.cpp from source (AVX-512 native + Vulkan GPU)  # noqa: no-handler
       ansible.builtin.shell:
         cmd: |
+          rm -f {{ whisper_cpp_bin_path }}/whisper-server
           cmake -B build -DCMAKE_BUILD_TYPE=Release \
             -DGGML_NATIVE=ON \
             -DGGML_VULKAN=ON \
