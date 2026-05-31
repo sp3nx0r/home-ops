@@ -1,0 +1,126 @@
+---
+# Restart pods using iSCSI-backed PVCs.
+# Used after TrueNAS reboot / iSCSI reconnection to trigger volume remount
+# and e2fsck recovery (requires checkFilesystem enabled in democratic-csi).
+#
+# Usage:
+#   task ansible:iscsi:restart
+#
+- name: Restart pods on iSCSI volumes
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    storage_class: iscsi
+    grace_period: 30
+
+  tasks:
+    - name: Get all PersistentVolumes
+      ansible.builtin.command:
+        cmd: kubectl get pv -o json
+      register: _pv_query
+      changed_when: false
+
+    - name: Build list of iSCSI-backed PVCs
+      ansible.builtin.set_fact:
+        _iscsi_pvcs: >-
+          {{
+            (_pv_query.stdout | from_json).items
+            | selectattr('spec.storageClassName', 'eq', storage_class)
+            | selectattr('spec.claimRef', 'defined')
+            | map(attribute='spec.claimRef')
+            | list
+          }}
+
+    - name: Display iSCSI PVC count
+      ansible.builtin.debug:
+        msg: "Found {{ _iscsi_pvcs | length }} iSCSI-backed PVCs"
+
+    - name: End play if no iSCSI PVCs found
+      ansible.builtin.meta: end_play
+      when: _iscsi_pvcs | length == 0
+
+    - name: Build PVC lookup set
+      ansible.builtin.set_fact:
+        _pvc_lookup: "{{ _iscsi_pvcs | map(attribute='namespace') | zip(_iscsi_pvcs | map(attribute='name')) | map('join', '/') | list }}"
+
+    - name: Get all running pods
+      ansible.builtin.command:
+        cmd: kubectl get pods --all-namespaces -o json --field-selector=status.phase=Running
+      register: _pods_query
+      changed_when: false
+
+    - name: Identify pods using iSCSI PVCs
+      ansible.builtin.set_fact:
+        _affected_pods: >-
+          {%- set pods = [] -%}
+          {%- for pod in (_pods_query.stdout | from_json).items -%}
+            {%- set ns = pod.metadata.namespace -%}
+            {%- set found = {'value': false} -%}
+            {%- for vol in pod.spec.volumes | default([]) -%}
+              {%- if vol.persistentVolumeClaim is defined and not found.value -%}
+                {%- set pvc_key = ns ~ '/' ~ vol.persistentVolumeClaim.claimName -%}
+                {%- if pvc_key in _pvc_lookup -%}
+                  {%- if pods.append({'namespace': ns, 'name': pod.metadata.name}) -%}{%- endif -%}
+                  {%- if found.update({'value': true}) -%}{%- endif -%}
+                {%- endif -%}
+              {%- endif -%}
+            {%- endfor -%}
+          {%- endfor -%}
+          {{ pods }}
+
+    - name: End play if no affected pods
+      ansible.builtin.meta: end_play
+      when: _affected_pods | length == 0
+
+    - name: Display affected pods
+      ansible.builtin.debug:
+        msg: "Will restart: {{ item.namespace }}/{{ item.name }}"
+      loop: "{{ _affected_pods }}"
+      loop_control:
+        label: "{{ item.namespace }}/{{ item.name }}"
+
+    - name: Confirm restart
+      ansible.builtin.pause:
+        prompt: "About to restart {{ _affected_pods | length }} pods. Press Enter to continue or Ctrl+C to abort"
+
+    - name: Delete affected pods
+      ansible.builtin.command:
+        cmd: >-
+          kubectl delete pod -n {{ item.namespace }} {{ item.name }}
+          --grace-period={{ grace_period }}
+      loop: "{{ _affected_pods }}"
+      loop_control:
+        label: "{{ item.namespace }}/{{ item.name }}"
+      changed_when: true
+      register: _delete_results
+
+    - name: Wait for replacements to become ready
+      ansible.builtin.command:
+        cmd: >-
+          kubectl wait pods -n {{ item.namespace }}
+          -l app.kubernetes.io/name={{ item.name | regex_replace('-[a-z0-9]{5,10}(-[a-z0-9]{5})?$', '') | regex_replace('-[0-9]+$', '') }}
+          --for=condition=Ready --timeout=120s
+      loop: "{{ _affected_pods }}"
+      loop_control:
+        label: "{{ item.namespace }}/{{ item.name }}"
+      changed_when: false
+      failed_when: false
+      register: _wait_results
+
+    - name: Report pods that failed to become ready
+      ansible.builtin.debug:
+        msg: "WARNING: {{ item.item.namespace }}/{{ item.item.name }} - {{ item.stderr | default('timeout or error') }}"
+      loop: "{{ _wait_results.results }}"
+      loop_control:
+        label: "{{ item.item.namespace }}/{{ item.item.name }}"
+      when: item.rc | default(1) != 0
+
+    - name: Summary
+      vars:
+        _ready: "{{ _wait_results.results | selectattr('rc', 'defined') | selectattr('rc', 'eq', 0) | list | length }}"
+      ansible.builtin.debug:
+        msg: >-
+          Restart complete. {{ _ready }}/{{ _affected_pods | length }} pods ready.
+          Run 'kubectl get pods -A | grep -v Running' to check remaining issues.
