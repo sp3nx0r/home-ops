@@ -152,7 +152,7 @@ spec:
 
     prometheus-node-exporter:
       fullnameOverride: node-exporter
-      podSecurityContext:
+      securityContext:
         supplementalGroups: [0]
       extraArgs:
         - --collector.filesystem.mount-points-exclude=^/(dev|proc|sys|run/containerd/.+|var/lib/docker/.+|var/lib/kubelet/pods/.+)($|/)
