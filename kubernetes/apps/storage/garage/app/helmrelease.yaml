@@ -76,6 +76,13 @@ spec:
             - name: pocket-id
               read: true
               write: true
+        thanos:
+          keyId: "${GARAGE_THANOS_KEY_ID}"
+          secretKey: "${GARAGE_THANOS_SECRET_KEY}"
+          buckets:
+            - name: thanos
+              read: true
+              write: true
       buckets:
         - name: loki-chunks
           keys:
@@ -88,6 +95,10 @@ spec:
         - name: pocket-id
           keys:
             - name: pocket-id
+              permissions: ["read", "write"]
+        - name: thanos
+          keys:
+            - name: thanos
               permissions: ["read", "write"]
 
     monitoring:

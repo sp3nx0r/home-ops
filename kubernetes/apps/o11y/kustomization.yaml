@@ -18,5 +18,6 @@ resources:
   - ./prometheus-adapter/ks.yaml
   - ./truenas-exporter/ks.yaml
   - ./unpoller/ks.yaml
+  - ./thanos/ks.yaml
   - ./vector/ks.yaml
   - ./vector-syslog/ks.yaml
