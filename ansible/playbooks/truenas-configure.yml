@@ -895,6 +895,7 @@
           encryption_salt: "{{ truenas_cloudsync_encryption_salt }}"
           bwlimit: "{{ truenas_cloudsync_bwlimit }}"
           transfers: "{{ truenas_cloudsync_transfers }}"
+          args: "{{ truenas_cloudsync_args }}"
           exclude: "{{ item.exclude | default([]) }}"
           follow_symlinks: true
           create_empty_src_dirs: false
@@ -914,10 +915,18 @@
         _existing: "{{ _cloudsync_tasks.stdout | from_json | selectattr('description', 'equalto', item.description) | first }}"
         _task_id: "{{ _existing.id }}"
         _desired_exclude: "{{ item.exclude | default([]) }}"
+        _desired_schedule:
+          minute: "{{ item.minute }}"
+          hour: "{{ item.hour }}"
+          dom: "*"
+          month: "*"
+          dow: "*"
         _update:
           bwlimit: "{{ truenas_cloudsync_bwlimit }}"
           transfers: "{{ truenas_cloudsync_transfers }}"
+          args: "{{ truenas_cloudsync_args }}"
           exclude: "{{ _desired_exclude }}"
+          schedule: "{{ _desired_schedule }}"
       loop: "{{ truenas_cloudsync_tasks }}"
       loop_control:
         label: "{{ item.description }}"
@@ -926,7 +935,10 @@
         - >-
           (_existing.bwlimit | default([])) != truenas_cloudsync_bwlimit or
           (_existing.transfers | default(4)) != truenas_cloudsync_transfers or
-          (_existing.exclude | default([])) != _desired_exclude
+          (_existing.args | default('')) != truenas_cloudsync_args or
+          (_existing.exclude | default([])) != _desired_exclude or
+          (_existing.schedule.minute | default('')) != item.minute or
+          (_existing.schedule.hour | default('')) != item.hour
       changed_when: true
       tags: [cloudsync]
 
