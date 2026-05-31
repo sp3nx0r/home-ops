@@ -28,6 +28,12 @@ spec:
     volumeSnapshotClasses: []
     node:
       hostPID: true
+      mount:
+        checkFilesystem:
+          xfs:
+            enabled: true
+          ext4:
+            enabled: true
       driver:
         extraEnv:
           - name: ISCSIADM_HOST_STRATEGY

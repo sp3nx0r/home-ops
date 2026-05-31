@@ -2,11 +2,11 @@
 
 ## Alert
 
-**ISCSIVolumeReadOnly** — an ext4 filesystem on a Democratic-CSI iSCSI volume has been remounted read-only (`emergency_ro`).
+**ISCSIVolumeReadOnly** — an ext4 filesystem on a Democratic-CSI iSCSI volume has device errors, indicating the filesystem was remounted read-only (`emergency_ro`) or encountered I/O failures.
 
 ## When this fires
 
-The Linux kernel detected I/O errors or an aborted ext4 journal on an iSCSI-backed PVC and remounted the filesystem read-only to prevent data corruption. Common triggers:
+The Linux kernel detected I/O errors or an aborted ext4 journal on an iSCSI-backed PVC. The `node_filesystem_device_error` metric reports `1` for affected volumes. Common triggers:
 
 - TrueNAS NAS briefly went offline or rebooted
 - Network blip between a Talos node and `nas.securimancy.com:3260`
@@ -16,13 +16,14 @@ This typically affects **all iSCSI volumes on the affected node(s)**, not just o
 
 ## Assess the damage
 
-### 1. Identify affected nodes
+### 1. Identify affected volumes via Prometheus
 
 ```bash
-for n in miirym palarandusk aurinax; do
-  count=$(talosctl -n $n read /proc/mounts 2>/dev/null | grep -c emergency_ro)
-  echo "$n: $count emergency_ro mounts"
-done
+# Query Prometheus for volumes with device errors
+kubectl port-forward -n o11y svc/kube-prometheus-stack-prometheus 9090:9090 &
+curl -s 'http://localhost:9090/api/v1/query' \
+  --data-urlencode 'query=node_filesystem_device_error{mountpoint=~"/var/lib/kubelet/plugins/kubernetes.io/csi/org.democratic-csi.*",fstype="ext4"} == 1' \
+  | python3 -c "import sys,json; [print(f'{r[\"metric\"][\"instance\"]} {r[\"metric\"][\"device\"]}') for r in json.load(sys.stdin)['data']['result']]"
 ```
 
 ### 2. Check which pods are crashing
@@ -42,70 +43,66 @@ talosctl -n <node> dmesg | grep -i "iscsi\|connection.*error\|session.*recovery"
 
 If iSCSI sessions are **still down**, fix the network/NAS issue first. The recovery below only works once iSCSI is healthy again.
 
-## Recovery: Rolling node reboot
+## Recovery: Delete affected pods
 
-The only way to clear `emergency_ro` is to unmount and remount the filesystem. On Talos Linux, the cleanest path is a node reboot. Do this one node at a time to maintain cluster availability.
+With `checkFilesystem` enabled in democratic-csi, deleting a pod triggers the following chain:
 
-### For each affected node
+1. Pod deleted → volume unmounted from pod
+2. If no other pods use the volume → CSI NodeUnstageVolume disconnects the iSCSI session
+3. New pod scheduled → CSI NodeStageVolume reconnects iSCSI and runs `e2fsck -p` before mounting
+4. `e2fsck` clears the ext4 error flag in the superblock → `device_error` returns to `0`
+
+### Delete all pods on iSCSI volumes
+
+```bash
+kubectl get pods --all-namespaces -o json | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+for pod in data['items']:
+    ns = pod['metadata']['namespace']
+    name = pod['metadata']['name']
+    phase = pod.get('status',{}).get('phase','')
+    for v in pod.get('spec',{}).get('volumes',[]):
+        if v.get('persistentVolumeClaim',{}).get('claimName',''):
+            if phase == 'Running':
+                print(f'{ns} {name}')
+                break
+" | while read ns name; do
+  echo "Deleting $ns/$name"
+  kubectl delete pod -n "$ns" "$name" --grace-period=30
+done
+```
+
+### If pod deletion alone doesn't clear errors
+
+If `device_error` persists after pod restart (the ext4 superblock error flag can survive unmount/remount without `e2fsck`), fall back to a node reboot:
 
 ```bash
 NODE=<node-name>
-
-# 1. Cordon — prevent new pods from scheduling
 kubectl cordon $NODE
-
-# 2. Drain — evict all workloads
 kubectl drain $NODE --ignore-daemonsets --delete-emptydir-data --timeout=120s
-
-# If a pod gets stuck terminating:
-# kubectl delete pod -n <namespace> <pod> --force --grace-period=0
-
-# 3. Reboot
 talosctl -n $NODE reboot
-
-# 4. Wait for the node to come back (typically 1-2 minutes)
+# Wait for Ready
 kubectl get node $NODE -w
-# Wait until STATUS = Ready,SchedulingDisabled
-
-# 5. Verify no emergency_ro mounts remain
-talosctl -n $NODE read /proc/mounts | grep emergency_ro
-# Expected: no output
-
-# 6. Uncordon — allow scheduling again
 kubectl uncordon $NODE
 ```
 
-Repeat for each affected node. Order recommendation: start with the node that has the fewest affected mounts.
-
-### After all nodes are rebooted
-
-StatefulSets that were scaled down for the fix need to be scaled back up:
-
-```bash
-# Check for any StatefulSets at 0 replicas that shouldn't be
-kubectl get statefulsets -A -o wide
-```
-
-Pods that were in `CrashLoopBackOff` due to read-only mounts will self-heal once the node is rebooted and the volume is remounted read-write. You may need to delete pods stuck in backoff to speed up recovery:
-
-```bash
-kubectl delete pod -n <namespace> <pod-name>
-```
+Repeat for each affected node, starting with the node that has the fewest affected mounts.
 
 ## Verify recovery
 
 ```bash
-# All nodes ready
-kubectl get nodes
-
-# No emergency_ro mounts on any node
-for n in miirym palarandusk aurinax; do
-  count=$(talosctl -n $n read /proc/mounts 2>/dev/null | grep -c emergency_ro)
-  echo "$n: $count emergency_ro mounts"
-done
+# Check device errors cleared
+kubectl port-forward -n o11y svc/kube-prometheus-stack-prometheus 9090:9090 &
+curl -s 'http://localhost:9090/api/v1/query' \
+  --data-urlencode 'query=node_filesystem_device_error{mountpoint=~"/var/lib/kubelet/plugins/kubernetes.io/csi/org.democratic-csi.*",fstype="ext4"} == 1' \
+  | python3 -c "import sys,json; r=json.load(sys.stdin)['data']['result']; print(f'Volumes with errors: {len(r)}')"
 
 # No crashing pods
 kubectl get pods -A | grep -v Running | grep -v Completed
+
+# All nodes ready
+kubectl get nodes
 ```
 
 ## Root cause investigation
@@ -116,3 +113,4 @@ After recovery, check TrueNAS for the underlying cause:
 - **iSCSI target status**: Sharing → Block Shares (iSCSI) — verify all targets/extents are online
 - **Pool health**: Storage → Pools — check for degraded pools or disk errors
 - **Network**: check switch logs / UPS status for any outage around the time of the alert
+- **Cloud Sync / rclone**: check if an OOM event from rclone caused a reboot (see `journalctl -k --grep oom`)
