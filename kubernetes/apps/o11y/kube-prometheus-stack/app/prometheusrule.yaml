@@ -10,15 +10,15 @@ spec:
       rules:
         - alert: ISCSIVolumeReadOnly
           expr: |-
-            node_filesystem_device_error{mountpoint=~"/var/lib/kubelet/plugins/kubernetes.io/csi/org.democratic-csi.*", fstype="ext4"} == 1
+            node_filesystem_readonly{mountpoint=~"/var/lib/kubelet/plugins/kubernetes.io/csi/org.democratic-csi.*", fstype="ext4"} == 1
           for: 2m
           annotations:
             summary: >-
-              iSCSI volume {{ $labels.mountpoint }} on {{ $labels.instance }} has device errors
+              iSCSI volume {{ $labels.mountpoint }} on {{ $labels.instance }} is read-only
             description: >-
-              The ext4 filesystem on {{ $labels.device }} ({{ $labels.mountpoint }}) has encountered
-              device errors, likely due to iSCSI connection loss. Pods using this volume are likely
-              in a read-only state. Delete affected pods to trigger remount and e2fsck recovery.
+              The ext4 filesystem on {{ $labels.device }} ({{ $labels.mountpoint }}) has been
+              remounted read-only, likely due to iSCSI connection loss. Delete affected pods to
+              trigger remount and e2fsck recovery.
             runbook_url: https://github.com/sp3nx0r/home-ops/blob/main/docs/runbooks/runbook-iscsi-readonly.md
           labels:
             severity: critical
