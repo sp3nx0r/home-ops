@@ -170,6 +170,8 @@ truenas_datasets_common:
     compression: zstd
     recordsize: 128K
     atime: "off"
+    owner: "1000"
+    group: "1000"
 
   - name: "{{ truenas_pool }}/scratch"
     compression: lz4
