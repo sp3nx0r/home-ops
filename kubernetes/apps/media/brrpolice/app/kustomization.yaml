@@ -8,4 +8,16 @@ resources:
   - ./helmrelease.yaml
   - ./ocirepository.yaml
   - ./pvc.yaml
+  - ./prometheusrule.yaml
   - ./volsync-secret.sops.yaml
+configMapGenerator:
+  - name: grafana-dashboard-brrpolice
+    files:
+      - ./dashboards/brrpolice-overview.json
+    options:
+      labels:
+        grafana_dashboard: "1"
+      annotations:
+        grafana_folder: Media
+generatorOptions:
+  disableNameSuffixHash: true

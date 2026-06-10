@@ -1,0 +1,84 @@
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/monitoring.coreos.com/prometheusrule_v1.json
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: brrpolice
+spec:
+  groups:
+    - name: brrpolice.rules
+      rules:
+        - alert: BrrpoliceMetricsTargetDown
+          expr: |-
+            max by (namespace, service) (up{namespace="media", service="brrpolice"}) == 0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: >-
+              Prometheus cannot scrape brrpolice metrics
+            description: >-
+              The brrpolice ServiceMonitor target in namespace media has been unreachable
+              for more than 5 minutes.
+
+        - alert: BrrpolicePollLoopStale
+          expr: |-
+            (
+              time() - max(brrpolice_last_successful_poll_timestamp{namespace="media"})
+            ) > 120
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: >-
+              brrpolice control loop has not completed successfully
+            description: >-
+              The last successful poll cycle was more than 2 minutes ago. The app is
+              likely failing runtime_healthy (SQLite I/O errors, qBittorrent failures,
+              or recovery issues) even if the pod is still running.
+            runbook_url: >-
+              https://github.com/sp3nx0r/home-ops/blob/main/docs/runbooks/runbook-iscsi-readonly.md
+
+        - alert: BrrpolicePollLoopCritical
+          expr: |-
+            (
+              time() - max(brrpolice_last_successful_poll_timestamp{namespace="media"})
+            ) > 900
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: >-
+              brrpolice control loop has been unhealthy for 15+ minutes
+            description: >-
+              The last successful poll cycle was more than 15 minutes ago. Enforcement
+              is not running; check pod logs for SQLite disk I/O errors and inspect the
+              iSCSI PVC before restoring from Volsync.
+            runbook_url: >-
+              https://github.com/sp3nx0r/home-ops/blob/main/docs/runbooks/runbook-iscsi-readonly.md
+
+        - alert: BrrpolicePruneFailing
+          expr: |-
+            increase(brrpolice_prune_runs_total{namespace="media", result="failure"}[1h]) > 0
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: >-
+              brrpolice SQLite retention prune is failing
+            description: >-
+              At least one retention prune run failed in the past hour. Check pod logs
+              for SQLite errors and review brrpolice_prune_runs_total on the dashboard.
+
+        - alert: BrrpoliceSqliteSizeHigh
+          expr: |-
+            max(brrpolice_sqlite_size_bytes{namespace="media"}) > 1.073741824e+09
+          for: 1h
+          labels:
+            severity: warning
+          annotations:
+            summary: >-
+              brrpolice SQLite database exceeds 1 GiB
+            description: >-
+              The database file on the PVC is larger than 1 GiB. Consider tuning
+              retention settings or verifying prune runs are succeeding.
