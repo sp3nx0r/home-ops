@@ -66,6 +66,13 @@ spec:
         ports:
           http:
             port: *port
+    serviceMonitor:
+      app:
+        endpoints:
+          - port: http
+            path: /metrics
+            interval: 30s
+            scrapeTimeout: 10s
     persistence:
       data:
         existingClaim: brrpolice
