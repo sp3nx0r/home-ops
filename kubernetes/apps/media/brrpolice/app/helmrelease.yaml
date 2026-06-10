@@ -21,11 +21,17 @@ spec:
               BRRPOLICE_HTTP__PORT: &port 80
               BRRPOLICE_LOGGING__LEVEL: info
               BRRPOLICE_QBITTORRENT__BASE_URL: http://qbittorrent-gluetun.media.svc.cluster.local
+              BRRPOLICE_RETENTION__PEER_SESSION_MAX_AGE: "14d"
+              BRRPOLICE_RETENTION__PRUNE_INTERVAL: "6h"
               TZ: America/Chicago
             probes:
               liveness:
                 enabled: true
+                custom: true
                 spec:
+                  httpGet:
+                    path: /readyz
+                    port: *port
                   periodSeconds: 30
                   timeoutSeconds: 5
                   failureThreshold: 5
