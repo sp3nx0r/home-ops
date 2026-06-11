@@ -20,6 +20,7 @@ spec:
               pullPolicy: Always
             env:
               DOWNLOADER: securimancer
+              WARRIOR_ID: securimancer
               SELECTED_PROJECT: auto
               CONCURRENT_ITEMS: "6"
             probes:
