@@ -147,3 +147,11 @@ When automating or investigating from this repo, prefer local CLI and cluster ac
 - Renovate manages dependency updates (`.renovaterc.json5`).
 - Keep HelmRelease values minimal — only override what differs from chart defaults.
 - Security contexts: prefer `runAsNonRoot`, `readOnlyRootFilesystem`, and drop all capabilities.
+
+## Commit Conventions
+
+- Follow Conventional Commits for commit subjects.
+- Prefer the format `<type>(<scope>): <summary>` and use lowercase types such as `fix`, `feat`, and `chore`.
+- Write the subject in imperative style and avoid title-case freeform subjects.
+- For manual or non-trivial changes, include a commit body that briefly explains the rationale for the change and any important implementation context.
+- Keep commit bodies concise; explain why the change was needed before listing mechanical details.
