@@ -46,7 +46,7 @@ spec:
               allowPrivilegeEscalation: true
               readOnlyRootFilesystem: false
               capabilities:
-                add: ["SETUID", "SETGID"]
+                add: ["SETUID", "SETGID", "CHOWN", "DAC_OVERRIDE", "FOWNER"]
                 drop: ["ALL"]
             resources:
               requests:
