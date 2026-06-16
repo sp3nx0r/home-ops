@@ -67,22 +67,40 @@
       register: _unlock_job
       changed_when: true
 
-    - name: Wait for unlock job to complete
-      ansible.builtin.command:
-        cmd: "midclt call core.job_wait {{ _unlock_job.stdout }}"
-      register: _job_wait
-      changed_when: false
-      failed_when: false
-
-    - name: Get job result
+    - name: Wait for unlock job to leave active state
       ansible.builtin.command:
         cmd: "midclt call core.get_jobs '[[ \"id\", \"=\", {{ _unlock_job.stdout }} ]]'"
       register: _job_result
       changed_when: false
+      failed_when: false
+      until: >-
+        ((_job_result.stdout | from_json | first).state | default('UNKNOWN'))
+        not in ['WAITING', 'RUNNING']
+      retries: 60
+      delay: 2
+
+    - name: Parse unlock job
+      ansible.builtin.set_fact:
+        _job: "{{ _job_result.stdout | from_json | first }}"
+
+    - name: Identify unlock job status
+      ansible.builtin.set_fact:
+        _job_state: "{{ _job.state | default('UNKNOWN') }}"
+        _job_error: >-
+          {{ _job.error
+             if _job.error | default(none) is not none
+             else _job.exception | default('', true) }}
+
+    - name: Fail if unlock job did not complete successfully
+      ansible.builtin.fail:
+        msg: "Unlock job {{ _unlock_job.stdout }} ended with state {{ _job_state }}: {{ _job_error | default('no error detail', true) }}"
+      when: >-
+        _job_state not in ['SUCCESS']
+        or _job_error | length > 0
 
     - name: Parse unlock results
       ansible.builtin.set_fact:
-        _result: "{{ (_job_result.stdout | from_json | first).result }}"
+        _result: "{{ _job.result | default({}) }}"
 
     - name: Report unlocked datasets
       ansible.builtin.debug:
@@ -100,9 +118,23 @@
           midclt call pool.dataset.query '[["locked", "=", true]]' '{"select": ["name"]}'
       register: _verify
       changed_when: false
-      failed_when: >-
+      failed_when: false
+      until: >-
         (_verify.stdout | from_json | map(attribute='name')
-         | intersect(truenas_encrypted_datasets)) | length > 0
+         | intersect(truenas_encrypted_datasets)) | length == 0
+      retries: 20
+      delay: 3
+
+    - name: Identify remaining locked target datasets
+      ansible.builtin.set_fact:
+        _remaining_locked_targets: >-
+          {{ _verify.stdout | from_json | map(attribute='name')
+             | intersect(truenas_encrypted_datasets) | list }}
+
+    - name: Fail if target datasets remain locked
+      ansible.builtin.fail:
+        msg: "Target datasets are still locked after unlock: {{ _remaining_locked_targets }}"
+      when: _remaining_locked_targets | length > 0
 
     - name: Restart NFS service (shares depend on unlocked datasets)
       ansible.builtin.command:
