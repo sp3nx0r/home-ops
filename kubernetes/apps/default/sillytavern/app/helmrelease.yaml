@@ -25,6 +25,7 @@ spec:
               SILLYTAVERN_WHITELISTMODE: "false"
               SILLYTAVERN_HEARTBEATINTERVAL: "30"
               SILLYTAVERN_ENABLEUSERACCOUNTS: "true"
+              SILLYTAVERN_SECURITYOVERRIDE: "true"
               PUID: "1000"
               PGID: "1000"
               TZ: America/Chicago

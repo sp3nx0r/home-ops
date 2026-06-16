@@ -32,9 +32,13 @@ SillyTavern listens on port `8000` with:
 - `SILLYTAVERN_PORT=8000`
 - `SILLYTAVERN_WHITELISTMODE=false`
 - `SILLYTAVERN_HEARTBEATINTERVAL=30`
+- `SILLYTAVERN_ENABLEUSERACCOUNTS=true`
+- `SILLYTAVERN_SECURITYOVERRIDE=true`
 - `PUID=1000`
 - `PGID=1000`
 - `TZ=America/Chicago`
+
+`SILLYTAVERN_SECURITYOVERRIDE=true` is required for first boot because multi-user mode starts with a passwordless `default-user` admin account. Access is constrained by the internal Envoy route, and the admin password should be set in SillyTavern after the pod starts.
 
 The 20Gi PVC is mounted with subPaths:
 
