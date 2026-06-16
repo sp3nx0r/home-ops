@@ -89,6 +89,24 @@ kubectl uncordon $NODE
 
 Repeat for each affected node, starting with the node that has the fewest affected mounts.
 
+### If VolSync source backups keep failing
+
+An interrupted iSCSI session can corrupt a VolSync mover's temporary source PVC
+or Kopia cache PVC. Typical symptoms include `read-only file system`,
+`input/output error`, `Cache corruption detected`, or
+`own-writes directory contains ... uncommitted files` in the `volsync-src-*`
+pod logs.
+
+Reset only the affected VolSync source state and trigger a fresh backup:
+
+```bash
+task volsync:reset-source NS=<namespace> APP=<app>
+```
+
+This deletes the `volsync-src-<app>` Job, `volsync-<app>-src` temporary PVC and
+VolumeSnapshot, and `volsync-src-<app>-cache` Kopia cache PVC. It does not touch
+the live application PVC.
+
 ## Verify recovery
 
 ```bash

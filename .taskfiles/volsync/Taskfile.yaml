@@ -45,6 +45,33 @@ tasks:
       - kubectl --namespace {{.NS}} get replicationsources {{.APP}}
       - which kubectl
 
+  reset-source:
+    desc: Reset a failed VolSync source backup and trigger a fresh run [NS=default] [APP=required]
+    interactive: true
+    prompt: >-
+      This will delete the VolSync source job, temporary source PVC/snapshot,
+      and Kopia cache PVC for {{.NS}}/{{.APP}}. The live app PVC is not
+      touched. Continue?
+    cmds:
+      - kubectl --namespace {{.NS}} delete job/{{.JOB}} --ignore-not-found --cascade=foreground --wait=true --timeout=5m
+      - kubectl --namespace {{.NS}} delete pvc/{{.TEMP_PVC}} --ignore-not-found --wait=true --timeout=5m
+      - kubectl --namespace {{.NS}} delete volumesnapshot/{{.TEMP_SNAPSHOT}} --ignore-not-found --wait=true --timeout=5m
+      - kubectl --namespace {{.NS}} delete pvc/{{.CACHE_PVC}} --ignore-not-found --wait=true --timeout=5m
+      - kubectl --namespace {{.NS}} patch replicationsources/{{.APP}} --type merge -p '{"spec":{"trigger":{"manual":"{{now | unixEpoch}}"}}}'
+      - until kubectl --namespace {{.NS}} get job/{{.JOB}} &>/dev/null; do sleep 5; done
+      - kubectl --namespace {{.NS}} wait job/{{.JOB}} --for=condition=complete --timeout=120m
+    vars:
+      NS: '{{.NS | default "default"}}'
+      JOB: volsync-src-{{.APP}}
+      TEMP_PVC: volsync-{{.APP}}-src
+      TEMP_SNAPSHOT: volsync-{{.APP}}-src
+      CACHE_PVC: volsync-src-{{.APP}}-cache
+    requires:
+      vars: [APP]
+    preconditions:
+      - kubectl --namespace {{.NS}} get replicationsources {{.APP}}
+      - which kubectl
+
   restore:
     desc: Restore an app from backup [NS=default] [APP=required] [PREVIOUS=required]
     cmds:
