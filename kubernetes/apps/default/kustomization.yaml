@@ -14,6 +14,7 @@ resources:
   - ./minecraft-bedrock/ks.yaml
   - ./ollama-proxy/ks.yaml
   - ./openwebui/ks.yaml
+  - ./sillytavern/ks.yaml
   - ./speaches-proxy/ks.yaml
   - ./searxng/ks.yaml
   - ./volsync-test/ks.yaml

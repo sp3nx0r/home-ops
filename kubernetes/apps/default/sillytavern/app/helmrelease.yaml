@@ -1,0 +1,90 @@
+---
+# yaml-language-server: $schema=https://raw.githubusercontent.com/bjw-s-labs/helm-charts/main/charts/other/app-template/schemas/helmrelease-helm-v2.schema.json
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: sillytavern
+spec:
+  chartRef:
+    kind: OCIRepository
+    name: sillytavern
+  interval: 1h
+  values:
+    controllers:
+      sillytavern:
+        annotations:
+          reloader.stakater.com/auto: "true"
+        containers:
+          app:
+            image:
+              repository: ghcr.io/sillytavern/sillytavern
+              tag: 1.18.0@sha256:7b30a1698b605d01dbd01a20459600c035f0d2c866912b69d7eee98065dcedd3
+            env:
+              SILLYTAVERN_LISTEN: "true"
+              SILLYTAVERN_PORT: &port 8000
+              SILLYTAVERN_WHITELISTMODE: "false"
+              SILLYTAVERN_HEARTBEATINTERVAL: "30"
+              SILLYTAVERN_ENABLEUSERACCOUNTS: "true"
+              PUID: "1000"
+              PGID: "1000"
+              TZ: America/Chicago
+            probes:
+              liveness: &probes
+                enabled: true
+                custom: true
+                spec:
+                  exec:
+                    command: ["node", "src/healthcheck.js"]
+                  initialDelaySeconds: 45
+                  periodSeconds: 30
+                  timeoutSeconds: 5
+                  failureThreshold: 3
+              readiness: *probes
+            # TODO: Add resource restrictions at some point
+            # resources:
+            #   requests:
+            #     cpu: 50m
+            #     memory: 256Mi
+            #   limits:
+            #     memory: 1Gi
+            securityContext:
+              allowPrivilegeEscalation: false
+              readOnlyRootFilesystem: false
+              capabilities: {drop: ["ALL"]}
+              seccompProfile: {type: RuntimeDefault}
+    defaultPodOptions:
+      securityContext:
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile: {type: RuntimeDefault}
+    service:
+      app:
+        ports:
+          http:
+            port: *port
+    route:
+      app:
+        hostnames:
+          - "tavern.${SECRET_DOMAIN}"
+        parentRefs:
+          - name: envoy-internal
+            namespace: network
+            sectionName: https
+        rules:
+          - backendRefs:
+              - identifier: app
+                port: *port
+    persistence:
+      config:
+        existingClaim: sillytavern
+        advancedMounts:
+          sillytavern:
+            app:
+              - path: /home/node/app/config
+                subPath: config
+              - path: /home/node/app/data
+                subPath: data
+              - path: /home/node/app/plugins
+                subPath: plugins
+              - path: /home/node/app/public/scripts/extensions/third-party
+                subPath: extensions
