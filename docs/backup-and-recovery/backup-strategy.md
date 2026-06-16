@@ -40,7 +40,7 @@
 │  Bucket: sp3nx0r-truenas (rclone crypt, versioned)            │
 │  Cloud Sync: per-dataset PUSH (snapshot: true)                │
 │  Transfer mode: SYNC                                          │
-│  Schedule: staggered nightly (00:00–00:30)                    │
+│  Schedule: staggered nightly (22:45–04:45)                    │
 │  Versioning: enabled, 30-day noncurrent retention             │
 │  Includes tank/homelab/kopia → offsite Kopia repo copy        │
 │  Config: ansible/playbooks/backblaze-configure.yml            │
@@ -165,15 +165,15 @@
 ### Level 5: Backblaze B2 Cloud Sync (disaster recovery)
 
 - **What it protects against**: Total NAS loss (fire, theft, multiple disk failure, controller failure)
-- **RPO**: 24 hours (nightly sync, staggered 00:00–00:30)
+- **RPO**: 24 hours (nightly sync, staggered 22:45–04:45)
 - **RTO**: Hours to days (depending on bandwidth for full restore)
 - **Coverage**: Per-dataset cloud sync tasks with ZFS snapshot consistency:
   | Task | Path | Schedule | Snapshot |
   |------|------|----------|----------|
-  | B2 - backups | `/mnt/tank/backups` | 00:00 | Yes |
-  | B2 - k8s-exports | `/mnt/tank/homelab/k8s-exports` | 00:00 | Yes |
-  | B2 - kopia | `/mnt/tank/homelab/kopia` | 00:15 | Yes |
-  | B2 - media | `/mnt/tank/media` | 00:30 | Yes |
+  | B2 - k8s-exports | `/mnt/tank/homelab/k8s-exports` | 22:45 | Yes |
+  | B2 - kopia | `/mnt/tank/homelab/kopia` | 00:45 | Yes |
+  | B2 - media | `/mnt/tank/media` | 02:45 | Yes |
+  | B2 - backups | `/mnt/tank/backups` | 04:45 | Yes |
 - **Transfer mode**: SYNC (mirror, deletes removed files from B2)
 - **Versioning**: Enabled — noncurrent versions retained 30 days, protecting against accidental/malicious deletion propagation
 - **Encryption**: Server-side encryption enabled on bucket; rclone crypt layer on all sync tasks

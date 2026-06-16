@@ -335,14 +335,14 @@ truenas_cloudsync_tasks:
   - description: "B2 - backups"
     path: "/mnt/{{ truenas_pool }}/backups"
     folder: /backups/
-    hour: "0"
-    minute: "0"
+    hour: "4"
+    minute: "45"
     exclude: "{{ truenas_cloudsync_excludes_backups }}"
 
   - description: "B2 - k8s-exports"
     path: "/mnt/{{ truenas_pool }}/homelab/k8s-exports"
     folder: /homelab/k8s-exports/
-    hour: "23"
+    hour: "22"
     minute: "45"
     exclude: []
 
@@ -350,14 +350,14 @@ truenas_cloudsync_tasks:
     path: "/mnt/{{ truenas_pool }}/homelab/kopia"
     folder: /homelab/kopia/
     hour: "0"
-    minute: "15"
+    minute: "45"
     exclude: []
 
   - description: "B2 - media"
     path: "/mnt/{{ truenas_pool }}/media"
     folder: /media/
-    hour: "0"
-    minute: "30"
+    hour: "2"
+    minute: "45"
     exclude: []
 
 # -- Syslog -------------------------------------------------------------------
