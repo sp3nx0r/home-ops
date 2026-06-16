@@ -1,0 +1,163 @@
+---
+# Reset failed VolSync source backup state and trigger a fresh source run.
+#
+# Usage:
+#   task volsync:reset-source NS=<namespace> APP=<app>
+#
+- name: Reset VolSync source backup state
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    target_namespace: "{{ target_namespace | default('default') }}"
+    volsync_controller_namespace: volsync-system
+    volsync_controller_deployment: volsync
+    volsync_controller_selector: app.kubernetes.io/instance=volsync,app.kubernetes.io/name=volsync-perfectra1n
+
+  tasks:
+    - name: Validate required variables
+      ansible.builtin.assert:
+        that:
+          - app is defined
+          - app | length > 0
+          - target_namespace is defined
+          - target_namespace | length > 0
+        fail_msg: "Both app and target_namespace are required"
+
+    - name: Build VolSync resource names
+      ansible.builtin.set_fact:
+        _job: "volsync-src-{{ app }}"
+        _temp_pvc: "volsync-{{ app }}-src"
+        _temp_snapshot: "volsync-{{ app }}-src"
+        _cache_pvc: "volsync-src-{{ app }}-cache"
+
+    - name: Verify ReplicationSource exists
+      ansible.builtin.command:
+        cmd: "kubectl --namespace {{ target_namespace }} get replicationsources {{ app }}"
+      changed_when: false
+
+    - name: Capture current VolSync controller replica count
+      ansible.builtin.command:
+        cmd: >-
+          kubectl --namespace {{ volsync_controller_namespace }}
+          get deployment {{ volsync_controller_deployment }}
+          --output=jsonpath='{.spec.replicas}'
+      register: _controller_replicas
+      changed_when: false
+
+    - name: Record original VolSync controller replica count
+      ansible.builtin.set_fact:
+        _original_replicas: "{{ _controller_replicas.stdout | default('1', true) }}"
+
+    - name: Generate manual source backup trigger
+      ansible.builtin.set_fact:
+        _manual_trigger: "{{ lookup('pipe', 'date +%s') }}"
+
+    - name: Reset VolSync source state
+      block:
+        - name: Scale VolSync controller down
+          ansible.builtin.command:
+            cmd: >-
+              kubectl --namespace {{ volsync_controller_namespace }}
+              scale deployment/{{ volsync_controller_deployment }} --replicas=0
+          changed_when: true
+
+        - name: Wait for VolSync controller pods to terminate
+          ansible.builtin.command:
+            cmd: >-
+              kubectl --namespace {{ volsync_controller_namespace }}
+              get pods --selector={{ volsync_controller_selector }} --output=name
+          register: _controller_pods
+          changed_when: false
+          until: _controller_pods.stdout | length == 0
+          retries: 150
+          delay: 2
+
+        - name: Delete failed source Job
+          ansible.builtin.command:
+            cmd: >-
+              kubectl --namespace {{ target_namespace }}
+              delete job {{ _job }}
+              --ignore-not-found --cascade=foreground --wait=true --timeout=5m
+          register: _delete_job
+          changed_when: _delete_job.stdout | length > 0
+
+        - name: Delete temporary source PVC
+          ansible.builtin.command:
+            cmd: >-
+              kubectl --namespace {{ target_namespace }}
+              delete pvc {{ _temp_pvc }}
+              --ignore-not-found --wait=true --timeout=5m
+          register: _delete_temp_pvc
+          changed_when: _delete_temp_pvc.stdout | length > 0
+
+        - name: Delete temporary source VolumeSnapshot
+          ansible.builtin.command:
+            cmd: >-
+              kubectl --namespace {{ target_namespace }}
+              delete volumesnapshot {{ _temp_snapshot }}
+              --ignore-not-found --wait=true --timeout=5m
+          register: _delete_temp_snapshot
+          changed_when: _delete_temp_snapshot.stdout | length > 0
+
+        - name: Delete Kopia cache PVC
+          ansible.builtin.command:
+            cmd: >-
+              kubectl --namespace {{ target_namespace }}
+              delete pvc {{ _cache_pvc }}
+              --ignore-not-found --wait=true --timeout=5m
+          register: _delete_cache_pvc
+          changed_when: _delete_cache_pvc.stdout | length > 0
+
+        - name: Trigger a fresh VolSync source backup
+          ansible.builtin.command:
+            cmd: >-
+              kubectl --namespace {{ target_namespace }}
+              patch replicationsources {{ app }} --type merge
+              -p '{"spec":{"trigger":{"manual":"{{ _manual_trigger }}"}}}'
+          changed_when: true
+
+      always:
+        - name: Restore VolSync controller replica count
+          ansible.builtin.command:
+            cmd: >-
+              kubectl --namespace {{ volsync_controller_namespace }}
+              scale deployment/{{ volsync_controller_deployment }} --replicas={{ _original_replicas }}
+          changed_when: true
+
+        - name: Wait for VolSync controller rollout
+          ansible.builtin.command:
+            cmd: >-
+              kubectl --namespace {{ volsync_controller_namespace }}
+              rollout status deployment/{{ volsync_controller_deployment }} --timeout=5m
+          changed_when: false
+          when: _original_replicas != "0"
+
+    - name: Report skipped job wait when controller was originally stopped
+      ansible.builtin.debug:
+        msg: >-
+          VolSync controller was originally scaled to 0; trigger is patched,
+          but no job will start until the controller is resumed.
+      when: _original_replicas == "0"
+
+    - name: End play when controller was originally stopped
+      ansible.builtin.meta: end_play
+      when: _original_replicas == "0"
+
+    - name: Wait for fresh source Job to exist
+      ansible.builtin.command:
+        cmd: "kubectl --namespace {{ target_namespace }} get job {{ _job }}"
+      register: _fresh_job
+      changed_when: false
+      failed_when: false
+      until: _fresh_job.rc == 0
+      retries: 120
+      delay: 5
+
+    - name: Wait for fresh source Job to complete
+      ansible.builtin.command:
+        cmd: >-
+          kubectl --namespace {{ target_namespace }}
+          wait job/{{ _job }} --for=condition=complete --timeout=120m
+      changed_when: false

@@ -103,9 +103,12 @@ Reset only the affected VolSync source state and trigger a fresh backup:
 task volsync:reset-source NS=<namespace> APP=<app>
 ```
 
-This deletes the `volsync-src-<app>` Job, `volsync-<app>-src` temporary PVC and
-VolumeSnapshot, and `volsync-src-<app>-cache` Kopia cache PVC. It does not touch
-the live application PVC.
+This runs `ansible/playbooks/volsync-reset-source.yml`. The playbook deletes
+the `volsync-src-<app>` Job, `volsync-<app>-src` temporary PVC and
+VolumeSnapshot, and `volsync-src-<app>-cache` Kopia cache PVC while the
+VolSync controller is temporarily scaled to zero so it cannot immediately
+recreate the Job. It restores the controller afterward and does not touch the
+live application PVC.
 
 ## Verify recovery
 
