@@ -71,7 +71,7 @@ speaches_api_key: "{{ vault_speaches_api_key }}"
 # ROCm/HIP blocked by https://github.com/ggml-org/whisper.cpp/issues/3553
 # but Vulkan via Mesa RADV works fine on RDNA 4
 # renovate: datasource=github-releases depName=ggml-org/whisper.cpp
-whisper_cpp_version: v1.8.6
+whisper_cpp_version: v1.8.7
 whisper_cpp_model: large-v3-turbo
 whisper_cpp_install_path: /opt/whisper-cpp
 whisper_cpp_model_path: /opt/whisper-cpp/models
