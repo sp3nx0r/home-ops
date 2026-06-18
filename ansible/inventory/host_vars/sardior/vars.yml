@@ -180,6 +180,7 @@ nginx_exporter_version: "1.5.1"
 ms_s1_packages:
   - rocm
   - curl
+  - unzip
   - ffmpeg
   - nginx
   - patchelf
