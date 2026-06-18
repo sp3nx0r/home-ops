@@ -8,13 +8,14 @@ components:
   - ../../components/sops
 
 resources:
-  - ./namespace.yaml
+  - ./dnd-proxy/ks.yaml
   - ./it-tools/ks.yaml
   - ./kokoro/ks.yaml
   - ./minecraft-bedrock/ks.yaml
+  - ./namespace.yaml
   - ./ollama-proxy/ks.yaml
   - ./openwebui/ks.yaml
+  - ./searxng/ks.yaml
   - ./sillytavern/ks.yaml
   - ./speaches-proxy/ks.yaml
-  - ./searxng/ks.yaml
   - ./volsync-test/ks.yaml
