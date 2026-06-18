@@ -1,0 +1,57 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dnd-proxy
+spec:
+  ports:
+    - name: frontend
+      port: 5173
+      targetPort: 5173
+    - name: backend
+      port: 8765
+      targetPort: 8765
+---
+apiVersion: discovery.k8s.io/v1
+kind: EndpointSlice
+metadata:
+  name: dnd-proxy
+  labels:
+    kubernetes.io/service-name: dnd-proxy
+addressType: IPv4
+ports:
+  - name: frontend
+    port: 5173
+    protocol: TCP
+  - name: backend
+    port: 8765
+    protocol: TCP
+endpoints:
+  - addresses:
+      - 192.168.5.70
+    conditions:
+      ready: true
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/gateway.networking.k8s.io/httproute_v1.json
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: dnd-proxy
+spec:
+  hostnames:
+    - dnd.${SECRET_DOMAIN}
+  parentRefs:
+    - name: envoy-internal
+      namespace: network
+      sectionName: https
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /api
+      backendRefs:
+        - name: dnd-proxy
+          port: 8765
+    - backendRefs:
+        - name: dnd-proxy
+          port: 5173
