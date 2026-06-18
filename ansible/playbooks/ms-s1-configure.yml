@@ -35,6 +35,99 @@
         state: present
       tags: [apt]
 
+    # ===== Bun — JavaScript runtime ==========================================
+
+    - name: Install Bun apt prerequisites
+      ansible.builtin.apt:
+        name:
+          - unzip
+        state: present
+      tags: [apt, bun, tools]
+
+    - name: Check Bun runtime version
+      ansible.builtin.command:
+        cmd: /usr/local/bin/bun --version
+      register: _bun_installed_version
+      check_mode: false
+      changed_when: false
+      failed_when: false
+      tags: [bun, tools]
+
+    - name: Install Bun runtime  # noqa: command-instead-of-module risky-shell-pipe
+      ansible.builtin.shell:
+        cmd: set -o pipefail && curl -fsSL https://bun.sh/install | BUN_INSTALL=/usr/local bash -s "{{ bun_version }}"
+        executable: /bin/bash
+      changed_when: true
+      when: >-
+        _bun_installed_version.rc != 0 or
+        (bun_version | regex_replace('^bun-v', '')) not in (_bun_installed_version.stdout | default(''))
+      tags: [bun, tools]
+
+    # ===== DND LLM game ======================================================
+
+    - name: Check DND application directory exists
+      ansible.builtin.stat:
+        path: "{{ dnd_llm_game_path }}"
+      register: _dnd_app_dir
+      tags: [dnd]
+
+    - name: Check DND virtualenv Python exists
+      ansible.builtin.stat:
+        path: "{{ dnd_llm_game_venv_path }}/bin/python"
+      register: _dnd_venv_python
+      tags: [dnd]
+
+    - name: Verify DND application prerequisites
+      ansible.builtin.assert:
+        that:
+          - _dnd_app_dir.stat.isdir | default(false)
+          - _dnd_venv_python.stat.executable | default(false)
+        fail_msg: >-
+          DND app prerequisites are missing. Expected app directory
+          {{ dnd_llm_game_path }} and executable Python at
+          {{ dnd_llm_game_venv_path }}/bin/python.
+      tags: [dnd]
+
+    - name: Deploy DND LLM game systemd service
+      ansible.builtin.copy:
+        dest: "/etc/systemd/system/{{ dnd_llm_game_service_name }}.service"
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=DND LLM Game
+          After=network-online.target
+          Wants=network-online.target
+
+          [Service]
+          Type=simple
+          User={{ dnd_llm_game_user }}
+          Group={{ dnd_llm_game_group }}
+          WorkingDirectory={{ dnd_llm_game_path }}
+          Environment=HOME=/home/{{ dnd_llm_game_user }}
+          Environment=VIRTUAL_ENV={{ dnd_llm_game_venv_path }}
+          Environment=PATH={{ dnd_llm_game_venv_path }}/bin:/usr/local/bin:/usr/bin:/bin
+          ExecStart=/usr/local/bin/bun run start
+          Restart=always
+          RestartSec=10
+          KillMode=control-group
+          TimeoutStopSec=30
+          StandardOutput=journal
+          StandardError=journal
+
+          [Install]
+          WantedBy=multi-user.target
+      notify: restart dnd-llm-game
+      tags: [dnd]
+
+    - name: Enable and start DND LLM game
+      ansible.builtin.systemd:
+        name: "{{ dnd_llm_game_service_name }}"
+        enabled: true
+        state: started
+        daemon_reload: true
+      when: not ansible_check_mode
+      tags: [dnd]
+
     # ===== Unattended upgrades ==================================================
 
     - name: Configure unattended-upgrades
@@ -673,6 +766,54 @@
       notify: restart nginx
       tags: [nginx]
 
+    - name: Configure additional nginx targets
+      ansible.builtin.copy:
+        dest: "/etc/nginx/sites-available/{{ item.name }}"
+        mode: "0644"
+        content: |
+          {% if item.allowed_host is defined %}
+          server {
+              listen {{ item.listen }} default_server;
+              server_name _;
+              return 444;
+          }
+
+          {% endif %}
+          server {
+              listen {{ item.listen }};
+          {% if item.allowed_host is defined %}
+              server_name {{ item.allowed_host }};
+          {% endif %}
+
+              location / {
+                  proxy_pass {{ item.upstream }};
+                  proxy_set_header Host $host;
+                  proxy_set_header X-Real-IP $remote_addr;
+                  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                  proxy_set_header X-Forwarded-Proto $scheme;
+                  proxy_buffering off;
+                  proxy_read_timeout 600s;
+                  proxy_send_timeout 600s;
+
+                  proxy_http_version 1.1;
+                  proxy_set_header Upgrade $http_upgrade;
+                  proxy_set_header Connection "upgrade";
+              }
+          }
+      loop: "{{ ms_s1_nginx_targets | default([]) }}"
+      notify: restart nginx
+      tags: [nginx]
+
+    - name: Enable additional nginx targets
+      ansible.builtin.file:
+        src: "/etc/nginx/sites-available/{{ item.name }}"
+        dest: "/etc/nginx/sites-enabled/{{ item.name }}"
+        state: link
+        force: "{{ ansible_check_mode }}"
+      loop: "{{ ms_s1_nginx_targets | default([]) }}"
+      notify: restart nginx
+      tags: [nginx]
+
     - name: Remove default nginx site
       ansible.builtin.file:
         path: /etc/nginx/sites-enabled/default
@@ -1170,11 +1311,19 @@
       changed_when: false
       tags: [validate]
 
+    - name: Verify Bun is installed
+      ansible.builtin.command:
+        cmd: /usr/local/bin/bun --version
+      register: _bun_version
+      changed_when: false
+      tags: [validate, bun]
+
     - name: Print summary
       vars:
         _summary:
           - "Host:          {{ ms_s1_host_ip }} (sardior.{{ ms_s1_domain }})"
           - "OS:            Ubuntu 26.04 LTS"
+          - "Bun:           {{ _bun_version.stdout | default('not validated') }}"
           - "GPU:           AMD Radeon 8060S (ROCm + Vulkan)"
           - "Ollama:        http://{{ ms_s1_host_ip }}:{{ ollama_port }}{{ ' | proxy: http://' + ollama_proxy_listen if ollama_nginx_proxy else '' }}"
           - "Models:        {{ ollama_models | join(', ') }}"
@@ -1233,6 +1382,14 @@
         state: restarted
         daemon_reload: true
       listen: restart nginx-exporter
+
+    - name: Restart DND LLM game
+      ansible.builtin.systemd:
+        name: "{{ dnd_llm_game_service_name }}"
+        state: restarted
+        daemon_reload: true
+      listen: restart dnd-llm-game
+      when: not ansible_check_mode
 
     - name: Restart Speaches
       ansible.builtin.systemd:

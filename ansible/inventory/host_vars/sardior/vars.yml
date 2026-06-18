@@ -48,9 +48,29 @@ ollama_models:
   - gemma4:e4b
   - gemma3:27b
 
+# -- Bun --------------------------------------------------------------------
+# renovate: datasource=github-releases depName=oven-sh/bun
+bun_version: bun-v1.3.14
+
 # -- Nginx API proxy (optional) --------------------------------------------
 ollama_nginx_proxy: true
 ollama_proxy_listen: "{{ ms_s1_host_ip }}:11435"
+ms_s1_nginx_targets:
+  - name: dnd-8765
+    listen: "{{ ms_s1_host_ip }}:8765"
+    upstream: http://127.0.0.1:8765
+    allowed_host: dnd.{{ ms_s1_domain }}
+  - name: dnd-5173
+    listen: "{{ ms_s1_host_ip }}:5173"
+    upstream: http://127.0.0.1:5173
+    allowed_host: dnd.{{ ms_s1_domain }}
+
+# -- DND LLM game -----------------------------------------------------------
+dnd_llm_game_service_name: dnd-llm-game
+dnd_llm_game_user: ubuntu
+dnd_llm_game_group: ubuntu
+dnd_llm_game_path: /opt/dnd-llm-game/dnd-llm-game
+dnd_llm_game_venv_path: "{{ dnd_llm_game_path }}/.venv"
 
 # -- STT Backend (Speaches / whisper.cpp) -----------------------------------
 stt_backend: whisper-cpp  # "speaches" or "whisper-cpp"
