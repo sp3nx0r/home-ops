@@ -1,4 +1,5 @@
 ---
 exclude_paths:
+  - inventory/group_vars/backblaze/secrets.sops.yml
   - inventory/host_vars/hl8/secrets.sops.yml
   - inventory/host_vars/sardior/secrets.sops.yml

@@ -81,7 +81,11 @@
               print('clean')
       register: _b2_purge
       changed_when: "'purged' in _b2_purge.stdout"
-      when: (_b2_lifecycle_rules.stdout | from_json | map(attribute='ID') | reject('in', ['noncurrent-version-cleanup', 'abort-incomplete-multipart']) | list | length) > 0
+      when: >-
+        (_b2_lifecycle_rules.stdout | from_json
+         | map(attribute='ID')
+         | reject('in', ['noncurrent-version-cleanup', 'abort-incomplete-multipart'])
+         | list | length) > 0
       tags: [lifecycle]
 
     - name: Configure noncurrent version lifecycle rule
