@@ -100,3 +100,16 @@ tasks:
     preconditions:
       - test -f {{.ANSIBLE_VENV}}/bin/ansible-playbook
 
+  backblaze:purge-versions:
+    desc: Purge noncurrent B2 object versions under b2_purge_prefix (dry-run by default)
+    dir: '{{.ANSIBLE_DIR}}'
+    cmd: '{{.ANSIBLE_VENV}}/bin/ansible-playbook playbooks/backblaze-purge-versions.yml {{.CLI_ARGS}}'
+    preconditions:
+      - test -f {{.ANSIBLE_VENV}}/bin/ansible-playbook
+
+  backblaze:delete-prefix:
+    desc: Delete all B2 object versions and markers under b2_delete_prefix (dry-run by default)
+    dir: '{{.ANSIBLE_DIR}}'
+    cmd: '{{.ANSIBLE_VENV}}/bin/ansible-playbook playbooks/backblaze-delete-prefix.yml {{.CLI_ARGS}}'
+    preconditions:
+      - test -f {{.ANSIBLE_VENV}}/bin/ansible-playbook

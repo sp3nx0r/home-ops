@@ -333,6 +333,7 @@ truenas_cloudsync_excludes_backups:
 
 truenas_cloudsync_excludes_media:
   - "downloads/qbittorrent/**"
+  - "isos/**"
 
 truenas_cloudsync_tasks:
   - description: "B2 - backups"

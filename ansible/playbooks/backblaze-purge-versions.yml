@@ -1,0 +1,187 @@
+---
+# Backblaze B2 version purge helper
+#
+# Deletes noncurrent object versions under a single prefix. This is intended for
+# one-off history collapse after large backup cleanup, not normal lifecycle
+# management. Dry-run is enabled by default.
+#
+# Usage:
+#   task ansible:backblaze:purge-versions -- -e b2_purge_prefix=media/downloads/qbittorrent
+#   task ansible:backblaze:purge-versions -- -e b2_purge_prefix=media/downloads/qbittorrent -e b2_purge_dry_run=false
+#
+- name: Purge Backblaze B2 previous versions
+  hosts: backblaze
+  gather_facts: false
+
+  vars:
+    b2_purge_dry_run: true
+    b2_purge_delete_markers: false
+    b2_purge_allow_bucket_root: false
+
+  tasks:
+    - name: Require b2_purge_prefix
+      ansible.builtin.assert:
+        that:
+          - b2_purge_prefix is defined
+          - b2_purge_prefix | trim | length > 0
+        fail_msg: >-
+          Set b2_purge_prefix to the bucket directory to purge, for example
+          -e b2_purge_prefix=media/downloads/qbittorrent
+
+    - name: Normalize purge prefix
+      ansible.builtin.set_fact:
+        _b2_purge_prefix_normalized: >-
+          {{ (b2_purge_prefix | trim | regex_replace('^/+', '') | regex_replace('/+$', '')) }}
+
+    - name: Refuse bucket-root purge unless explicitly allowed
+      ansible.builtin.assert:
+        that:
+          - _b2_purge_prefix_normalized | length > 0 or b2_purge_allow_bucket_root | bool
+        fail_msg: >-
+          Refusing to purge the bucket root. Set b2_purge_allow_bucket_root=true
+          if you really intend to process every object version in the bucket.
+
+    - name: Purge noncurrent B2 object versions
+      ansible.builtin.command:
+        argv:
+          - "{{ ansible_playbook_python }}"
+          - "-c"
+          - |
+            import boto3
+            import json
+            import os
+            import sys
+
+            bucket = os.environ["B2_BUCKET_NAME"]
+            endpoint = os.environ["B2_ENDPOINT"]
+            region = os.environ["B2_REGION"]
+            dry_run = os.environ["B2_PURGE_DRY_RUN"].lower() == "true"
+            delete_markers = os.environ["B2_PURGE_DELETE_MARKERS"].lower() == "true"
+            prefix = os.environ["B2_PURGE_PREFIX"].strip("/")
+            if prefix:
+                prefix = f"{prefix}/"
+
+            s3 = boto3.client(
+                "s3",
+                endpoint_url=endpoint,
+                region_name=region,
+                aws_access_key_id=os.environ["B2_ACCESS_KEY_ID"],
+                aws_secret_access_key=os.environ["B2_SECRET_ACCESS_KEY"],
+            )
+            paginator = s3.get_paginator("list_object_versions")
+
+            result = {
+                "bucket": bucket,
+                "prefix": prefix,
+                "dry_run": dry_run,
+                "delete_markers_enabled": delete_markers,
+                "noncurrent_versions_matched": 0,
+                "noncurrent_version_bytes": 0,
+                "noncurrent_versions_deleted": 0,
+                "delete_markers_matched": 0,
+                "delete_markers_deleted": 0,
+                "sample_noncurrent_versions": [],
+                "sample_delete_markers": [],
+                "delete_errors": [],
+            }
+
+            def delete_batch(batch, key):
+                if not batch:
+                    return
+                if dry_run:
+                    return
+                response = s3.delete_objects(
+                    Bucket=bucket,
+                    Delete={"Objects": batch, "Quiet": False},
+                )
+                errors = response.get("Errors", [])
+                deleted = response.get("Deleted", [])
+                if deleted:
+                    result[key] += len(deleted)
+                else:
+                    result[key] += len(batch) - len(errors)
+                for error in errors:
+                    if len(result["delete_errors"]) < 20:
+                        result["delete_errors"].append({
+                            "Key": error.get("Key"),
+                            "VersionId": error.get("VersionId"),
+                            "Code": error.get("Code"),
+                            "Message": error.get("Message"),
+                        })
+
+            version_batch = []
+            marker_batch = []
+            for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
+                for version in page.get("Versions", []):
+                    if version.get("IsLatest", False):
+                        continue
+                    item = {
+                        "Key": version["Key"],
+                        "VersionId": version["VersionId"],
+                    }
+                    version_batch.append(item)
+                    result["noncurrent_versions_matched"] += 1
+                    result["noncurrent_version_bytes"] += int(version.get("Size", 0))
+                    if len(result["sample_noncurrent_versions"]) < 10:
+                        result["sample_noncurrent_versions"].append({
+                            "Key": version["Key"],
+                            "Size": int(version.get("Size", 0)),
+                            "LastModified": version["LastModified"].isoformat(),
+                        })
+                    if len(version_batch) == 1000:
+                        delete_batch(version_batch, "noncurrent_versions_deleted")
+                        version_batch = []
+
+                if delete_markers:
+                    for marker in page.get("DeleteMarkers", []):
+                        item = {
+                            "Key": marker["Key"],
+                            "VersionId": marker["VersionId"],
+                        }
+                        marker_batch.append(item)
+                        result["delete_markers_matched"] += 1
+                        if len(result["sample_delete_markers"]) < 10:
+                            result["sample_delete_markers"].append({
+                                "Key": marker["Key"],
+                                "LastModified": marker["LastModified"].isoformat(),
+                                "IsLatest": marker.get("IsLatest", False),
+                            })
+                        if len(marker_batch) == 1000:
+                            delete_batch(marker_batch, "delete_markers_deleted")
+                            marker_batch = []
+
+            delete_batch(version_batch, "noncurrent_versions_deleted")
+            delete_batch(marker_batch, "delete_markers_deleted")
+            if dry_run:
+                result["noncurrent_versions_deleted"] = 0
+                result["delete_markers_deleted"] = 0
+            failed_delete = not dry_run and (
+                result["noncurrent_versions_matched"] != result["noncurrent_versions_deleted"]
+                or (
+                    delete_markers
+                    and result["delete_markers_matched"] != result["delete_markers_deleted"]
+                )
+            )
+            print(json.dumps(result, sort_keys=True))
+            if failed_delete:
+                sys.exit(1)
+      environment:
+        B2_ACCESS_KEY_ID: "{{ b2_access_key_id }}"
+        B2_SECRET_ACCESS_KEY: "{{ b2_secret_access_key }}"
+        B2_BUCKET_NAME: "{{ b2_bucket_name }}"
+        B2_ENDPOINT: "{{ b2_endpoint }}"
+        B2_REGION: "{{ b2_region }}"
+        B2_PURGE_PREFIX: "{{ _b2_purge_prefix_normalized }}"
+        B2_PURGE_DRY_RUN: "{{ b2_purge_dry_run | bool | lower }}"
+        B2_PURGE_DELETE_MARKERS: "{{ b2_purge_delete_markers | bool | lower }}"
+      register: _b2_purge_result
+      changed_when: >-
+        not b2_purge_dry_run | bool and
+        (
+          (_b2_purge_result.stdout | from_json).noncurrent_versions_deleted > 0 or
+          (_b2_purge_result.stdout | from_json).delete_markers_deleted > 0
+        )
+
+    - name: Show purge summary
+      ansible.builtin.debug:
+        var: _b2_purge_result.stdout | from_json

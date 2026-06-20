@@ -53,6 +53,37 @@ task ansible:backblaze -- --tags versioning   # just versioning
 task ansible:backblaze -- --tags lifecycle    # just lifecycle rules
 ```
 
+### Purge previous versions
+
+Use `backblaze-purge-versions.yml` for one-off cleanup of noncurrent object
+versions under a bucket prefix. It is dry-run by default and requires an
+explicit prefix:
+
+```bash
+task ansible:backblaze:purge-versions -- -e b2_purge_prefix=media/downloads/qbittorrent
+task ansible:backblaze:purge-versions -- -e b2_purge_prefix=media/downloads/qbittorrent -e b2_purge_dry_run=false
+```
+
+Delete markers are not removed unless requested:
+
+```bash
+task ansible:backblaze:purge-versions -- \
+  -e b2_purge_prefix=media/downloads/qbittorrent \
+  -e b2_purge_delete_markers=true \
+  -e b2_purge_dry_run=false
+```
+
+### Delete a prefix completely
+
+Use `backblaze-delete-prefix.yml` when you want to remove a bucket path
+entirely, including current versions, previous versions, and delete markers.
+It is dry-run by default and requires an explicit prefix:
+
+```bash
+task ansible:backblaze:delete-prefix -- -e b2_delete_prefix=backups/vassago
+task ansible:backblaze:delete-prefix -- -e b2_delete_prefix=backups/vassago -e b2_delete_dry_run=false
+```
+
 ---
 
 ## TrueNAS HL8 NAS
