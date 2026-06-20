@@ -331,6 +331,9 @@ truenas_cloudsync_excludes_backups:
   - ".venv/"
   - "Cache_Data/"
 
+truenas_cloudsync_excludes_media:
+  - "downloads/qbittorrent/**"
+
 truenas_cloudsync_tasks:
   - description: "B2 - backups"
     path: "/mnt/{{ truenas_pool }}/backups"
@@ -358,7 +361,7 @@ truenas_cloudsync_tasks:
     folder: /media/
     hour: "2"
     minute: "45"
-    exclude: []
+    exclude: "{{ truenas_cloudsync_excludes_media }}"
 
 # -- Syslog -------------------------------------------------------------------
 truenas_syslog_remote: "192.168.5.24"

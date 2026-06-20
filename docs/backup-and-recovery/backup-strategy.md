@@ -172,7 +172,7 @@
   |------|------|----------|----------|
   | B2 - k8s-exports | `/mnt/tank/homelab/k8s-exports` | 22:45 | Yes |
   | B2 - kopia | `/mnt/tank/homelab/kopia` | 00:45 | Yes |
-  | B2 - media | `/mnt/tank/media` | 02:45 | Yes |
+  | B2 - media | `/mnt/tank/media` | 02:45 | Yes; excludes `/mnt/tank/media/downloads/qbittorrent` |
   | B2 - backups | `/mnt/tank/backups` | 04:45 | Yes |
 - **Transfer mode**: SYNC (mirror, deletes removed files from B2)
 - **Versioning**: Enabled — noncurrent versions retained 30 days, protecting against accidental/malicious deletion propagation
