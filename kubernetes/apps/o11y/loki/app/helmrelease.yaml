@@ -98,7 +98,3 @@ spec:
     monitoring:
       serviceMonitor:
         enabled: true
-      selfMonitoring:
-        enabled: false
-        grafanaAgent:
-          installOperator: false
