@@ -1,0 +1,26 @@
+---
+# yaml-language-server: $schema=https://kubernetes-schemas.pages.dev/gateway.envoyproxy.io/securitypolicy_v1alpha1.json
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: SecurityPolicy
+metadata:
+  name: headlamp-oidc
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: headlamp
+  oidc:
+    provider:
+      issuer: "https://id.securimancy.com"
+    clientID: "d08cc81f-49e2-4815-be35-437ff02a8403"
+    clientSecret:
+      name: headlamp-oidc-secret
+    redirectURL: "https://headlamp.securimancy.com/oauth2/callback"
+    cookieDomain: "securimancy.com"
+    cookieNames:
+      idToken: headlamp-id-token
+      accessToken: headlamp-access-token
+    scopes:
+      - openid
+      - profile
+      - email
