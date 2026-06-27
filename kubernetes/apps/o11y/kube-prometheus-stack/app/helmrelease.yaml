@@ -99,6 +99,10 @@ spec:
       enabled: false
 
     prometheus:
+      thanosService:
+        enabled: true
+      thanosServiceMonitor:
+        enabled: true
       route:
         main:
           enabled: true
@@ -112,6 +116,12 @@ spec:
               namespace: network
       prometheusSpec:
         externalUrl: https://prometheus.securimancy.com
+        replicaExternalLabelName: __replica__
+        thanos:
+          objectStorageConfig:
+            existingSecret:
+              name: thanos-objstore-secret
+              key: objstore.yml
         ruleSelectorNilUsesHelmValues: false
         serviceMonitorSelectorNilUsesHelmValues: false
         podMonitorSelectorNilUsesHelmValues: false
@@ -142,8 +152,8 @@ spec:
         walCompression: true
         enableFeatures:
           - memory-snapshot-on-shutdown
-        retention: 14d
-        retentionSize: 10GB
+        retention: 7d
+        retentionSize: 5GB
         resources:
           requests:
             cpu: 100m

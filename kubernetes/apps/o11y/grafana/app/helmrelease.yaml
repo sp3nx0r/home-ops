@@ -53,7 +53,7 @@ spec:
         datasources:
           - name: Prometheus
             type: prometheus
-            url: http://kube-prometheus-stack-prometheus.o11y.svc.cluster.local:9090
+            url: http://thanos-query-frontend.o11y.svc.cluster.local:9090
             access: proxy
             isDefault: true
           - name: Alertmanager

@@ -1,0 +1,105 @@
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/helm.toolkit.fluxcd.io/helmrelease_v2.json
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: thanos
+spec:
+  chart:
+    spec:
+      chart: thanos
+      version: 0.18.0
+      sourceRef:
+        kind: HelmRepository
+        name: thanos-community
+  interval: 1h
+  values:
+    global:
+      objstore:
+        createSecret: false
+        secretName: thanos-objstore-secret
+        secretKey: objstore.yml
+
+    kube-prometheus-stack:
+      enabled: false
+
+    query:
+      enabled: true
+      replicaCount: 1
+      replicaLabels:
+        - __replica__
+      endpoints:
+        autogen:
+          enabled: true
+        static:
+          - dnssrv+_grpc._tcp.kube-prometheus-stack-thanos-discovery.o11y.svc.cluster.local
+      httpRoute:
+        enabled: true
+        parentRefs:
+          - name: envoy-internal
+            namespace: network
+        hostnames:
+          - thanos.securimancy.com
+      serviceMonitor:
+        enabled: true
+      resources:
+        requests:
+          cpu: 50m
+          memory: 128Mi
+        limits:
+          memory: 512Mi
+
+    queryFrontend:
+      enabled: true
+      replicaCount: 1
+      serviceMonitor:
+        enabled: true
+      resources:
+        requests:
+          cpu: 50m
+          memory: 64Mi
+        limits:
+          memory: 256Mi
+
+    storegateway:
+      enabled: true
+      replicaCount: 1
+      persistence:
+        enabled: true
+        size: 5Gi
+        storageClass: iscsi
+      serviceMonitor:
+        enabled: true
+      resources:
+        requests:
+          cpu: 50m
+          memory: 128Mi
+        limits:
+          memory: 512Mi
+
+    compactor:
+      enabled: true
+      replicaCount: 1
+      persistence:
+        enabled: true
+        size: 10Gi
+        storageClass: iscsi
+      retention:
+        resolutionRaw: 14d
+        resolution5m: 30d
+        resolution1h: 90d
+      serviceMonitor:
+        enabled: true
+      resources:
+        requests:
+          cpu: 50m
+          memory: 128Mi
+        limits:
+          memory: 512Mi
+
+    receive:
+      enabled: false
+    ruler:
+      enabled: false
+    bucket:
+      enabled: false
