@@ -1,0 +1,97 @@
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/helm.toolkit.fluxcd.io/helmrelease_v2.json
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: backblaze-exporter
+spec:
+  chartRef:
+    kind: OCIRepository
+    name: backblaze-exporter
+  interval: 1h
+  values:
+    controllers:
+      backblaze-exporter:
+        containers:
+          app:
+            image:
+              repository: docker.io/t0mmili/backblaze-prometheus-exporter
+              tag: 0.1.0@sha256:1f969f9accf7845b07131108f4d319a373010e24fcd55e7236a634834f3689d9
+            env:
+              TZ: America/Chicago
+              B2_APPLICATION_KEY_ID:
+                valueFrom:
+                  secretKeyRef:
+                    name: backblaze-exporter-secret
+                    key: B2_APPLICATION_KEY_ID
+              B2_APPLICATION_KEY_FILE: /backblaze-exporter/secrets/application-key
+              B2_BUCKETS_CONFIG: >-
+                {
+                  "sp3nx0r-backups-workstation": [""],
+                  "sp3nx0r-backups-archive": [""],
+                  "sp3nx0r-backups-truenas-config": [""],
+                  "sp3nx0r-homelab": [""],
+                  "sp3nx0r-homelab-kopia": [""],
+                  "sp3nx0r-media": [""]
+                }
+              B2_FILES_LATEST_ONLY: "true"
+              METRICS_UPDATE_INTERVAL: "3600"
+              LOG_LEVEL: INFO
+              GUNICORN_CMD_ARGS: >-
+                --workers=1
+                --threads=4
+                --worker-class=gthread
+                --bind=0.0.0.0:52000
+                --worker-tmp-dir=/dev/shm
+                --log-level=warning
+            probes:
+              liveness: &probes
+                enabled: true
+                custom: true
+                spec:
+                  httpGet:
+                    path: /
+                    port: &port 52000
+                  initialDelaySeconds: 30
+                  periodSeconds: 30
+                  timeoutSeconds: 5
+                  failureThreshold: 3
+              readiness: *probes
+            securityContext:
+              allowPrivilegeEscalation: false
+              readOnlyRootFilesystem: true
+              capabilities: { drop: ["ALL"] }
+            resources:
+              requests:
+                cpu: 10m
+              limits:
+                memory: 256Mi
+    defaultPodOptions:
+      annotations:
+        reloader.stakater.com/auto: "true"
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 100
+        runAsGroup: 101
+    persistence:
+      application-key:
+        type: secret
+        name: backblaze-exporter-secret
+        advancedMounts:
+          backblaze-exporter:
+            app:
+              - path: /backblaze-exporter/secrets/application-key
+                subPath: B2_APPLICATION_KEY
+                readOnly: true
+    service:
+      app:
+        ports:
+          http:
+            port: *port
+    serviceMonitor:
+      app:
+        endpoints:
+          - port: http
+            path: /metrics
+            interval: 5m
+            scrapeTimeout: 30s
