@@ -11,7 +11,11 @@
 
 | Dataset | Schedule | Retention |
 |---------|----------|-----------|
-| `tank/backups` | Hourly | 24h |
+| `tank/backups` | Hourly, recursive | 24h |
+| `tank/backups/workstations` | Hourly, inherited from `tank/backups` | 24h |
+| `tank/backups/git-bundles` | Hourly, inherited from `tank/backups` | 24h |
+| `tank/backups/archive` | Hourly, inherited from `tank/backups` | 24h |
+| `tank/backups/truenas-config` | Hourly, inherited from `tank/backups` | 24h |
 | `tank/homelab/k8s-exports` | Hourly | 24h |
 | `tank/homelab/k8s-exports` | Daily (2am) | 14d |
 | `tank/homelab/k8s-iscsi` | Hourly | 24h |

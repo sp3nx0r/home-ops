@@ -37,18 +37,19 @@
 ┌───────────────────────────────────────────────────────────────┐
 │                    Backblaze B2 (offsite)                     │
 │                                                               │
-│  Bucket: sp3nx0r-truenas (rclone crypt, versioned)            │
-│  Cloud Sync: per-dataset PUSH (snapshot: true)                │
+│  Buckets: policy-specific B2 buckets (rclone crypt)           │
+│  Cloud Sync: per-dataset PUSH (snapshot: true, managed by     │
+│              Ansible)                                         │
 │  Transfer mode: SYNC                                          │
 │  Schedule: staggered nightly (22:45–04:45)                    │
-│  Versioning: enabled, 30-day noncurrent retention             │
-│  Includes tank/homelab/kopia → offsite Kopia repo copy        │
+│  Versioning: bucket-specific noncurrent retention             │
+│  Kopia: synced to sp3nx0r-homelab-kopia; Kopia owns retention │
 │  Config: ansible/playbooks/backblaze-configure.yml            │
 │                                                               │
 │  TrueNAS Config Backup:                                       │
 │    Cron: daily 23:45 → /mnt/tank/backups/truenas-config/      │
 │    freenas-v1.db + pwenc_secret, 14-day retention             │
-│    Synced offsite via B2 - backups cloud sync task            │
+│    Synced offsite via sp3nx0r-backups-truenas-config bucket   │
 └───────────────────────────────────────────────────────────────┘
 ```
 
@@ -66,6 +67,10 @@
 - **What it protects against**: Accidental file deletion, application bugs, ransomware
 - **RPO**:
   - `tank/backups`: 1 hour (retained 24h)
+  - `tank/backups/workstations`: 1 hour (retained 24h, inherited by recursive task)
+  - `tank/backups/git-bundles`: 1 hour (retained 24h, inherited by recursive task)
+  - `tank/backups/archive`: 1 hour (retained 24h, inherited by recursive task)
+  - `tank/backups/truenas-config`: 1 hour (retained 24h, inherited by recursive task)
   - `tank/homelab/k8s-exports`: 1 hour (retained 24h) + daily (retained 14d)
   - `tank/homelab/k8s-iscsi`: 1 hour (retained 24h, recursive across all zvols)
   - `tank/media`: 1 day (retained 7d)
@@ -167,17 +172,21 @@
 - **What it protects against**: Total NAS loss (fire, theft, multiple disk failure, controller failure)
 - **RPO**: 24 hours (nightly sync, staggered 22:45–04:45)
 - **RTO**: Hours to days (depending on bandwidth for full restore)
-- **Coverage**: Per-dataset cloud sync tasks with ZFS snapshot consistency:
-  | Task | Path | Schedule | Snapshot |
-  |------|------|----------|----------|
-  | B2 - k8s-exports | `/mnt/tank/homelab/k8s-exports` | 22:45 | Yes |
-  | B2 - kopia | `/mnt/tank/homelab/kopia` | 00:45 | Yes |
-  | B2 - media | `/mnt/tank/media` | 02:45 | Yes; excludes `/mnt/tank/media/downloads/qbittorrent` |
-  | B2 - backups | `/mnt/tank/backups` | 04:45 | Yes |
+- **Coverage**: Per-dataset cloud sync tasks with ZFS snapshot consistency. Ansible creates and updates these jobs with `enabled: true`.
+  | Task | Path | Bucket | Schedule | Snapshot |
+  |------|------|--------|----------|----------|
+  | B2 - backups-workstation | `/mnt/tank/backups/workstations` | `sp3nx0r-backups-workstation` | 04:15 | Yes |
+  | B2 - backups-git-bundles | `/mnt/tank/backups/git-bundles` | `sp3nx0r-backups-workstation` | 04:30 | Yes |
+  | B2 - backups-archive | `/mnt/tank/backups/archive` | `sp3nx0r-backups-archive` | 04:45 | Yes |
+  | B2 - backups-truenas-config | `/mnt/tank/backups/truenas-config` | `sp3nx0r-backups-truenas-config` | 23:55 | Yes |
+  | B2 - homelab-k8s-exports | `/mnt/tank/homelab/k8s-exports` | `sp3nx0r-homelab` | 22:45 | Yes |
+  | B2 - homelab-kopia | `/mnt/tank/homelab/kopia` | `sp3nx0r-homelab-kopia` | 00:45 | Yes |
+  | B2 - media | `/mnt/tank/media` | `sp3nx0r-media` | 02:45 | Yes; excludes `/mnt/tank/media/downloads/qbittorrent` and `/mnt/tank/media/isos` |
 - **Transfer mode**: SYNC (mirror, deletes removed files from B2)
-- **Versioning**: Enabled — noncurrent versions retained 30 days, protecting against accidental/malicious deletion propagation
-- **Encryption**: Server-side encryption enabled on bucket; rclone crypt layer on all sync tasks
+- **Versioning**: Enabled with bucket-specific noncurrent retention. High-churn buckets keep short noncurrent windows; critical config keeps longer history.
+- **Encryption**: Server-side encryption enabled on buckets; rclone crypt layer on all sync tasks
 - **Config as code**: Bucket settings managed by `ansible/playbooks/backblaze-configure.yml`; cloud sync tasks codified in `ansible/playbooks/truenas-configure.yml`
+- **Legacy bucket**: `sp3nx0r-truenas` is retired and receives no new Cloud Sync tasks.
 
 ### Level 6: TrueNAS Config Backup (system recovery)
 
@@ -185,8 +194,8 @@
 - **RPO**: 24 hours (daily cron at 23:45)
 - **RTO**: Minutes (restore DB + secret seed during TrueNAS install)
 - **Coverage**: Full TrueNAS configuration database (`freenas-v1.db`) + password encryption seed (`pwenc_secret`)
-- **Retention**: 14 daily copies on-disk, plus B2 versioning for 30 additional days
-- **Storage**: `/mnt/tank/backups/truenas-config/` (synced offsite by the "B2 - backups" cloud sync task)
+- **Retention**: 14 daily copies on-disk, plus B2 noncurrent retention in the `sp3nx0r-backups-truenas-config` bucket
+- **Storage**: `/mnt/tank/backups/truenas-config/` (synced offsite by the "B2 - backups-truenas-config" cloud sync task)
 
 ## What's NOT Covered
 
@@ -195,14 +204,14 @@
 | Not all iSCSI PVCs have Volsync configured | Apps without a ReplicationSource have no application-level backup | Add Volsync component to all stateful apps |
 | RAIDZ1 can only tolerate 1 disk failure | Second disk failure during rebuild = total pool loss | Phase 2 migration to 2x RAIDZ2 (planned) |
 | No application-consistent snapshots | Database crash-consistency not guaranteed for iSCSI zvol snapshots | Use app-level backup tools (pg_dump, etc.) before snapshots |
-| Kopia repo is single-site (NFS on TrueNAS) | NAS loss = Kopia repo loss (until B2 sync restores it) | Kopia repo is included in B2 nightly sync via `/mnt/tank` |
+| Kopia repo is single-site (NFS on TrueNAS) | NAS loss = Kopia repo loss (until B2 sync restores it) | Kopia repo syncs to the `sp3nx0r-homelab-kopia` B2 bucket |
 | Kubernetes etcd/cluster state not backed up | Cluster rebuild requires full re-bootstrap | GitOps (Flux) reconstructs cluster state from git |
 
 ## Key Weaknesses
 
 1. **RAIDZ1 is fragile during rebuilds** — with 5 disks in RAIDZ1, a second failure during a rebuild (which can take hours on large disks) means total data loss. The Phase 2 migration to dual RAIDZ2 vdevs addresses this.
 
-2. **Cloud sync does not capture iSCSI zvol data directly** — zvols are block devices under `/dev/zvol/`, not files under `/mnt/`. The Backblaze task syncs `/mnt/tank` which includes dataset files but not raw zvol block data. **Partially mitigated**: Volsync + Kopia stores iSCSI PVC data as deduplicated file content in the Kopia NFS repo (`tank/homelab/kopia`), which *is* included in the B2 sync. Apps with Volsync configured have offsite coverage through this path.
+2. **Cloud sync does not capture iSCSI zvol data directly** — zvols are block devices under `/dev/zvol/`, not files under `/mnt/`. Cloud Sync covers dataset files but not raw zvol block data. **Partially mitigated**: Volsync + Kopia stores iSCSI PVC data as deduplicated file content in the Kopia NFS repo (`tank/homelab/kopia`), which syncs to the `sp3nx0r-homelab-kopia` B2 bucket. Apps with Volsync configured have offsite coverage through this path.
 
 ## Recommendations
 

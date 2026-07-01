@@ -3,13 +3,33 @@
 b2_endpoint: https://s3.us-west-000.backblazeb2.com
 b2_region: us-west-000
 
-b2_bucket_name: sp3nx0r-truenas
+b2_buckets:
+  - name: sp3nx0r-backups-workstation
+    versioning: true
+    noncurrent_version_expiration_days: 3
+    abort_multipart_days: 7
 
-# Versioning is required for lifecycle rules on B2
-b2_versioning: true
+  - name: sp3nx0r-backups-archive
+    versioning: true
+    noncurrent_version_expiration_days: 90
+    abort_multipart_days: 7
 
-# Lifecycle rules for noncurrent version retention
-b2_noncurrent_version_expiration_days: 30
+  - name: sp3nx0r-backups-truenas-config
+    versioning: true
+    noncurrent_version_expiration_days: 90
+    abort_multipart_days: 7
 
-# Abort incomplete multipart uploads after 7 days
-b2_abort_multipart_days: 7
+  - name: sp3nx0r-homelab
+    versioning: true
+    noncurrent_version_expiration_days: 30
+    abort_multipart_days: 7
+
+  - name: sp3nx0r-homelab-kopia
+    versioning: true
+    noncurrent_version_expiration_days: 1
+    abort_multipart_days: 7
+
+  - name: sp3nx0r-media
+    versioning: true
+    noncurrent_version_expiration_days: 1
+    abort_multipart_days: 7

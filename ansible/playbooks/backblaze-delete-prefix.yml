@@ -6,8 +6,8 @@
 # enabled by default.
 #
 # Usage:
-#   task ansible:backblaze:delete-prefix -- -e b2_delete_prefix=backups/vassago
-#   task ansible:backblaze:delete-prefix -- -e b2_delete_prefix=backups/vassago -e b2_delete_dry_run=false
+#   task ansible:backblaze:delete-prefix -- -e b2_target_bucket=sp3nx0r-backups-workstation -e b2_delete_prefix=workstations/vassago
+#   task ansible:backblaze:delete-prefix -- -e b2_target_bucket=sp3nx0r-backups-workstation -e b2_delete_prefix=workstations/vassago -e b2_delete_dry_run=false
 #
 - name: Delete Backblaze B2 prefix
   hosts: backblaze
@@ -18,6 +18,15 @@
     b2_delete_allow_bucket_root: false
 
   tasks:
+    - name: Require b2_target_bucket
+      ansible.builtin.assert:
+        that:
+          - b2_target_bucket is defined
+          - b2_target_bucket | trim | length > 0
+        fail_msg: >-
+          Set b2_target_bucket to the bucket to delete from, for example
+          -e b2_target_bucket=sp3nx0r-backups-workstation
+
     - name: Require b2_delete_prefix
       ansible.builtin.assert:
         that:
@@ -25,7 +34,7 @@
           - b2_delete_prefix | trim | length > 0
         fail_msg: >-
           Set b2_delete_prefix to the bucket directory to delete, for example
-          -e b2_delete_prefix=backups/vassago
+          -e b2_delete_prefix=workstations/vassago
 
     - name: Normalize delete prefix
       ansible.builtin.set_fact:
@@ -161,7 +170,7 @@
       environment:
         B2_ACCESS_KEY_ID: "{{ b2_access_key_id }}"
         B2_SECRET_ACCESS_KEY: "{{ b2_secret_access_key }}"
-        B2_BUCKET_NAME: "{{ b2_bucket_name }}"
+        B2_BUCKET_NAME: "{{ b2_target_bucket }}"
         B2_ENDPOINT: "{{ b2_endpoint }}"
         B2_REGION: "{{ b2_region }}"
         B2_DELETE_PREFIX: "{{ _b2_delete_prefix_normalized }}"

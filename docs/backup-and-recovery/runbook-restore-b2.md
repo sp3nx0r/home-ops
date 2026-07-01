@@ -4,14 +4,26 @@
 
 - A file or directory was accidentally deleted or overwritten on TrueNAS
 - The TrueNAS Cloud Sync (SYNC mode) propagated the deletion/corruption to B2
-- The incident was discovered within 30 days (noncurrent version retention window)
+- The incident was discovered within the target bucket's noncurrent version retention window
 - ZFS snapshots have already rolled past the incident (>24h ago)
 
 ## Prerequisites
 
 - `aws` CLI or `b2` CLI installed
-- B2 application key with `listBuckets`, `readBuckets`, `listFiles`, `readFiles` on `sp3nx0r-truenas`
+- B2 application key with `listBuckets`, `readBuckets`, `listFiles`, `readFiles` on the target bucket
 - Or use `rclone` configured with B2 backend
+
+## Bucket map
+
+| Local data | B2 bucket | Remote path |
+|------------|-----------|-------------|
+| Workstation mirrors | `sp3nx0r-backups-workstation` | `workstations/` |
+| Workstation Git bundles | `sp3nx0r-backups-workstation` | `git-bundles/` |
+| Archive backups | `sp3nx0r-backups-archive` | bucket root |
+| TrueNAS config backups | `sp3nx0r-backups-truenas-config` | bucket root |
+| Kubernetes NFS exports | `sp3nx0r-homelab` | `k8s-exports/` |
+| Kopia repository | `sp3nx0r-homelab-kopia` | bucket root |
+| Media | `sp3nx0r-media` | bucket root |
 
 ## Configure CLI
 
@@ -24,7 +36,7 @@ eval $(sops -d ansible/inventory/group_vars/backblaze/secrets.sops.yml \
 export AWS_ENDPOINT_URL=https://s3.us-west-000.backblazeb2.com
 
 # Browse raw bucket contents (encrypted .bin files)
-aws s3 ls s3://sp3nx0r-truenas/ --summarize --human-readable | head -5
+aws s3 ls s3://sp3nx0r-homelab/ --summarize --human-readable | head -5
 ```
 
 ## Understanding the rclone crypt layer
@@ -57,13 +69,18 @@ type = b2
 account = <B2_KEY_ID>
 key = <B2_SECRET>
 
-[b2]
+[b2-homelab]
 type = crypt
-remote = b2-raw:sp3nx0r-truenas
+remote = b2-raw:sp3nx0r-homelab
 password = <OBSCURED_PASSWORD>
 password2 = <OBSCURED_SALT>
 filename_encryption = off
 ```
+
+Create one crypt remote per bucket you need to restore from, changing only the
+remote bucket name. For example, `b2-kopia` should point at
+`b2-raw:sp3nx0r-homelab-kopia`, `b2-workstations` should point at
+`b2-raw:sp3nx0r-backups-workstation`, and `b2-media` should point at `b2-raw:sp3nx0r-media`.
 
 To obscure the password and salt for the rclone config:
 
@@ -76,22 +93,22 @@ rclone obscure '<vault_truenas_b2_encryption_salt>'
 
 ```bash
 # List top-level directories
-rclone ls b2: --max-depth 1
+rclone ls b2-homelab: --max-depth 1
 
 # List files in a specific path (shows real filenames, not .bin)
-rclone ls b2:media/movies/
+rclone ls b2-media:movies/
 ```
 
 ### Restore a single file
 
 ```bash
-rclone copy b2:path/to/file.txt ./restored/ --progress
+rclone copy b2-homelab:path/to/file.txt ./restored/ --progress
 ```
 
 ### Restore a directory
 
 ```bash
-rclone copy b2:homelab/k8s-exports/some-app/ ./restored/some-app/ --progress
+rclone copy b2-homelab:k8s-exports/some-app/ ./restored/some-app/ --progress
 ```
 
 ### Restore directly to TrueNAS
@@ -99,10 +116,10 @@ rclone copy b2:homelab/k8s-exports/some-app/ ./restored/some-app/ --progress
 ```bash
 # From the NAS (if rclone is configured there)
 ssh nas
-rclone copy b2:homelab/k8s-exports /mnt/tank/homelab/k8s-exports --progress
+rclone copy b2-homelab:k8s-exports /mnt/tank/homelab/k8s-exports --progress
 
 # Or for a full dataset restore
-rclone sync b2:backups /mnt/tank/backups --progress
+rclone sync b2-workstations:workstations /mnt/tank/backups/workstations --progress
 ```
 
 ### Restore a previous version (noncurrent)
@@ -112,30 +129,30 @@ rclone doesn't natively browse noncurrent versions. Use the `aws` CLI against th
 ```bash
 # List noncurrent versions of a file (uses .bin name as stored in B2)
 aws s3api list-object-versions \
-  --bucket sp3nx0r-truenas \
+  --bucket sp3nx0r-homelab \
   --prefix "path/to/file.txt.bin" \
   --max-keys 20
 
 # Remove delete markers to "undelete" files at a prefix
 aws s3api list-object-versions \
-  --bucket sp3nx0r-truenas \
+  --bucket sp3nx0r-homelab \
   --prefix "path/to/restore/" \
   --query 'DeleteMarkers[?IsLatest==`true`].[Key,VersionId]' \
   --output text | while read KEY VID; do
     aws s3api delete-object \
-      --bucket sp3nx0r-truenas \
+      --bucket sp3nx0r-homelab \
       --key "$KEY" \
       --version-id "$VID"
     echo "Undeleted: $KEY"
 done
 
 # Now pull via rclone to get decrypted content
-rclone copy b2:path/to/restore/ ./restored/ --progress
+rclone copy b2-homelab:path/to/restore/ ./restored/ --progress
 ```
 
 ## Important notes
 
-- **30-day window**: Noncurrent versions are permanently deleted after 30 days by the lifecycle rule. Act quickly.
+- **Bucket-specific window**: Noncurrent versions are permanently deleted according to the target bucket's lifecycle rule. High-churn buckets intentionally have short windows.
 - **B2 egress costs**: Downloading from B2 is free for the first 1 GB/day, then $0.01/GB. Large restores may incur costs.
 - **Cloud Sync may re-delete**: If you restore files to TrueNAS and the original issue isn't fixed, the next Cloud Sync PUSH will overwrite your restoration. Fix the root cause first, or pause Cloud Sync during recovery.
 - **Encryption credentials are critical**: Without the rclone crypt password and salt, B2 data is unrecoverable. These are stored in `ansible/inventory/host_vars/hl8/secrets.sops.yml` (encrypted with age) and in each TrueNAS Cloud Sync task config.

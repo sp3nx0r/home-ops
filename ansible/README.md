@@ -14,16 +14,23 @@ the Kubernetes cluster.
 
 ## Backblaze B2
 
-Manages the `sp3nx0r-truenas` B2 bucket used by TrueNAS Cloud Sync for offsite
-backups. Runs locally against B2's S3-compatible API.
+Manages the B2 buckets used by TrueNAS Cloud Sync for offsite backups. Runs
+locally against B2's S3-compatible API. The legacy `sp3nx0r-truenas` bucket is
+retired and is not used by new Cloud Sync tasks.
 
 ### What it configures
 
-| Setting | Value |
-|---------|-------|
-| Versioning | Enabled (required for lifecycle rules) |
-| Noncurrent version expiration | 30 days (protects against ransomware/accidental deletion propagation) |
-| Abort incomplete multipart uploads | 7 days |
+| Bucket | Noncurrent version expiration | Purpose |
+|--------|-------------------------------|---------|
+| `sp3nx0r-backups-workstation` | 3 days | Workstation mirrors and Git bundles |
+| `sp3nx0r-backups-archive` | 90 days | Low-churn archive data |
+| `sp3nx0r-backups-truenas-config` | 90 days | TrueNAS config database and secret seed |
+| `sp3nx0r-homelab` | 30 days | Kubernetes NFS exports |
+| `sp3nx0r-homelab-kopia` | 1 day | Kopia repository; Kopia owns retention |
+| `sp3nx0r-media` | 1 day | Media library |
+
+Versioning is enabled on every bucket so lifecycle rules can expire noncurrent
+versions. Incomplete multipart uploads are aborted after 7 days.
 
 ### Secrets
 
@@ -35,9 +42,9 @@ B2 application key credentials are stored in
 | `b2_access_key_id` | B2 application key ID |
 | `b2_secret_access_key` | B2 application key secret |
 
-Generate a B2 application key scoped to the bucket:
+Generate a B2 application key that can manage all backup buckets:
 1. Log into Backblaze → App Keys → Add a New Application Key
-2. Restrict to bucket: `sp3nx0r-truenas`
+2. Leave bucket restriction unset, or create separate keys per bucket if you also split the Ansible inventory
 3. Allow: `listBuckets`, `readBuckets`, `writeBuckets`, `listFiles`, `readFiles`, `writeFiles`
 4. Decrypt and update the secrets file:
    ```bash
@@ -57,18 +64,19 @@ task ansible:backblaze -- --tags lifecycle    # just lifecycle rules
 
 Use `backblaze-purge-versions.yml` for one-off cleanup of noncurrent object
 versions under a bucket prefix. It is dry-run by default and requires an
-explicit prefix:
+explicit bucket and prefix:
 
 ```bash
-task ansible:backblaze:purge-versions -- -e b2_purge_prefix=media/downloads/qbittorrent
-task ansible:backblaze:purge-versions -- -e b2_purge_prefix=media/downloads/qbittorrent -e b2_purge_dry_run=false
+task ansible:backblaze:purge-versions -- -e b2_target_bucket=sp3nx0r-media -e b2_purge_prefix=downloads/qbittorrent
+task ansible:backblaze:purge-versions -- -e b2_target_bucket=sp3nx0r-media -e b2_purge_prefix=downloads/qbittorrent -e b2_purge_dry_run=false
 ```
 
 Delete markers are not removed unless requested:
 
 ```bash
 task ansible:backblaze:purge-versions -- \
-  -e b2_purge_prefix=media/downloads/qbittorrent \
+  -e b2_target_bucket=sp3nx0r-media \
+  -e b2_purge_prefix=downloads/qbittorrent \
   -e b2_purge_delete_markers=true \
   -e b2_purge_dry_run=false
 ```
@@ -77,11 +85,11 @@ task ansible:backblaze:purge-versions -- \
 
 Use `backblaze-delete-prefix.yml` when you want to remove a bucket path
 entirely, including current versions, previous versions, and delete markers.
-It is dry-run by default and requires an explicit prefix:
+It is dry-run by default and requires an explicit bucket and prefix:
 
 ```bash
-task ansible:backblaze:delete-prefix -- -e b2_delete_prefix=backups/vassago
-task ansible:backblaze:delete-prefix -- -e b2_delete_prefix=backups/vassago -e b2_delete_dry_run=false
+task ansible:backblaze:delete-prefix -- -e b2_target_bucket=sp3nx0r-backups-workstation -e b2_delete_prefix=workstations/vassago
+task ansible:backblaze:delete-prefix -- -e b2_target_bucket=sp3nx0r-backups-workstation -e b2_delete_prefix=workstations/vassago -e b2_delete_dry_run=false
 ```
 
 ---

@@ -142,6 +142,21 @@ truenas_datasets_common:
     recordsize: 1M
     atime: "off"
 
+  - name: "{{ truenas_pool }}/backups/workstations"
+    compression: zstd
+    recordsize: 1M
+    atime: "off"
+
+  - name: "{{ truenas_pool }}/backups/git-bundles"
+    compression: zstd
+    recordsize: 1M
+    atime: "off"
+
+  - name: "{{ truenas_pool }}/backups/archive"
+    compression: zstd
+    recordsize: 1M
+    atime: "off"
+
   - name: "{{ truenas_pool }}/media"
     compression: lz4
     recordsize: 1M
@@ -315,7 +330,6 @@ truenas_scrub_threshold: 35
 
 # -- Cloud Sync (Backblaze B2) ------------------------------------------------
 truenas_cloudsync_credential_name: Backblaze B2
-truenas_cloudsync_bucket: sp3nx0r-truenas
 truenas_cloudsync_encryption_password: "{{ vault_truenas_b2_encryption_password }}"
 truenas_cloudsync_encryption_salt: "{{ vault_truenas_b2_encryption_salt }}"
 truenas_cloudsync_transfers: 4
@@ -336,30 +350,65 @@ truenas_cloudsync_excludes_media:
   - "isos/**"
 
 truenas_cloudsync_tasks:
-  - description: "B2 - backups"
-    path: "/mnt/{{ truenas_pool }}/backups"
-    folder: /backups/
+  - description: "B2 - backups-workstation"
+    path: "/mnt/{{ truenas_pool }}/backups/workstations"
+    bucket: sp3nx0r-backups-workstation
+    folder: /workstations/
+    enabled: true
     hour: "4"
-    minute: "45"
+    minute: "15"
     exclude: "{{ truenas_cloudsync_excludes_backups }}"
 
-  - description: "B2 - k8s-exports"
+  - description: "B2 - backups-git-bundles"
+    path: "/mnt/{{ truenas_pool }}/backups/git-bundles"
+    bucket: sp3nx0r-backups-workstation
+    folder: /git-bundles/
+    enabled: true
+    hour: "4"
+    minute: "30"
+    exclude: []
+
+  - description: "B2 - backups-archive"
+    path: "/mnt/{{ truenas_pool }}/backups/archive"
+    bucket: sp3nx0r-backups-archive
+    folder: /
+    enabled: true
+    hour: "4"
+    minute: "45"
+    exclude: []
+
+  - description: "B2 - backups-truenas-config"
+    path: "/mnt/{{ truenas_pool }}/backups/truenas-config"
+    bucket: sp3nx0r-backups-truenas-config
+    folder: /
+    enabled: true
+    hour: "23"
+    minute: "55"
+    exclude: []
+
+  - description: "B2 - homelab-k8s-exports"
     path: "/mnt/{{ truenas_pool }}/homelab/k8s-exports"
-    folder: /homelab/k8s-exports/
+    bucket: sp3nx0r-homelab
+    folder: /k8s-exports/
+    enabled: true
     hour: "22"
     minute: "45"
     exclude: []
 
-  - description: "B2 - kopia"
+  - description: "B2 - homelab-kopia"
     path: "/mnt/{{ truenas_pool }}/homelab/kopia"
-    folder: /homelab/kopia/
+    bucket: sp3nx0r-homelab-kopia
+    folder: /
+    enabled: true
     hour: "0"
     minute: "45"
     exclude: []
 
   - description: "B2 - media"
     path: "/mnt/{{ truenas_pool }}/media"
-    folder: /media/
+    bucket: sp3nx0r-media
+    folder: /
+    enabled: true
     hour: "2"
     minute: "45"
     exclude: "{{ truenas_cloudsync_excludes_media }}"

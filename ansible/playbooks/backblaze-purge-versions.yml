@@ -6,8 +6,8 @@
 # management. Dry-run is enabled by default.
 #
 # Usage:
-#   task ansible:backblaze:purge-versions -- -e b2_purge_prefix=media/downloads/qbittorrent
-#   task ansible:backblaze:purge-versions -- -e b2_purge_prefix=media/downloads/qbittorrent -e b2_purge_dry_run=false
+#   task ansible:backblaze:purge-versions -- -e b2_target_bucket=sp3nx0r-media -e b2_purge_prefix=downloads/qbittorrent
+#   task ansible:backblaze:purge-versions -- -e b2_target_bucket=sp3nx0r-media -e b2_purge_prefix=downloads/qbittorrent -e b2_purge_dry_run=false
 #
 - name: Purge Backblaze B2 previous versions
   hosts: backblaze
@@ -19,6 +19,15 @@
     b2_purge_allow_bucket_root: false
 
   tasks:
+    - name: Require b2_target_bucket
+      ansible.builtin.assert:
+        that:
+          - b2_target_bucket is defined
+          - b2_target_bucket | trim | length > 0
+        fail_msg: >-
+          Set b2_target_bucket to the bucket to purge, for example
+          -e b2_target_bucket=sp3nx0r-media
+
     - name: Require b2_purge_prefix
       ansible.builtin.assert:
         that:
@@ -26,7 +35,7 @@
           - b2_purge_prefix | trim | length > 0
         fail_msg: >-
           Set b2_purge_prefix to the bucket directory to purge, for example
-          -e b2_purge_prefix=media/downloads/qbittorrent
+          -e b2_purge_prefix=downloads/qbittorrent
 
     - name: Normalize purge prefix
       ansible.builtin.set_fact:
@@ -168,7 +177,7 @@
       environment:
         B2_ACCESS_KEY_ID: "{{ b2_access_key_id }}"
         B2_SECRET_ACCESS_KEY: "{{ b2_secret_access_key }}"
-        B2_BUCKET_NAME: "{{ b2_bucket_name }}"
+        B2_BUCKET_NAME: "{{ b2_target_bucket }}"
         B2_ENDPOINT: "{{ b2_endpoint }}"
         B2_REGION: "{{ b2_region }}"
         B2_PURGE_PREFIX: "{{ _b2_purge_prefix_normalized }}"

@@ -18,13 +18,15 @@
 
 Restore in priority order — critical infrastructure first, media last.
 
-| Priority | Dataset | Size estimate | Purpose |
-|----------|---------|---------------|---------|
-| 1 | `homelab/k8s-exports` | Small | Kubernetes NFS PVCs |
-| 2 | `homelab/kopia` | Small-medium | Volsync backup repo (needed to restore iSCSI PVC data) |
-| 3 | `homelab/k8s-iscsi` | Small | iSCSI zvols (may not restore cleanly from B2 — use Kopia instead) |
-| 4 | `backups` | Medium | General backups |
-| 5 | `media` | Large | Media library (lowest priority, largest download) |
+| Priority | Dataset | B2 bucket | Size estimate | Purpose |
+|----------|---------|-----------|---------------|---------|
+| 1 | `backups/truenas-config` | `sp3nx0r-backups-truenas-config` | Tiny | TrueNAS configuration database and secret seed |
+| 2 | `homelab/k8s-exports` | `sp3nx0r-homelab` | Small | Kubernetes NFS PVCs |
+| 3 | `homelab/kopia` | `sp3nx0r-homelab-kopia` | Small-medium | Volsync backup repo (needed to restore iSCSI PVC data) |
+| 4 | `homelab/k8s-iscsi` | N/A | Small | iSCSI zvols (do not restore from B2 file sync; use Kopia instead) |
+| 5 | `backups/workstations` + `backups/git-bundles` | `sp3nx0r-backups-workstation` | Medium | Workstation mirrors and Git bundles |
+| 6 | `backups/archive` | `sp3nx0r-backups-archive` | Variable | Long-lived archive data |
+| 7 | `media` | `sp3nx0r-media` | Large | Media library (lowest priority, largest download) |
 
 ## Procedure
 
@@ -58,9 +60,9 @@ This recreates all datasets, NFS shares, snapshot tasks, users, services, iSCSI 
 1. In TrueNAS UI: Data Protection → Cloud Sync Tasks → Add
 2. Direction: **PULL**
 3. Credential: Add B2 credentials
-4. Bucket: `sp3nx0r-truenas`
-5. Remote path: `/` (or specific dataset path for priority restore)
-6. Local path: `/mnt/tank`
+4. Bucket: choose the bucket for the dataset being restored
+5. Remote path: use the bucket-specific path from the recovery order table
+6. Local path: use the matching `/mnt/tank/...` dataset path
 7. Transfer mode: **COPY**
 8. Run manually for each priority dataset
 
@@ -74,15 +76,25 @@ eval $(sops -d ansible/inventory/group_vars/backblaze/secrets.sops.yml \
 # Configure rclone remote on the NAS
 ssh nas
 rclone config
-# Add remote: name=b2, type=b2, account=$B2_ACCOUNT, key=$B2_KEY
+# Add raw remote: name=b2-raw, type=b2, account=$B2_ACCOUNT, key=$B2_KEY
+# Add crypt remotes using the TrueNAS Cloud Sync encryption password and salt:
+#   b2-truenas-config -> b2-raw:sp3nx0r-backups-truenas-config
+#   b2-homelab -> b2-raw:sp3nx0r-homelab
+#   b2-kopia -> b2-raw:sp3nx0r-homelab-kopia
+#   b2-workstations -> b2-raw:sp3nx0r-backups-workstation
+#   b2-archive -> b2-raw:sp3nx0r-backups-archive
+#   b2-media -> b2-raw:sp3nx0r-media
 
 # Restore priority datasets first
-rclone sync b2:sp3nx0r-truenas/homelab/k8s-exports /mnt/tank/homelab/k8s-exports --progress
-rclone sync b2:sp3nx0r-truenas/homelab/kopia /mnt/tank/homelab/kopia --progress
+rclone sync b2-truenas-config: /mnt/tank/backups/truenas-config --progress
+rclone sync b2-homelab:k8s-exports /mnt/tank/homelab/k8s-exports --progress
+rclone sync b2-kopia: /mnt/tank/homelab/kopia --progress
 
 # Then the rest
-rclone sync b2:sp3nx0r-truenas/backups /mnt/tank/backups --progress
-rclone sync b2:sp3nx0r-truenas/media /mnt/tank/media --progress
+rclone sync b2-workstations:workstations /mnt/tank/backups/workstations --progress
+rclone sync b2-workstations:git-bundles /mnt/tank/backups/git-bundles --progress
+rclone sync b2-archive: /mnt/tank/backups/archive --progress
+rclone sync b2-media: /mnt/tank/media --progress
 ```
 
 ### Phase 3: Fix ownership
@@ -108,7 +120,7 @@ task talos:bootstrap
 - [ ] All pods running: `kubectl get pods -A`
 - [ ] Volsync ReplicationDestinations completed
 - [ ] NFS PVCs accessible
-- [ ] Re-enable Cloud Sync PUSH task to resume offsite backups
+- [ ] Verify the Ansible-managed Cloud Sync PUSH tasks are enabled after restored data is confirmed
 
 ## Estimated recovery time
 
@@ -124,7 +136,7 @@ task talos:bootstrap
 
 - **iSCSI zvols are block devices** — they won't restore cleanly from B2 file sync. Use Volsync/Kopia to restore iSCSI PVC data instead.
 - **B2 egress is metered** — first 1 GB/day free, then $0.01/GB. Budget for egress costs on large restores.
-- **Don't re-enable Cloud Sync PUSH** until you've verified the restored data is correct, or you'll push incomplete data back to B2.
+- **Suspend Cloud Sync PUSH during restore** if tasks were recreated or restored as enabled. Resume only after verifying restored data, or incomplete local data can be pushed back to B2.
 
 ## TODO
 

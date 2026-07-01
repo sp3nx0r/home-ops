@@ -87,28 +87,28 @@ tasks:
       - test -f {{.ANSIBLE_VENV}}/bin/ansible-playbook
 
   backblaze:
-    desc: Configure Backblaze B2 bucket (versioning + lifecycle)
+    desc: Configure Backblaze B2 buckets (versioning + lifecycle)
     dir: '{{.ANSIBLE_DIR}}'
     cmd: '{{.ANSIBLE_VENV}}/bin/ansible-playbook playbooks/backblaze-configure.yml {{.CLI_ARGS}}'
     preconditions:
       - test -f {{.ANSIBLE_VENV}}/bin/ansible-playbook
 
   backblaze:dry-run:
-    desc: Dry run Backblaze B2 configuration
+    desc: Dry run Backblaze B2 bucket configuration
     dir: '{{.ANSIBLE_DIR}}'
     cmd: '{{.ANSIBLE_VENV}}/bin/ansible-playbook playbooks/backblaze-configure.yml --check --diff {{.CLI_ARGS}}'
     preconditions:
       - test -f {{.ANSIBLE_VENV}}/bin/ansible-playbook
 
   backblaze:purge-versions:
-    desc: Purge noncurrent B2 object versions under b2_purge_prefix (dry-run by default)
+    desc: Purge noncurrent B2 object versions under b2_target_bucket/b2_purge_prefix (dry-run by default)
     dir: '{{.ANSIBLE_DIR}}'
     cmd: '{{.ANSIBLE_VENV}}/bin/ansible-playbook playbooks/backblaze-purge-versions.yml {{.CLI_ARGS}}'
     preconditions:
       - test -f {{.ANSIBLE_VENV}}/bin/ansible-playbook
 
   backblaze:delete-prefix:
-    desc: Delete all B2 object versions and markers under b2_delete_prefix (dry-run by default)
+    desc: Delete all B2 object versions and markers under b2_target_bucket/b2_delete_prefix (dry-run by default)
     dir: '{{.ANSIBLE_DIR}}'
     cmd: '{{.ANSIBLE_VENV}}/bin/ansible-playbook playbooks/backblaze-delete-prefix.yml {{.CLI_ARGS}}'
     preconditions:
