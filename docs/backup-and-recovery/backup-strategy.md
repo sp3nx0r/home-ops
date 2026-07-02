@@ -41,7 +41,7 @@
 │  Cloud Sync: per-dataset PUSH (snapshot: true, managed by     │
 │              Ansible)                                         │
 │  Transfer mode: SYNC                                          │
-│  Schedule: staggered nightly (22:45–04:45)                    │
+│  Schedule: staggered nightly (22:45–05:30)                    │
 │  Versioning: bucket-specific noncurrent retention             │
 │  Kopia: synced to sp3nx0r-homelab-kopia; Kopia owns retention │
 │  Config: ansible/playbooks/backblaze-configure.yml            │
@@ -170,13 +170,13 @@
 ### Level 5: Backblaze B2 Cloud Sync (disaster recovery)
 
 - **What it protects against**: Total NAS loss (fire, theft, multiple disk failure, controller failure)
-- **RPO**: 24 hours (nightly sync, staggered 22:45–04:45)
+- **RPO**: 24 hours (nightly sync, staggered 22:45–05:30)
 - **RTO**: Hours to days (depending on bandwidth for full restore)
 - **Coverage**: Per-dataset cloud sync tasks with ZFS snapshot consistency. Ansible creates and updates these jobs with `enabled: true`.
   | Task | Path | Bucket | Schedule | Snapshot |
   |------|------|--------|----------|----------|
   | B2 - backups-workstation | `/mnt/tank/backups/workstations` | `sp3nx0r-backups-workstation` | 04:15 | Yes |
-  | B2 - backups-git-bundles | `/mnt/tank/backups/git-bundles` | `sp3nx0r-backups-workstation` | 04:30 | Yes |
+  | B2 - backups-git-bundles | `/mnt/tank/backups/git-bundles` | `sp3nx0r-backups-workstation` | 05:30 | Yes |
   | B2 - backups-archive | `/mnt/tank/backups/archive` | `sp3nx0r-backups-archive` | 04:45 | Yes |
   | B2 - backups-truenas-config | `/mnt/tank/backups/truenas-config` | `sp3nx0r-backups-truenas-config` | 23:55 | Yes |
   | B2 - homelab-k8s-exports | `/mnt/tank/homelab/k8s-exports` | `sp3nx0r-homelab` | 22:45 | Yes |

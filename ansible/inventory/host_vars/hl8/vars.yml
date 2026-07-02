@@ -364,7 +364,7 @@ truenas_cloudsync_tasks:
     bucket: sp3nx0r-backups-workstation
     folder: /git-bundles/
     enabled: true
-    hour: "4"
+    hour: "5"
     minute: "30"
     exclude: []
 
