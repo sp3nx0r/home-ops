@@ -18,7 +18,7 @@ spec:
           app:
             image:
               repository: ghcr.io/home-operations/bazarr
-              tag: 1.5.6
+              tag: 1.6.0
             env:
               BAZARR__PORT: &port 80
               TZ: America/Chicago
@@ -35,6 +35,14 @@ spec:
                   timeoutSeconds: 5
                   failureThreshold: 3
               readiness: *probes
+              startup:
+                enabled: true
+                custom: true
+                spec:
+                  tcpSocket:
+                    port: *port
+                  periodSeconds: 10
+                  failureThreshold: 30
             resources:
               requests:
                 cpu: 100m
