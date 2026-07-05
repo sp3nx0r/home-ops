@@ -39,10 +39,12 @@ spec:
                 enabled: true
                 custom: true
                 spec:
-                  tcpSocket:
+                  httpGet:
+                    path: /api/system/ping
                     port: *port
+                  timeoutSeconds: 5
                   periodSeconds: 10
-                  failureThreshold: 30
+                  failureThreshold: 60
             resources:
               requests:
                 cpu: 100m
