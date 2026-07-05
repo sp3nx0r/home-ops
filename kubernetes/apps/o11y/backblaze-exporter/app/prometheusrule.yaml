@@ -1,0 +1,138 @@
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/monitoring.coreos.com/prometheusrule_v1.json
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: backblaze-exporter
+spec:
+  groups:
+    - name: backblaze-exporter.rules
+      rules:
+        - alert: BackblazeExporterBucketScrapeFailed
+          expr: |-
+            backblaze_b2_scrape_success == 0
+          for: 15m
+          annotations:
+            summary: >-
+              Backblaze exporter scrape failed for {{ $labels.bucket }}
+            description: >-
+              The Backblaze exporter has reported an unsuccessful B2 scrape for
+              {{ $labels.bucket }} for at least 15 minutes. Bucket capacity,
+              freshness, and drop-detection metrics may be stale.
+          labels:
+            severity: critical
+
+        - alert: BackblazeExporterBucketMissing
+          expr: |-
+            absent_over_time(backblaze_b2_scrape_success{bucket="sp3nx0r-backups-archive"}[30m])
+            or absent_over_time(backblaze_b2_scrape_success{bucket="sp3nx0r-backups-truenas-config"}[30m])
+            or absent_over_time(backblaze_b2_scrape_success{bucket="sp3nx0r-backups-workstation"}[30m])
+            or absent_over_time(backblaze_b2_scrape_success{bucket="sp3nx0r-homelab"}[30m])
+            or absent_over_time(backblaze_b2_scrape_success{bucket="sp3nx0r-homelab-kopia"}[30m])
+            or absent_over_time(backblaze_b2_scrape_success{bucket="sp3nx0r-media"}[30m])
+          for: 5m
+          annotations:
+            summary: >-
+              Expected Backblaze bucket metric is missing
+            description: >-
+              Prometheus has not received Backblaze exporter scrape-success
+              metrics for one of the expected B2 backup buckets for at least
+              30 minutes. The exporter configuration, ServiceMonitor, or B2
+              authorization may be broken.
+          labels:
+            severity: critical
+
+        - alert: BackblazeBucketNewestObjectStale
+          expr: |-
+            (time() * 1000 - backblaze_b2_path_last_upload_seconds) / 1000 > 14 * 24 * 60 * 60
+          for: 1h
+          annotations:
+            summary: >-
+              Backblaze bucket {{ $labels.bucket }} has no recent B2 objects
+            description: >-
+              The newest object currently visible in {{ $labels.bucket }} is
+              older than 14 days. This does not prove the TrueNAS Cloud Sync job
+              failed to run; a successful sync with no changed files will not
+              advance this metric.
+          labels:
+            severity: warning
+
+        - alert: BackblazeBucketSizeDropped
+          expr: |-
+            (
+              (backblaze_b2_path_size_bytes offset 24h - backblaze_b2_path_size_bytes)
+              / (backblaze_b2_path_size_bytes offset 24h)
+            ) > 0.10
+            and
+            (backblaze_b2_path_size_bytes offset 24h - backblaze_b2_path_size_bytes) > 10 * 1024 * 1024
+          for: 30m
+          annotations:
+            summary: >-
+              Backblaze bucket {{ $labels.bucket }} size dropped by more than 10%
+            description: >-
+              {{ $labels.bucket }} is more than 10% smaller than it was 24 hours
+              ago, with at least 10 MiB removed. This may be normal sync churn,
+              but it can also indicate accidental deletion or a destructive
+              Cloud Sync run.
+          labels:
+            severity: warning
+
+        - alert: BackblazeBucketSizeDroppedCritical
+          expr: |-
+            (
+              (backblaze_b2_path_size_bytes offset 24h - backblaze_b2_path_size_bytes)
+              / (backblaze_b2_path_size_bytes offset 24h)
+            ) > 0.25
+            and
+            (backblaze_b2_path_size_bytes offset 24h - backblaze_b2_path_size_bytes) > 100 * 1024 * 1024
+          for: 15m
+          annotations:
+            summary: >-
+              Backblaze bucket {{ $labels.bucket }} size dropped by more than 25%
+            description: >-
+              {{ $labels.bucket }} is more than 25% smaller than it was 24 hours
+              ago, with at least 100 MiB removed. Investigate immediately for
+              accidental deletion, bad sync source state, or bucket-level data
+              loss.
+          labels:
+            severity: critical
+
+        - alert: BackblazeBucketFileCountDropped
+          expr: |-
+            (
+              (backblaze_b2_path_files_count offset 24h - backblaze_b2_path_files_count)
+              / (backblaze_b2_path_files_count offset 24h)
+            ) > 0.10
+            and
+            (backblaze_b2_path_files_count offset 24h - backblaze_b2_path_files_count) > 10
+          for: 30m
+          annotations:
+            summary: >-
+              Backblaze bucket {{ $labels.bucket }} file count dropped by more than 10%
+            description: >-
+              {{ $labels.bucket }} has more than 10% fewer files than it had 24
+              hours ago, with at least 10 files removed. This may be normal sync
+              churn, but it can also indicate accidental deletion or a destructive
+              Cloud Sync run.
+          labels:
+            severity: warning
+
+        - alert: BackblazeBucketFileCountDroppedCritical
+          expr: |-
+            (
+              (backblaze_b2_path_files_count offset 24h - backblaze_b2_path_files_count)
+              / (backblaze_b2_path_files_count offset 24h)
+            ) > 0.25
+            and
+            (backblaze_b2_path_files_count offset 24h - backblaze_b2_path_files_count) > 100
+          for: 15m
+          annotations:
+            summary: >-
+              Backblaze bucket {{ $labels.bucket }} file count dropped by more than 25%
+            description: >-
+              {{ $labels.bucket }} has more than 25% fewer files than it had 24
+              hours ago, with at least 100 files removed. Investigate immediately
+              for accidental deletion, bad sync source state, or bucket-level data
+              loss.
+          labels:
+            severity: critical

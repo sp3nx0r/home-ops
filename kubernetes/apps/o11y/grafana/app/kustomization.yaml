@@ -7,6 +7,14 @@ resources:
   - ./ocirepository.yaml
   - ./secret.sops.yaml
 configMapGenerator:
+  - name: grafana-dashboard-backblaze-b2-capacity
+    files:
+      - ./dashboards/backblaze-b2-capacity.json
+    options:
+      labels:
+        grafana_dashboard: "1"
+      annotations:
+        grafana_folder: Backups
   - name: grafana-dashboard-ollama
     files:
       - ./dashboards/ollama.json
