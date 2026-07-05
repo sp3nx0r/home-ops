@@ -905,7 +905,7 @@
           transfers: "{{ truenas_cloudsync_transfers }}"
           args: "{{ truenas_cloudsync_args }}"
           exclude: "{{ item.exclude | default([]) }}"
-          follow_symlinks: true
+          follow_symlinks: "{{ item.follow_symlinks | default(truenas_cloudsync_follow_symlinks) | bool }}"
           create_empty_src_dirs: false
       loop: "{{ truenas_cloudsync_tasks }}"
       loop_control:
@@ -930,6 +930,7 @@
         _desired_transfers: "{{ truenas_cloudsync_transfers }}"
         _desired_args: "{{ truenas_cloudsync_args }}"
         _desired_exclude: "{{ item.exclude | default([]) }}"
+        _desired_follow_symlinks: "{{ item.follow_symlinks | default(truenas_cloudsync_follow_symlinks) | bool }}"
         _desired_schedule:
           minute: "{{ item.minute }}"
           hour: "{{ item.hour }}"
@@ -946,6 +947,7 @@
           transfers: "{{ _desired_transfers }}"
           args: "{{ _desired_args }}"
           exclude: "{{ _desired_exclude }}"
+          follow_symlinks: "{{ _desired_follow_symlinks }}"
           schedule: "{{ _desired_schedule }}"
       loop: "{{ truenas_cloudsync_tasks }}"
       loop_control:
@@ -957,6 +959,7 @@
           (_existing.transfers | default(4)) != _desired_transfers or
           (_existing.args | default('')) != _desired_args or
           (_existing.exclude | default([])) != _desired_exclude or
+          (_existing.follow_symlinks | default(false) | bool) != (_desired_follow_symlinks | bool) or
           (_existing.path | default('')) != _desired_path or
           (_existing.attributes.bucket | default('')) != _desired_bucket or
           (_existing.attributes.folder | default('')) != _desired_folder or

@@ -334,6 +334,7 @@ truenas_cloudsync_encryption_password: "{{ vault_truenas_b2_encryption_password 
 truenas_cloudsync_encryption_salt: "{{ vault_truenas_b2_encryption_salt }}"
 truenas_cloudsync_transfers: 4
 truenas_cloudsync_args: "--buffer-size 8M --checkers 4"
+truenas_cloudsync_follow_symlinks: false
 truenas_cloudsync_bwlimit:
   - time: "00:00"
     bandwidth: 60000000
