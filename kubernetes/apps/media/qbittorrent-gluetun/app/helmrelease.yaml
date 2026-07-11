@@ -89,7 +89,7 @@ spec:
             dependsOn: gluetun
             image:
               repository: ghcr.io/home-operations/qbittorrent-libtorrentv1
-              tag: 5.2.2
+              tag: 5.2.3
             env:
               QBT_TORRENTING_PORT: &bittorrentPort 50414
               QBT_WEBUI_PORT: &port 80
