@@ -54,6 +54,7 @@ spec:
       sinks:
         loki:
           type: loki
+          dangerously_allow_unconfined_template_resolution: true
           inputs: ["syslog_parse"]
           endpoint: http://loki-gateway.o11y.svc.cluster.local
           buffer:
