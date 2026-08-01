@@ -72,6 +72,14 @@ tasks:
       - test -f {{.ANSIBLE_VENV}}/bin/ansible-playbook
       - which kubectl
 
+  volsync:cache-scrub:
+    desc: Scrub zero-byte Kopia index files from VolSync cache PVCs (fixes mmap EINVAL / out-of-sync)
+    dir: '{{.ANSIBLE_DIR}}'
+    cmd: '{{.ANSIBLE_VENV}}/bin/ansible-playbook playbooks/volsync-cache-scrub.yml {{.CLI_ARGS}}'
+    preconditions:
+      - test -f {{.ANSIBLE_VENV}}/bin/ansible-playbook
+      - which kubectl
+
   ms-s1:
     desc: Run MS-S1 (sardior) configuration playbook
     dir: '{{.ANSIBLE_DIR}}'

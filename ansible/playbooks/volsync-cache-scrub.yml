@@ -1,0 +1,260 @@
+---
+# Scrub zero-length (truncated) Kopia index files from VolSync mover cache PVCs.
+#
+# Truncated *.sndx / *.f files in a mover's cache cause Kopia to fail at
+# repository-open with "mmap error: invalid argument" (mmap of a 0-byte file
+# returns EINVAL). Every affected ReplicationSource then goes out-of-sync and
+# fires VolSyncVolumeOutOfSync. Real Kopia cache blobs are never 0 bytes, so
+# deleting only zero-length files is safe — Kopia re-fetches them on next sync.
+#
+# Flow: scale VolSync controller to 0 (stop all movers) -> delete mover Jobs
+# (release RWO cache PVCs) -> run a scrub Job per cache PVC -> restore the
+# controller (VolSync re-syncs overdue sources).
+#
+# Usage:
+#   task ansible:volsync:cache-scrub
+#   # limit to specific sources (space/comma-separated app names):
+#   task ansible:volsync:cache-scrub -- -e 'only=qui,pocket-id'
+#
+- name: Scrub VolSync Kopia cache PVCs
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    scrub_image: docker.io/library/busybox:1.37
+    scrub_active_deadline: 150
+    scrub_wait_timeout: 300s
+    volsync_controller_namespace: volsync-system
+    volsync_controller_deployment: volsync
+    only: ""
+
+  tasks:
+    - name: Discover VolSync cache PVCs with a matching ReplicationSource
+      ansible.builtin.command:
+        cmd: python3 -
+        stdin: |
+          import json
+          import subprocess
+
+          only = "{{ only }}".replace(",", " ").split()
+
+          def kubectl(*args):
+              return json.loads(subprocess.check_output(["kubectl", *args], text=True))
+
+          pvcs = kubectl("get", "pvc", "--all-namespaces", "-o", "json")["items"]
+          sources = kubectl("get", "replicationsource", "--all-namespaces", "-o", "json")["items"]
+
+          rs_index = {(s["metadata"]["namespace"], s["metadata"]["name"]) for s in sources}
+
+          targets = []
+          for pvc in pvcs:
+              name = pvc["metadata"]["name"]
+              namespace = pvc["metadata"]["namespace"]
+              if not (name.startswith("volsync-src-") and name.endswith("-cache")):
+                  continue
+              app = name[len("volsync-src-"):-len("-cache")]
+              if (namespace, app) not in rs_index:
+                  continue
+              if only and app not in only:
+                  continue
+              targets.append({"namespace": namespace, "pvc": name, "app": app})
+
+          targets.sort(key=lambda t: (t["namespace"], t["app"]))
+          print(json.dumps({"targets": targets}))
+      register: _discovery
+      changed_when: false
+
+    - name: Store discovery result
+      ansible.builtin.set_fact:
+        _targets: "{{ (_discovery.stdout | from_json).targets }}"
+
+    - name: Display targets
+      ansible.builtin.debug:
+        msg: "Will scrub {{ item.namespace }}/{{ item.pvc }} (source: {{ item.app }})"
+      loop: "{{ _targets }}"
+      loop_control:
+        label: "{{ item.namespace }}/{{ item.app }}"
+
+    - name: End play if no cache PVCs found
+      ansible.builtin.meta: end_play
+      when: _targets | length == 0
+
+    - name: Capture current VolSync controller replica count
+      ansible.builtin.command:
+        cmd: >-
+          kubectl --namespace {{ volsync_controller_namespace }}
+          get deployment {{ volsync_controller_deployment }}
+          --output=jsonpath={.spec.replicas}
+      register: _volsync_replicas
+      changed_when: false
+
+    - name: Record original VolSync controller replica count
+      ansible.builtin.set_fact:
+        _original_replicas: "{{ (_volsync_replicas.stdout | default('1', true)) | int }}"
+
+    - name: Scrub cache PVCs
+      block:
+        - name: Scale VolSync controller down
+          ansible.builtin.command:
+            cmd: >-
+              kubectl --namespace {{ volsync_controller_namespace }}
+              scale deployment/{{ volsync_controller_deployment }} --replicas=0
+          changed_when: true
+          when: _original_replicas | int > 0
+
+        - name: Wait for VolSync controller scale down
+          ansible.builtin.command:
+            cmd: >-
+              kubectl --namespace {{ volsync_controller_namespace }}
+              rollout status deployment/{{ volsync_controller_deployment }} --timeout=120s
+          changed_when: false
+          when: _original_replicas | int > 0
+
+        - name: Delete mover Jobs (releases the RWO cache PVCs)
+          ansible.builtin.command:
+            cmd: >-
+              kubectl --namespace {{ item.namespace }}
+              delete job volsync-src-{{ item.app }}
+              --ignore-not-found --cascade=foreground --wait=true --timeout=5m
+          loop: "{{ _targets }}"
+          loop_control:
+            label: "{{ item.namespace }}/volsync-src-{{ item.app }}"
+          register: _delete_jobs
+          changed_when: _delete_jobs.stdout | length > 0
+
+        - name: Wait for mover pods to terminate
+          ansible.builtin.command:
+            cmd: >-
+              kubectl --namespace {{ item.namespace }}
+              wait pod --for=delete --selector=job-name=volsync-src-{{ item.app }}
+              --timeout=180s
+          loop: "{{ _targets }}"
+          loop_control:
+            label: "{{ item.namespace }}/{{ item.app }}"
+          changed_when: false
+          failed_when: false
+
+        - name: Remove stale scrub Jobs from a previous run
+          ansible.builtin.command:
+            cmd: >-
+              kubectl --namespace {{ item.namespace }}
+              delete job volsync-cache-scrub-{{ item.app }}
+              --ignore-not-found --wait=true --timeout=2m
+          loop: "{{ _targets }}"
+          loop_control:
+            label: "{{ item.namespace }}/{{ item.app }}"
+          changed_when: false
+
+        - name: Launch scrub Jobs
+          ansible.builtin.command:
+            cmd: kubectl apply -f -
+            stdin: |
+              apiVersion: batch/v1
+              kind: Job
+              metadata:
+                name: volsync-cache-scrub-{{ item.app }}
+                namespace: {{ item.namespace }}
+                labels:
+                  app.kubernetes.io/name: volsync-cache-scrub
+              spec:
+                backoffLimit: 0
+                activeDeadlineSeconds: {{ scrub_active_deadline }}
+                ttlSecondsAfterFinished: 300
+                template:
+                  spec:
+                    restartPolicy: Never
+                    securityContext:
+                      runAsUser: 0
+                      runAsGroup: 0
+                    containers:
+                      - name: scrub
+                        image: {{ scrub_image }}
+                        command: ["sh", "-c"]
+                        args:
+                          - |
+                            n=$(find /cache -type f -size 0 | wc -l)
+                            echo "found $n zero-byte files"
+                            find /cache -type f -size 0 -print -delete
+                            echo "done; removed $n zero-byte files"
+                        volumeMounts:
+                          - name: cache
+                            mountPath: /cache
+                    volumes:
+                      - name: cache
+                        persistentVolumeClaim:
+                          claimName: {{ item.pvc }}
+          loop: "{{ _targets }}"
+          loop_control:
+            label: "{{ item.namespace }}/{{ item.app }}"
+          changed_when: true
+
+        - name: Wait for scrub Jobs to complete
+          ansible.builtin.command:
+            cmd: >-
+              kubectl --namespace {{ item.namespace }}
+              wait job/volsync-cache-scrub-{{ item.app }}
+              --for=condition=complete --timeout={{ scrub_wait_timeout }}
+          loop: "{{ _targets }}"
+          loop_control:
+            label: "{{ item.namespace }}/{{ item.app }}"
+          changed_when: false
+          failed_when: false
+          register: _scrub_wait
+
+        - name: Collect scrub Job results
+          ansible.builtin.command:
+            cmd: >-
+              kubectl --namespace {{ item.namespace }}
+              logs job/volsync-cache-scrub-{{ item.app }} --tail=1
+          loop: "{{ _targets }}"
+          loop_control:
+            label: "{{ item.namespace }}/{{ item.app }}"
+          changed_when: false
+          failed_when: false
+          register: _scrub_logs
+
+        - name: Report scrub results
+          ansible.builtin.debug:
+            msg: >-
+              {{ item.item.namespace }}/{{ item.item.app }}:
+              {{ item.stdout | default('(no output)') }}
+          loop: "{{ _scrub_logs.results }}"
+          loop_control:
+            label: "{{ item.item.namespace }}/{{ item.item.app }}"
+
+        - name: Delete completed scrub Jobs
+          ansible.builtin.command:
+            cmd: >-
+              kubectl --namespace {{ item.namespace }}
+              delete job volsync-cache-scrub-{{ item.app }}
+              --ignore-not-found --wait=false
+          loop: "{{ _targets }}"
+          loop_control:
+            label: "{{ item.namespace }}/{{ item.app }}"
+          changed_when: true
+
+      always:
+        - name: Restore VolSync controller replica count
+          ansible.builtin.command:
+            cmd: >-
+              kubectl --namespace {{ volsync_controller_namespace }}
+              scale deployment/{{ volsync_controller_deployment }} --replicas={{ _original_replicas }}
+          changed_when: true
+          when: _original_replicas | int > 0
+
+        - name: Wait for VolSync controller rollout
+          ansible.builtin.command:
+            cmd: >-
+              kubectl --namespace {{ volsync_controller_namespace }}
+              rollout status deployment/{{ volsync_controller_deployment }} --timeout=120s
+          changed_when: false
+          when: _original_replicas | int > 0
+
+    - name: Report scrub Jobs that did not complete
+      ansible.builtin.debug:
+        msg: "WARNING: {{ item.item.namespace }}/{{ item.item.app }} scrub did not complete cleanly"
+      loop: "{{ _scrub_wait.results }}"
+      loop_control:
+        label: "{{ item.item.namespace }}/{{ item.item.app }}"
+      when: item.rc | default(1) != 0
