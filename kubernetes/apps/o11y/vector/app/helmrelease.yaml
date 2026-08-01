@@ -102,7 +102,7 @@ spec:
             node: '{{ "{{ node }}" }}'
             source: kubernetes
           out_of_order_action: accept
-        prometheus_exporter:
+        prom_exporter:
           type: prometheus_exporter
           inputs: ["internal_metrics"]
           address: 0.0.0.0:9090
