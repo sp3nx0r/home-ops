@@ -15,8 +15,9 @@ ZEROCLAW_API_KEY=$(openssl rand -hex 32)
 # Edit secret files with real values, then encrypt:
 sops --encrypt --in-place kubernetes/apps/zeroclaw/zeroclaw/app/secret.sops.yaml
 sops --encrypt --in-place kubernetes/apps/zeroclaw/zeroclaw/app/oidc-secret.sops.yaml
-sops --encrypt --in-place kubernetes/apps/zeroclaw/zeroclaw/app/volsync-secret.sops.yaml
 sops --encrypt --in-place kubernetes/apps/zeroclaw/zeroclaw/app/persona-secret.sops.yaml
+# Note: the Kopia backup secret is no longer per-app — the volsync component
+# renders zeroclaw-volsync-secret from the shared KOPIA_PASSWORD in cluster-secrets.
 ```
 
 ### 2. Create a Discord bot

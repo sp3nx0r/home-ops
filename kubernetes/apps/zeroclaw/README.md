@@ -243,8 +243,10 @@ All `*.sops.yaml` files must be encrypted before commit:
 
 - `secret.sops.yaml` — Discord bot token, Signal phone, ZeroClaw API key
 - `oidc-secret.sops.yaml` — PocketID OIDC client secret
-- `volsync-secret.sops.yaml` — Kopia backup credentials
 - `persona-secret.sops.yaml` — SOUL.md, IDENTITY.md, USER.md persona files
+
+Kopia backup credentials are no longer per-app: the volsync component renders
+`zeroclaw-volsync-secret` from the shared `KOPIA_PASSWORD` in `cluster-secrets`.
 
 ## Troubleshooting
 

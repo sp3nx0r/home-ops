@@ -9,7 +9,6 @@ resources:
   - ./ocirepository.yaml
   - ./pvc.yaml
   - ./prometheusrule.yaml
-  - ./volsync-secret.sops.yaml
 configMapGenerator:
   - name: grafana-dashboard-brrpolice
     files:

@@ -9,6 +9,5 @@ resources:
   - ./ocirepository.yaml
   - ./pvc.yaml
   - ./secret.sops.yaml
-  - ./volsync-secret.sops.yaml
   - ./oidc-secret.sops.yaml
   - ./securitypolicy.yaml

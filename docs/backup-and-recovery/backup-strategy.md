@@ -100,15 +100,16 @@
 | Kopia server | `volsync-system` | Web UI for repository browsing/management, connects to NFS repo |
 | Kopia repository | NFS `192.168.5.40:/mnt/tank/homelab/kopia` | Shared filesystem-based Kopia repository, deduplicates across all backup sources |
 | Volsync component | `kubernetes/components/volsync/` | Reusable Kustomize component providing ReplicationSource + ReplicationDestination templates |
-| Per-app secret | `${APP}-volsync-secret` | Contains `KOPIA_PASSWORD` and `KOPIA_REPOSITORY` (format: `filesystem:///mnt/repository`) |
+| Kopia repo secret | `${APP}-volsync-secret` (rendered by the volsync component) | `KOPIA_PASSWORD` (injected from `cluster-secrets`) + `KOPIA_REPOSITORY` (`filesystem:///mnt/repository`) |
 
 #### Adding Volsync to a new app
 
-> **CRITICAL: All apps share a single Kopia repository on NFS.** Every
-> `volsync-secret` must use the **same** `KOPIA_PASSWORD`. Do NOT generate
-> a new password — copy it from an existing app's secret. A mismatched
-> password will cause `invalid repository password` errors on both backup
-> and restore jobs.
+> **The Kopia password is centralized — do not create a per-app secret.**
+> All apps share one Kopia repository on NFS and therefore one
+> `KOPIA_PASSWORD`, stored **once** in `cluster-secrets`
+> (`kubernetes/components/sops/cluster-secrets.sops.yaml`). The volsync
+> component renders each app's `${APP}-volsync-secret` from that value via
+> Flux `postBuild` substitution, so you never copy or encrypt a secret.
 
 1. Add the volsync Kustomize component to the app's `kustomization.yaml`:
    ```yaml
@@ -116,47 +117,33 @@
      - ../../../../components/volsync
    ```
 
-2. **Copy** the volsync secret from an existing app (do NOT generate a new password):
-   ```bash
-   # Decrypt an existing working secret to get the shared KOPIA_PASSWORD
-   sops --decrypt kubernetes/apps/media/autobrr/app/volsync-secret.sops.yaml
-
-   # Create the new secret with the SAME password, only changing the name
-   cat > kubernetes/apps/<namespace>/<app>/app/volsync-secret.sops.yaml <<EOF
-   apiVersion: v1
-   kind: Secret
-   metadata:
-     name: <app>-volsync-secret
-   type: Opaque
-   stringData:
-     KOPIA_PASSWORD: <paste the shared password here>
-     KOPIA_REPOSITORY: "filesystem:///mnt/repository"
-   EOF
-
-   # Encrypt it
-   sops --encrypt --age age1j8auc0sy76etmugnrnqv7j0v9de5l9ffswnqj7ndrzqndh5rdpjq5atgj8 \
-     --encrypted-regex '^(data|stringData)$' \
-     --in-place kubernetes/apps/<namespace>/<app>/app/volsync-secret.sops.yaml
-   ```
-
-3. Set `postBuild.substitute` in the app's Flux Kustomization:
+2. Set `postBuild` in the app's Flux Kustomization — `substitute` for the app
+   variables, and `substituteFrom` `cluster-secrets` so `${KOPIA_PASSWORD}`
+   resolves (**required**; without it the secret renders with a literal
+   placeholder and backups fail auth):
    ```yaml
    postBuild:
      substitute:
        APP: my-app
-       VOLSYNC_CAPACITY: 5Gi
-       VOLSYNC_UID: "1000"
-       VOLSYNC_GID: "1000"
+       VOLSYNC_CAPACITY: 5Gi   # match the PVC size
+       VOLSYNC_UID: "1000"     # optional, defaults to 1000
+       VOLSYNC_GID: "1000"     # optional, defaults to 1000
+     substituteFrom:
+       - name: cluster-secrets
+         kind: Secret
    ```
 
-4. Add `dependsOn` for volsync in the app's Flux Kustomization:
+3. Add `dependsOn` for volsync in the app's Flux Kustomization:
    ```yaml
    dependsOn:
      - name: volsync
        namespace: volsync-system
    ```
 
-5. The PVC must be named `${APP}` to match the ReplicationSource's `sourcePVC` reference
+4. Name the PVC `${APP}` so it matches the ReplicationSource's `sourcePVC` reference.
+
+To rotate the shared password, change `KOPIA_PASSWORD` in `cluster-secrets`
+once and reconcile — every app picks it up (re-key the Kopia repo accordingly).
 
 > **Tip:** When an app's PVC is not named after the app (e.g. an operator- or
 > StatefulSet-managed claim), set `APP` to the actual PVC name so the
@@ -173,9 +160,10 @@ captures **every bucket at once**.
 Because these PVCs use StatefulSet-generated names that do not match `${APP}`,
 Garage does not use the reusable volsync component. It defines **explicit**
 `ReplicationSource` resources in `kubernetes/apps/storage/garage/app/volsync.yaml`
-(one per PVC, `garage-data` and `garage-meta`) with matching
-`garage-volsync-secret`. Any new bucket added to Garage is covered automatically
-— no additional backup config is required.
+(one per PVC, `garage-data` and `garage-meta`). Its `garage-volsync-secret`
+(`app/secret.yaml`) is rendered from the same centralized `${KOPIA_PASSWORD}`
+via `substituteFrom: cluster-secrets`. Any new bucket added to Garage is covered
+automatically — no additional backup config is required.
 
 ### Level 4: Kubernetes VolumeSnapshots (iSCSI point-in-time recovery)
 
