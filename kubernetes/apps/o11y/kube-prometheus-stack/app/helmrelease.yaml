@@ -117,6 +117,8 @@ spec:
       prometheusSpec:
         externalUrl: https://prometheus.securimancy.com
         replicaExternalLabelName: __replica__
+        externalLabels:
+          cluster: securimancy
         thanos:
           objectStorageConfig:
             existingSecret:

@@ -77,6 +77,8 @@ Add to `clusterConfig.buckets`:
 Changes to `prometheus.prometheusSpec`:
 ```yaml
 replicaExternalLabelName: __replica__
+externalLabels:
+  cluster: securimancy
 retention: 7d
 retentionSize: 5GB
 thanos:
@@ -85,6 +87,8 @@ thanos:
       name: thanos-objstore-secret
       key: objstore.yml
 ```
+
+The `externalLabels.cluster` value gives every uploaded block a stable, non-replica external label. `__replica__` is stripped by Thanos during deduplication, so without an additional label the Compactor would see blocks with an empty external label set — fine for a single Prometheus today, but it avoids ambiguity if a second replica/instance is ever added.
 
 Add to `prometheus`:
 ```yaml
@@ -96,11 +100,13 @@ thanosServiceMonitor:
 
 This enables the sidecar container inside the Prometheus pod and creates a `kube-prometheus-stack-thanos-discovery` Service for Thanos Query to find.
 
-### 3. Thanos objstore secret (SOPS-encrypted)
+### 3. Thanos objstore secret
 
-**New file:** `kubernetes/apps/o11y/thanos/app/secret.yaml`
+**New file:** `kubernetes/apps/o11y/kube-prometheus-stack/app/secret.yaml`
 
-Rather than a SOPS-encrypted Secret, this is a plain manifest whose credentials are injected at reconcile time via Flux `postBuild` substitution from `cluster-secrets` (the same pattern Loki uses for its Garage S3 keys). Because the file contains only `${...}` placeholders and no ciphertext, it is intentionally **not** named `*.sops.yaml` and does not trip the SOPS pre-commit hook.
+The `thanos-objstore-secret` lives in the **kube-prometheus-stack** app, not the Thanos app, even though both consume it. The Prometheus sidecar (part of kube-prometheus-stack) mounts this secret, and the Thanos Kustomization `dependsOn` kube-prometheus-stack. Colocating the secret with its earliest consumer means it is applied in the same reconcile as the sidecar, avoiding the chicken-and-egg where the sidecar starts before the secret exists. Thanos then references the already-present secret by name (same `o11y` namespace).
+
+Rather than a SOPS-encrypted Secret, this is a plain manifest whose credentials are injected at reconcile time via Flux `postBuild` substitution from `cluster-secrets` (the same pattern Loki uses for its Garage S3 keys). Because the file contains only `${...}` placeholders and no ciphertext, it is intentionally **not** named `*.sops.yaml` and does not trip the SOPS pre-commit hook. This requires adding `cluster-secrets` to the kube-prometheus-stack Kustomization's `postBuild.substituteFrom`.
 
 ```yaml
 apiVersion: v1
@@ -118,7 +124,7 @@ stringData:
       insecure: true
 ```
 
-This same secret will be referenced by both kube-prometheus-stack (sidecar) and the Thanos chart. It needs to exist in `o11y` namespace. Since kube-prometheus-stack already lives there and mounts secrets from the same namespace, this works directly.
+Both kube-prometheus-stack (sidecar) and the Thanos chart reference this secret by name in the `o11y` namespace.
 
 ### 4. Thanos HelmRelease
 
@@ -242,11 +248,9 @@ spec:
     - name: kube-prometheus-stack
     - name: garage
       namespace: storage
-  postBuild:
-    substituteFrom:
-      - kind: Secret
-        name: cluster-secrets
 ```
+
+The Thanos app itself carries no `${...}` placeholders (the objstore secret lives in kube-prometheus-stack), so no `postBuild.substituteFrom` is needed here.
 
 ### 6. Wire into namespace kustomization
 
@@ -281,7 +285,7 @@ Add the following variables to cluster-secrets (SOPS-encrypted):
 - **Storage sizing**: At typical homelab cardinality (~50k active series), expect roughly 1-2 GB/month in Garage. The 50Gi Garage data volume should be more than sufficient for 90d retention.
 - **emptyDir still used for Prometheus WAL**: The sidecar uploads completed blocks (every 2h). In a pod restart, you lose at most ~2h of metrics that haven't been uploaded yet. For full WAL persistence, a PVC would be needed (separate concern from this plan).
 - **Garage single-node RF=1**: Object store data has no redundancy beyond what Garage provides. If the Garage iSCSI PVC is lost, historical metrics are gone. This is acceptable for a homelab but worth noting.
-- **Secret sharing**: The `thanos-objstore-secret` lives in the `o11y` namespace and is referenced by both kube-prometheus-stack (for the sidecar) and the Thanos HelmRelease. Both are in the same namespace so this works.
+- **Secret sharing**: The `thanos-objstore-secret` is defined in the kube-prometheus-stack app (its earliest consumer) and referenced by name by both the Prometheus sidecar and the Thanos HelmRelease. Colocating it with the sidecar — rather than in the Thanos app, which reconciles later — ensures it exists before the sidecar starts, so there is no first-deploy error to wait out.
 
 ## Failure Modes
 
