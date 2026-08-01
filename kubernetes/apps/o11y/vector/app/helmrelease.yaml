@@ -21,6 +21,10 @@ spec:
         kubernetes_logs:
           type: kubernetes_logs
           read_from: end
+          # Re-scan for new/idle pod log files every 15s instead of the
+          # 60s default, cutting source lag p95 (~60s -> ~15s). Nodes are
+          # near-idle on CPU so the extra globbing is negligible.
+          glob_minimum_cooldown_ms: 15000
         internal_metrics:
           type: internal_metrics
       transforms:
