@@ -51,11 +51,35 @@ spec:
                 .host = device_name.name
               }
             }
+            # TrueNAS forwards multi-line middleware logs (e.g. pydantic
+            # serialization errors) as separate UDP frames whose continuation
+            # lines carry no valid <PRI>/APP-NAME. syslog-ng then mis-parses a
+            # random message token as the program name, polluting the `app`
+            # label (and Loki's derived `service_name`) with values like `,`,
+            # `model_type,` or `input_type=str]`. Collapse anything that is not
+            # a plausible syslog program name into a single bucket.
+            app = to_string(.app) ?? ""
+            if !match(app, r'^[A-Za-z0-9(][A-Za-z0-9._/()\-]{0,31}$') {
+              .app = "unknown"
+            }
+        syslog_filter:
+          type: filter
+          inputs: ["syslog_parse"]
+          # Drop the repeating TrueNAS middleware pydantic serialization error
+          # and its split continuation fragments -- benign spam (~every 40s)
+          # that only shows up as malformed labels and broken log lines.
+          condition: |
+            msg = to_string(.message) ?? ""
+            drop = contains(msg, "errors.pydantic.dev") ||
+              contains(msg, "validation error for") ||
+              contains(msg, "input_type=") ||
+              contains(msg, "input_value=")
+            !drop
       sinks:
         loki:
           type: loki
           dangerously_allow_unconfined_template_resolution: true
-          inputs: ["syslog_parse"]
+          inputs: ["syslog_filter"]
           endpoint: http://loki-gateway.o11y.svc.cluster.local
           buffer:
             type: disk
