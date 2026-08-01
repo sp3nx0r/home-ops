@@ -1,0 +1,328 @@
+# Implement Thanos for Long-Term Metrics Storage
+
+## Problem
+
+Prometheus is backed by emptyDir -- a pod restart loses all metrics. There is no long-term storage or backup for time-series data.
+
+## Solution
+
+Add a Thanos sidecar to Prometheus that uploads TSDB blocks to Garage (S3), then deploy Thanos Query/Store Gateway/Compactor to serve historical data. Grafana will query through Thanos Query Frontend for seamless access to both recent and historical metrics.
+
+## Architecture
+
+```mermaid
+flowchart LR
+    subgraph prometheus_pod [Prometheus Pod]
+        Prometheus --> ThanosSidecar
+    end
+    ThanosSidecar -->|"upload blocks"| GarageS3["Garage S3 (thanos bucket)"]
+
+    subgraph thanos_stack [Thanos Stack]
+        StoreGateway -->|"read blocks"| GarageS3
+        Compactor -->|"compact/downsample"| GarageS3
+        QueryFrontend --> Query
+        Query -->|"gRPC"| ThanosSidecar
+        Query -->|"gRPC"| StoreGateway
+    end
+
+    Grafana --> QueryFrontend
+```
+
+**Data flow:**
+- Prometheus scrapes metrics, retains 7d locally
+- Thanos sidecar uploads 2h TSDB blocks to Garage as they close
+- Store Gateway serves historical blocks from Garage on demand
+- Compactor downsamples (5m at 30d, 1h at 90d) and deduplicates
+- Query Frontend caches and splits large Grafana queries, routes to Query
+- Query fans out to both sidecar (recent) and Store Gateway (historical)
+
+## Chart Selection
+
+**thanos-community/helm-charts** v0.29.0 (appVersion: Thanos v0.42.4)
+- Helm repo: `https://thanos-community.github.io/helm-charts/`
+- Single HelmRelease manages Query, Query Frontend, Store Gateway, Compactor
+- Has kube-prometheus-stack as optional subchart (we'll disable it -- already deployed separately)
+- Supports `global.objstore` with `createSecret: false` for externally-managed secrets
+- Supports Gateway API HTTPRoute natively
+
+## File Changes
+
+### 1. Garage: Add `thanos` bucket and key
+
+**File:** `kubernetes/apps/storage/garage/app/helmrelease.yaml`
+
+Add to `clusterConfig.keys`:
+```yaml
+thanos:
+  keyId: "${GARAGE_THANOS_KEY_ID}"
+  secretKey: "${GARAGE_THANOS_SECRET_KEY}"
+  buckets:
+    - name: thanos
+      read: true
+      write: true
+```
+
+Add to `clusterConfig.buckets`:
+```yaml
+- name: thanos
+  keys:
+    - name: thanos
+      permissions: ["read", "write"]
+```
+
+### 2. kube-prometheus-stack: Enable Thanos sidecar
+
+**File:** `kubernetes/apps/o11y/kube-prometheus-stack/app/helmrelease.yaml`
+
+Changes to `prometheus.prometheusSpec`:
+```yaml
+replicaExternalLabelName: __replica__
+externalLabels:
+  cluster: securimancy
+retention: 7d
+retentionSize: 5GB
+storageSpec:
+  volumeClaimTemplate:
+    spec:
+      storageClassName: iscsi
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: 10Gi
+thanos:
+  objectStorageConfig:
+    existingSecret:
+      name: thanos-objstore-secret
+      key: objstore.yml
+```
+
+`storageSpec` moves the Prometheus TSDB/WAL off `emptyDir` onto an iSCSI PVC so a pod restart no longer drops the in-progress (unshipped) head block. 10Gi comfortably covers the 5GB local `retentionSize` plus WAL and any blocks awaiting upload. Note: switching an existing Prometheus from `emptyDir` to a PVC requires the Prometheus Operator to recreate the StatefulSet — if it doesn't roll automatically, delete it with `--cascade=orphan` and let the operator rebuild it.
+
+The `externalLabels.cluster` value gives every uploaded block a stable, non-replica external label. `__replica__` is stripped by Thanos during deduplication, so without an additional label the Compactor would see blocks with an empty external label set — fine for a single Prometheus today, but it avoids ambiguity if a second replica/instance is ever added.
+
+Add to `prometheus`:
+```yaml
+thanosService:
+  enabled: true
+thanosServiceMonitor:
+  enabled: true
+```
+
+This enables the sidecar container inside the Prometheus pod and creates a `kube-prometheus-stack-thanos-discovery` Service for Thanos Query to find.
+
+### 3. Thanos objstore secret
+
+**New file:** `kubernetes/apps/o11y/kube-prometheus-stack/app/secret.yaml`
+
+The `thanos-objstore-secret` lives in the **kube-prometheus-stack** app, not the Thanos app, even though both consume it. The Prometheus sidecar (part of kube-prometheus-stack) mounts this secret, and the Thanos Kustomization `dependsOn` kube-prometheus-stack. Colocating the secret with its earliest consumer means it is applied in the same reconcile as the sidecar, avoiding the chicken-and-egg where the sidecar starts before the secret exists. Thanos then references the already-present secret by name (same `o11y` namespace).
+
+Rather than a SOPS-encrypted Secret, this is a plain manifest whose credentials are injected at reconcile time via Flux `postBuild` substitution from `cluster-secrets` (the same pattern Loki uses for its Garage S3 keys). Because the file contains only `${...}` placeholders and no ciphertext, it is intentionally **not** named `*.sops.yaml` and does not trip the SOPS pre-commit hook. This requires adding `cluster-secrets` to the kube-prometheus-stack Kustomization's `postBuild.substituteFrom`.
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: thanos-objstore-secret
+stringData:
+  objstore.yml: |
+    type: S3
+    config:
+      bucket: thanos
+      endpoint: garage.storage.svc.cluster.local:3900
+      access_key: ${GARAGE_THANOS_KEY_ID}
+      secret_key: ${GARAGE_THANOS_SECRET_KEY}
+      insecure: true
+```
+
+Both kube-prometheus-stack (sidecar) and the Thanos chart reference this secret by name in the `o11y` namespace.
+
+### 4. Thanos HelmRelease
+
+**New directory:** `kubernetes/apps/o11y/thanos/app/`
+
+**`helmrepository.yaml`:**
+```yaml
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: thanos-community
+spec:
+  interval: 1h
+  type: default
+  url: https://thanos-community.github.io/helm-charts
+```
+
+**`helmrelease.yaml`** (key values):
+```yaml
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: thanos
+spec:
+  chart:
+    spec:
+      chart: thanos
+      version: 0.29.0
+      sourceRef:
+        kind: HelmRepository
+        name: thanos-community
+  interval: 1h
+  values:
+    global:
+      objstore:
+        createSecret: false
+        secretName: thanos-objstore-secret
+        secretKey: objstore.yml
+      thanosRules:
+        enabled: true
+        alertOverrides:
+          ThanosCompactHalted:
+            severity: critical
+
+    kube-prometheus-stack:
+      enabled: false
+
+    query:
+      enabled: true
+      replicaCount: 1
+      replicaLabels:
+        - __replica__
+      endpoints:
+        autogen:
+          enabled: true
+        static:
+          - dnssrv+_grpc._tcp.kube-prometheus-stack-thanos-discovery.o11y.svc.cluster.local
+      httpRoute:
+        enabled: true
+        parentRefs:
+          - name: envoy-internal
+            namespace: network
+        hostnames:
+          - thanos.securimancy.com
+      serviceMonitor:
+        enabled: true
+
+    queryFrontend:
+      enabled: true
+      replicaCount: 1
+      serviceMonitor:
+        enabled: true
+
+    storegateway:
+      enabled: true
+      replicaCount: 1
+      persistence:
+        enabled: true
+        size: 5Gi
+        storageClass: iscsi
+      serviceMonitor:
+        enabled: true
+
+    compactor:
+      enabled: true
+      replicaCount: 1
+      persistence:
+        enabled: true
+        size: 10Gi
+        storageClass: iscsi
+      retention:
+        resolutionRaw: 14d
+        resolution5m: 30d
+        resolution1h: 90d
+      serviceMonitor:
+        enabled: true
+
+    # Disable unused components
+    receive:
+      enabled: false
+    ruler:
+      enabled: false
+    bucket:
+      enabled: false
+```
+
+### 5. Thanos `ks.yaml`
+
+**New file:** `kubernetes/apps/o11y/thanos/ks.yaml`
+```yaml
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: thanos
+spec:
+  interval: 1h
+  path: ./kubernetes/apps/o11y/thanos/app
+  prune: true
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+    namespace: flux-system
+  targetNamespace: o11y
+  wait: false
+  dependsOn:
+    - name: kube-prometheus-stack
+    - name: garage
+      namespace: storage
+```
+
+The Thanos app itself carries no `${...}` placeholders (the objstore secret lives in kube-prometheus-stack), so no `postBuild.substituteFrom` is needed here.
+
+### 6. Wire into namespace kustomization
+
+**File:** `kubernetes/apps/o11y/kustomization.yaml`
+
+Add:
+```yaml
+  - ./thanos/ks.yaml
+```
+
+### 7. Update Grafana datasource (single datasource)
+
+Replace the existing Prometheus datasource URL in Grafana with Thanos Query Frontend (`http://thanos-query-frontend.o11y.svc.cluster.local:9090`). All dashboards and alerts continue to work unchanged -- Query Frontend fans out to the sidecar for recent data and Store Gateway for historical data, so the full time range is available through one endpoint. No second datasource needed.
+
+### 8. cluster-secrets updates
+
+Add the following variables to cluster-secrets (SOPS-encrypted):
+- `GARAGE_THANOS_KEY_ID` -- S3 access key for the thanos bucket
+- `GARAGE_THANOS_SECRET_KEY` -- S3 secret key for the thanos bucket
+
+### 9. Garage: Volsync backup
+
+**New files:** `kubernetes/apps/storage/garage/app/volsync.yaml`, `kubernetes/apps/storage/garage/app/volsync-secret.sops.yaml`
+
+Garage runs single-node RF=1, so the `thanos` bucket (and loki/pocket-id) lives on one iSCSI PVC. To back it up, `ReplicationSource`s snapshot `data-garage-0` and `meta-garage-0` hourly to the shared Kopia repo on NFS, with matching `ReplicationDestination`s (`garage-data-dst`/`garage-meta-dst`) for restore. This mirrors the cluster's `components/volsync` settings (retention, `zstd-fastest`, `copyMethod: Snapshot`, mover security context) but is written explicitly because Garage's StatefulSet PVCs are not named `${APP}`. `garage-volsync-secret` reuses the shared `KOPIA_PASSWORD`. `garage/ks.yaml` gains `dependsOn: volsync` (volsync-system), and both files are added to `garage/app/kustomization.yaml`.
+
+## Retention Summary
+
+| Layer | Duration | Purpose |
+|-------|----------|---------|
+| Prometheus (local) | 7d / 5GB | Hot queries, real-time alerting |
+| Object store (raw) | 14d | Full-resolution historical data |
+| Object store (5m) | 30d | Medium-range dashboards |
+| Object store (1h) | 90d | Long-range capacity planning |
+
+## Considerations
+
+- **Storage sizing**: At typical homelab cardinality (~50k active series), expect roughly 1-2 GB/month in Garage. The 50Gi Garage data volume should be more than sufficient for 90d retention.
+- **Prometheus TSDB/WAL on iSCSI PVC**: Prometheus uses a 10Gi iSCSI `storageSpec` volume, so a pod restart or reschedule keeps the in-progress head block instead of losing the last ~2h. The Thanos sidecar still uploads closed 2h blocks to Garage for long-term retention.
+- **Compactor memory**: Compaction and downsampling are bursty and memory-hungry. The Compactor requests 256Mi with a 1Gi limit; if it OOMs (`ThanosCompactHalted`) it silently stops enforcing downsampling/retention, so that alert is elevated to `critical`.
+- **Alerting**: The chart's `global.thanosRules` PrometheusRule (upstream Thanos mixin) is enabled and picked up automatically since Prometheus selects all rules (`ruleSelectorNilUsesHelmValues: false`).
+- **Garage single-node RF=1**: Object store data has no live redundancy beyond what Garage provides. To mitigate total loss, Garage's `data-garage-0` and `meta-garage-0` PVCs are backed up hourly via Volsync/Kopia to NFS (`kubernetes/apps/storage/garage/app/volsync.yaml`), following the same shared-Kopia-repo pattern the rest of the cluster uses. If the Garage PVC is lost, the `garage-data-dst`/`garage-meta-dst` ReplicationDestinations restore the buckets (including `thanos`). Snapshots are crash-consistent; Garage's LMDB metadata is crash-safe, so a restored snapshot is recoverable.
+- **Secret sharing**: The `thanos-objstore-secret` is defined in the kube-prometheus-stack app (its earliest consumer) and referenced by name by both the Prometheus sidecar and the Thanos HelmRelease. Colocating it with the sidecar — rather than in the Thanos app, which reconciles later — ensures it exists before the sidecar starts, so there is no first-deploy error to wait out.
+
+## Failure Modes
+
+| Scenario | Impact | Recovery |
+|----------|--------|----------|
+| Prometheus pod restart / reschedule | No metric loss -- the TSDB/WAL is on an iSCSI PVC that reattaches. | Automatic. |
+| Prometheus WAL PVC lost | Lose the in-progress head block (up to ~2h). Older blocks were already shipped to Garage. | Store Gateway serves historical data immediately; the recent gap is unavoidable. |
+| Garage iSCSI read-only | Sidecar upload failures; Store Gateway reads still work for existing data. | Blocks queue in Prometheus until Garage is writable; gap fills on recovery. |
+| Store Gateway PVC read-only | Can't update local index cache; existing cache still serves. | Restart after PVC recovers. |
+| Thanos Query Frontend down | Grafana queries fail. | Stateless pod -- restarts in seconds. Alertmanager routes directly from Prometheus, unaffected. |
+
+## References
+
+- [thanos-community/helm-charts](https://github.com/thanos-community/helm-charts) -- chart source
+- [bluevulpine/flux-talos](https://github.com/bluevulpine/flux-talos) -- Garage + Flux + Thanos sidecar reference
+- [ishioni/homelab-ops](https://github.com/ishioni/homelab-ops) -- Flux + shared objstore secret pattern
+- [Thanos storage docs](https://thanos.io/tip/thanos/storage.md/) -- objstore.yml schema reference
