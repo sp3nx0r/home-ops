@@ -1,0 +1,118 @@
+# yaml-language-server: $schema=https://kubernetesjsonschema.dev/v1.18.0-standalone-strict/all.json
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: volsync-test-cache-scrub
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: volsync-test-cache-scrub
+rules:
+  - apiGroups:
+      - batch
+    resources:
+      - jobs
+    resourceNames:
+      - volsync-src-volsync-test
+    verbs:
+      - get
+  - apiGroups:
+      - ""
+    resources:
+      - persistentvolumeclaims
+    resourceNames:
+      - volsync-src-volsync-test-cache
+    verbs:
+      - get
+      - delete
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: volsync-test-cache-scrub
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: volsync-test-cache-scrub
+subjects:
+  - kind: ServiceAccount
+    name: volsync-test-cache-scrub
+    namespace: default
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: volsync-test-cache-scrub
+spec:
+  timeZone: America/Chicago
+  schedule: "30 0 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: 300
+      ttlSecondsAfterFinished: 86400
+      template:
+        spec:
+          serviceAccountName: volsync-test-cache-scrub
+          automountServiceAccountToken: true
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1001
+            runAsGroup: 1001
+            fsGroup: 1001
+          containers:
+            - name: scrub
+              image: bitnami/kubectl:latest@sha256:9e369df7ab3386b736d162348f167bcc02cb4ba3f5203e9151be854437d6e0af
+              command:
+                - /bin/sh
+                - -ec
+              args:
+                - |
+                  namespace="default"
+                  mover_job="volsync-src-volsync-test"
+                  cache_pvc="volsync-src-volsync-test-cache"
+
+                  mover_active="$(kubectl -n "$namespace" get job "$mover_job" -o jsonpath='{.status.active}')"
+                  if [ "${mover_active:-0}" != "0" ]; then
+                    echo "VolSync mover is active; skipping cache scrub"
+                    exit 0
+                  fi
+
+                  kubectl -n "$namespace" delete pvc "$cache_pvc" --ignore-not-found
+
+                  deadline=$((SECONDS + 300))
+                  while [ "$SECONDS" -lt "$deadline" ]; do
+                    phase="$(kubectl -n "$namespace" get pvc "$cache_pvc" -o jsonpath='{.status.phase}')"
+                    if [ "$phase" = "Bound" ]; then
+                      echo "cache PVC is Bound"
+                      exit 0
+                    fi
+                    sleep 5
+                  done
+
+                  echo "cache PVC did not become Bound within five minutes" >&2
+                  exit 1
+              resources:
+                requests:
+                  cpu: 10m
+                  memory: 32Mi
+                limits:
+                  memory: 64Mi
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop:
+                    - ALL
+              volumeMounts:
+                - name: tmp
+                  mountPath: /tmp
+          volumes:
+            - name: tmp
+              emptyDir: {}
