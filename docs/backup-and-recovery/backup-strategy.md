@@ -158,6 +158,25 @@
 
 5. The PVC must be named `${APP}` to match the ReplicationSource's `sourcePVC` reference
 
+> **Tip:** When an app's PVC is not named after the app (e.g. an operator- or
+> StatefulSet-managed claim), set `APP` to the actual PVC name so the
+> component's `sourcePVC: ${APP}` resolves correctly. For example
+> `minecraft-bedrock` uses `APP: minecraft-bedrock-data`.
+
+#### Object storage (Garage)
+
+Garage's S3 buckets (`thanos`, `loki-chunks`, `pocket-id`, …) are **not** backed
+up per-bucket. Instead, Garage's two StatefulSet PVCs — `data-garage-0`
+(objects) and `meta-garage-0` (metadata) — are backed up directly, which
+captures **every bucket at once**.
+
+Because these PVCs use StatefulSet-generated names that do not match `${APP}`,
+Garage does not use the reusable volsync component. It defines **explicit**
+`ReplicationSource` resources in `kubernetes/apps/storage/garage/app/volsync.yaml`
+(one per PVC, `garage-data` and `garage-meta`) with matching
+`garage-volsync-secret`. Any new bucket added to Garage is covered automatically
+— no additional backup config is required.
+
 ### Level 4: Kubernetes VolumeSnapshots (iSCSI point-in-time recovery)
 
 - **What it protects against**: Bad deployments, data migration failures, pre-upgrade safety nets
@@ -201,7 +220,7 @@
 
 | Gap | Risk | Mitigation |
 |-----|------|------------|
-| Not all iSCSI PVCs have Volsync configured | Apps without a ReplicationSource have no application-level backup | Add Volsync component to all stateful apps |
+| A few low-value iSCSI PVCs have no Volsync ReplicationSource | Reproducible data (e.g. `kokoro` model cache, `loki` local WAL — chunks already live in Garage) has no application-level backup | Intentional — these PVCs rebuild from source; all stateful apps holding irreplaceable data are covered |
 | RAIDZ1 can only tolerate 1 disk failure | Second disk failure during rebuild = total pool loss | Phase 2 migration to 2x RAIDZ2 (planned) |
 | No application-consistent snapshots | Database crash-consistency not guaranteed for iSCSI zvol snapshots | Use app-level backup tools (pg_dump, etc.) before snapshots |
 | Kopia repo is single-site (NFS on TrueNAS) | NAS loss = Kopia repo loss (until B2 sync restores it) | Kopia repo syncs to the `sp3nx0r-homelab-kopia` B2 bucket |
@@ -217,7 +236,6 @@
 
 | Priority | Action |
 |----------|--------|
-| High | Add Volsync ReplicationSource to all stateful iSCSI-backed apps (currently only `volsync-test` is configured) |
 | Medium | Document and test restore procedures (see `docs/backup-and-recovery/`) |
 | Low | Consider app-level backup CronJobs for databases (pg_dump, etc.) before snapshots |
 | Low | Remove `volsync-test` app once real workloads are backed up by Volsync |

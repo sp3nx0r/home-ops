@@ -15,5 +15,9 @@ spec:
   targetNamespace: default
   postBuild:
     substitute:
-      APP: minecraft-bedrock
+      APP: minecraft-bedrock-data
+      VOLSYNC_CAPACITY: 2Gi
   wait: false
+  dependsOn:
+    - name: volsync
+      namespace: volsync-system
