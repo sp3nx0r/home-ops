@@ -7,5 +7,6 @@ kind: Component
 # Copy the password from an existing secret — do NOT generate a new one.
 # See: docs/backup-and-recovery/backup-strategy.md
 resources:
+  - ./secret.yaml
   - ./replicationsource.yaml
   - ./replicationdestination.yaml

@@ -288,9 +288,9 @@ Add the following variables to cluster-secrets (SOPS-encrypted):
 
 ### 9. Garage: Volsync backup
 
-**New files:** `kubernetes/apps/storage/garage/app/volsync.yaml`, `kubernetes/apps/storage/garage/app/volsync-secret.sops.yaml`
+**New files:** `kubernetes/apps/storage/garage/app/volsync.yaml`, `kubernetes/apps/storage/garage/app/secret.yaml`
 
-Garage runs single-node RF=1, so the `thanos` bucket (and loki/pocket-id) lives on one iSCSI PVC. To back it up, `ReplicationSource`s snapshot `data-garage-0` and `meta-garage-0` hourly to the shared Kopia repo on NFS, with matching `ReplicationDestination`s (`garage-data-dst`/`garage-meta-dst`) for restore. This mirrors the cluster's `components/volsync` settings (retention, `zstd-fastest`, `copyMethod: Snapshot`, mover security context) but is written explicitly because Garage's StatefulSet PVCs are not named `${APP}`. `garage-volsync-secret` reuses the shared `KOPIA_PASSWORD`. `garage/ks.yaml` gains `dependsOn: volsync` (volsync-system), and both files are added to `garage/app/kustomization.yaml`.
+Garage runs single-node RF=1, so the `thanos` bucket (and loki/pocket-id) lives on one iSCSI PVC. To back it up, `ReplicationSource`s snapshot `data-garage-0` and `meta-garage-0` hourly to the shared Kopia repo on NFS, with matching `ReplicationDestination`s (`garage-data-dst`/`garage-meta-dst`) for restore. This mirrors the cluster's `components/volsync` settings (retention, `zstd-fastest`, `copyMethod: Snapshot`, mover security context) but is written explicitly because Garage's StatefulSet PVCs are not named `${APP}`. `garage-volsync-secret` (`app/secret.yaml`) is rendered from the shared `KOPIA_PASSWORD` in `cluster-secrets` via `substituteFrom`. `garage/ks.yaml` gains `dependsOn: volsync` (volsync-system), and both files are added to `garage/app/kustomization.yaml`.
 
 ## Retention Summary
 

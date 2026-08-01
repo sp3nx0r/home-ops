@@ -32,8 +32,9 @@ kubernetes/apps/security/
         ├── helmrelease.yaml           # Pocket ID via app-template
         ├── ocirepository.yaml         # OCI repo for app-template chart
         ├── pvc.yaml                   # 2Gi iSCSI PVC for SQLite
-        ├── secret.sops.yaml           # ENCRYPTION_KEY + MAXMIND_LICENSE_KEY
-        └── volsync-secret.sops.yaml   # Kopia backup credentials
+        └── secret.sops.yaml           # ENCRYPTION_KEY + MAXMIND_LICENSE_KEY
+        # pocket-id-volsync-secret is rendered by the volsync component
+        # from the shared KOPIA_PASSWORD in cluster-secrets (no per-app file)
 ```
 
 SecurityPolicy resources live alongside the apps they protect:
@@ -311,25 +312,11 @@ resources:
   - ./ocirepository.yaml
   - ./pvc.yaml
   - ./secret.sops.yaml
-  - ./volsync-secret.sops.yaml
 ```
 
 ### VolSync Backup
 
-```yaml
-# kubernetes/apps/security/pocket-id/app/volsync-secret.sops.yaml (structure, encrypted in repo)
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: pocket-id-volsync-secret
-type: Opaque
-stringData:
-  KOPIA_PASSWORD: "<generated-password>"
-  KOPIA_REPOSITORY: "<kopia-repo-path>"
-```
-
-Uses Kopia (not Restic). The `volsync` component in `kustomization.yaml` creates the `ReplicationSource` automatically using `${APP}` and `${VOLSYNC_CAPACITY}` from the Flux Kustomization's `postBuild.substitute`.
+Uses Kopia (not Restic). The `volsync` component in `kustomization.yaml` creates the `ReplicationSource` **and** the `pocket-id-volsync-secret` automatically, using `${APP}`, `${VOLSYNC_CAPACITY}`, and `${KOPIA_PASSWORD}` (from `cluster-secrets`) via the Flux Kustomization's `postBuild`. There is no per-app secret file — the shared Kopia password lives once in `cluster-secrets`.
 
 Pocket ID's SQLite database contains passkeys, OIDC clients, and user data — losing it means re-registering every user and every OIDC client. Backups are essential.
 

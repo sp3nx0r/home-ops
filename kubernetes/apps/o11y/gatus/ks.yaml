@@ -8,6 +8,9 @@ spec:
   interval: 1h
   path: ./kubernetes/apps/o11y/gatus/app
   postBuild:
+    substitute:
+      APP: gatus
+      VOLSYNC_CAPACITY: 1Gi
     substituteFrom:
       - name: cluster-secrets
         kind: Secret
@@ -18,3 +21,6 @@ spec:
     namespace: flux-system
   targetNamespace: o11y
   wait: false
+  dependsOn:
+    - name: volsync
+      namespace: volsync-system

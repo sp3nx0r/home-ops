@@ -8,9 +8,14 @@ spec:
   dependsOn:
     - name: kokoro
     - name: ollama-proxy
+    - name: volsync
+      namespace: volsync-system
   interval: 1h
   path: ./kubernetes/apps/default/openwebui/app
   postBuild:
+    substitute:
+      APP: openwebui
+      VOLSYNC_CAPACITY: 5Gi
     substituteFrom:
       - name: cluster-secrets
         kind: Secret

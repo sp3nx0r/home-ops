@@ -7,4 +7,3 @@ components:
 resources:
   - ./deployment.yaml
   - ./pvc.yaml
-  - ./secret.sops.yaml

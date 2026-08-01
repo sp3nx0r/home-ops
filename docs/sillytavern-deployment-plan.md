@@ -20,8 +20,9 @@ Deploy SillyTavern into the Kubernetes cluster with persistent storage, internal
   - `helmrelease.yaml`
   - `ocirepository.yaml`
   - `pvc.yaml`
-  - `volsync-secret.sops.yaml`
-  - `kustomization.yaml`
+  - `kustomization.yaml` (includes the `volsync` component; the
+    `sillytavern-volsync-secret` is rendered from the shared `KOPIA_PASSWORD`
+    in `cluster-secrets`, so no per-app secret file is needed)
 - Register the app in `kubernetes/apps/default/kustomization.yaml`.
 
 ## Runtime Configuration
