@@ -38,7 +38,7 @@ flowchart LR
 
 ## Chart Selection
 
-**thanos-community/helm-charts** v0.18.0 (appVersion: Thanos v0.41.0)
+**thanos-community/helm-charts** v0.29.0 (appVersion: Thanos v0.42.4)
 - Helm repo: `https://thanos-community.github.io/helm-charts/`
 - Single HelmRelease manages Query, Query Frontend, Store Gateway, Compactor
 - Has kube-prometheus-stack as optional subchart (we'll disable it -- already deployed separately)
@@ -162,7 +162,7 @@ spec:
   chart:
     spec:
       chart: thanos
-      version: 0.18.0
+      version: 0.29.0
       sourceRef:
         kind: HelmRepository
         name: thanos-community
