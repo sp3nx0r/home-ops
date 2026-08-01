@@ -4,6 +4,10 @@ machine:
     disableManifestsDirectory: true
     extraConfig:
       serializeImagePulls: false
+      maxParallelImagePulls: 3
+      imageMaximumGCAge: 168h
+      crashLoopBackOff:
+        maxContainerRestartPeriod: 60s
     extraMounts:
       - destination: /etc/iscsi
         type: bind
