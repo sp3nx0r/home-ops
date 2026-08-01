@@ -8,7 +8,6 @@ resources:
   - ./helmrelease.yaml
   - ./ocirepository.yaml
   - ./pvc.yaml
-  - ./volsync-secret.sops.yaml
 configMapGenerator:
   - name: minecraft-pack-configs
     files:

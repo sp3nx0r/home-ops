@@ -13,6 +13,5 @@ resources:
   - ./persona-secret.sops.yaml
   - ./secret.sops.yaml
   - ./oidc-secret.sops.yaml
-  - ./volsync-secret.sops.yaml
   - ./ciliumnetworkpolicy.yaml
   - ./securitypolicy.yaml
