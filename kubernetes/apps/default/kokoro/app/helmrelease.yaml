@@ -16,7 +16,7 @@ spec:
           app:
             image:
               repository: ghcr.io/remsky/kokoro-fastapi-cpu
-              tag: v0.6.0
+              tag: v0.7.0
             probes:
               liveness: &probes
                 enabled: true
