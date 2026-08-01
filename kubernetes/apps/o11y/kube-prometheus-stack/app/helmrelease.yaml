@@ -156,6 +156,14 @@ spec:
           - memory-snapshot-on-shutdown
         retention: 7d
         retentionSize: 5GB
+        storageSpec:
+          volumeClaimTemplate:
+            spec:
+              storageClassName: iscsi
+              accessModes: ["ReadWriteOnce"]
+              resources:
+                requests:
+                  storage: 10Gi
         resources:
           requests:
             cpu: 100m

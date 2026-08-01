@@ -19,6 +19,11 @@ spec:
         createSecret: false
         secretName: thanos-objstore-secret
         secretKey: objstore.yml
+      thanosRules:
+        enabled: true
+        alertOverrides:
+          ThanosCompactHalted:
+            severity: critical
 
     kube-prometheus-stack:
       enabled: false
@@ -93,9 +98,9 @@ spec:
       resources:
         requests:
           cpu: 50m
-          memory: 128Mi
+          memory: 256Mi
         limits:
-          memory: 512Mi
+          memory: 1Gi
 
     receive:
       enabled: false

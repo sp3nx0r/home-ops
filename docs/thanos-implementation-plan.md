@@ -81,12 +81,22 @@ externalLabels:
   cluster: securimancy
 retention: 7d
 retentionSize: 5GB
+storageSpec:
+  volumeClaimTemplate:
+    spec:
+      storageClassName: iscsi
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: 10Gi
 thanos:
   objectStorageConfig:
     existingSecret:
       name: thanos-objstore-secret
       key: objstore.yml
 ```
+
+`storageSpec` moves the Prometheus TSDB/WAL off `emptyDir` onto an iSCSI PVC so a pod restart no longer drops the in-progress (unshipped) head block. 10Gi comfortably covers the 5GB local `retentionSize` plus WAL and any blocks awaiting upload. Note: switching an existing Prometheus from `emptyDir` to a PVC requires the Prometheus Operator to recreate the StatefulSet — if it doesn't roll automatically, delete it with `--cascade=orphan` and let the operator rebuild it.
 
 The `externalLabels.cluster` value gives every uploaded block a stable, non-replica external label. `__replica__` is stripped by Thanos during deduplication, so without an additional label the Compactor would see blocks with an empty external label set — fine for a single Prometheus today, but it avoids ambiguity if a second replica/instance is ever added.
 
@@ -283,7 +293,9 @@ Add the following variables to cluster-secrets (SOPS-encrypted):
 ## Considerations
 
 - **Storage sizing**: At typical homelab cardinality (~50k active series), expect roughly 1-2 GB/month in Garage. The 50Gi Garage data volume should be more than sufficient for 90d retention.
-- **emptyDir still used for Prometheus WAL**: The sidecar uploads completed blocks (every 2h). In a pod restart, you lose at most ~2h of metrics that haven't been uploaded yet. For full WAL persistence, a PVC would be needed (separate concern from this plan).
+- **Prometheus TSDB/WAL on iSCSI PVC**: Prometheus uses a 10Gi iSCSI `storageSpec` volume, so a pod restart or reschedule keeps the in-progress head block instead of losing the last ~2h. The Thanos sidecar still uploads closed 2h blocks to Garage for long-term retention.
+- **Compactor memory**: Compaction and downsampling are bursty and memory-hungry. The Compactor requests 256Mi with a 1Gi limit; if it OOMs (`ThanosCompactHalted`) it silently stops enforcing downsampling/retention, so that alert is elevated to `critical`.
+- **Alerting**: The chart's `global.thanosRules` PrometheusRule (upstream Thanos mixin) is enabled and picked up automatically since Prometheus selects all rules (`ruleSelectorNilUsesHelmValues: false`).
 - **Garage single-node RF=1**: Object store data has no redundancy beyond what Garage provides. If the Garage iSCSI PVC is lost, historical metrics are gone. This is acceptable for a homelab but worth noting.
 - **Secret sharing**: The `thanos-objstore-secret` is defined in the kube-prometheus-stack app (its earliest consumer) and referenced by name by both the Prometheus sidecar and the Thanos HelmRelease. Colocating it with the sidecar — rather than in the Thanos app, which reconciles later — ensures it exists before the sidecar starts, so there is no first-deploy error to wait out.
 
