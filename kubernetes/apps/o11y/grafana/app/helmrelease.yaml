@@ -292,15 +292,6 @@ spec:
           datasource:
             - name: DS_PROMETHEUS
               value: Prometheus
-        vector:
-          # renovate: depName="Vector Monitoring"
-          gnetId: 19649
-          revision: 1
-          datasource:
-            - name: DS_MIMIR
-              value: Prometheus
-            - name: DS_LOKI
-              value: Loki
       unifi:
         unifi-pdu:
           # renovate: depName="UniFi-Poller: USW PDU Insight"
