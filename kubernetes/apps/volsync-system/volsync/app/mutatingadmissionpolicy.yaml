@@ -45,6 +45,21 @@ spec:
             JSONPatch{
               op: "add", path: "/spec/template/spec/initContainers/-",
               value: Object.spec.template.spec.initContainers{
+                name: "cache-scrub",
+                image: "ghcr.io/home-operations/busybox:1.38.0@sha256:7e2c04dd50ede647bf4a7a4c8dbd629dd4971cd139b9b88fb22bfc3c7a6c13df",
+                imagePullPolicy: "IfNotPresent",
+                command: ["sh", "-c", "find /cache -type f -size 0 -delete 2>/dev/null || true"],
+                volumeMounts: [
+                  Object.spec.template.spec.initContainers.volumeMounts{
+                    name: "cache",
+                    mountPath: "/cache"
+                  }
+                ]
+              }
+            },
+            JSONPatch{
+              op: "add", path: "/spec/template/spec/initContainers/-",
+              value: Object.spec.template.spec.initContainers{
                 name: "jitter",
                 image: "ghcr.io/home-operations/busybox:1.38.0@sha256:7e2c04dd50ede647bf4a7a4c8dbd629dd4971cd139b9b88fb22bfc3c7a6c13df",
                 imagePullPolicy: "IfNotPresent",
