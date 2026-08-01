@@ -7,6 +7,8 @@ metadata:
 spec:
   dependsOn:
     - name: kube-prometheus-stack
+    - name: garage
+      namespace: storage
   interval: 1h
   path: ./kubernetes/apps/o11y/thanos/app
   prune: true

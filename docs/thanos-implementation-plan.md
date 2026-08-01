@@ -98,9 +98,10 @@ This enables the sidecar container inside the Prometheus pod and creates a `kube
 
 ### 3. Thanos objstore secret (SOPS-encrypted)
 
-**New file:** `kubernetes/apps/o11y/thanos/app/secret.sops.yaml`
+**New file:** `kubernetes/apps/o11y/thanos/app/secret.yaml`
 
-Plaintext before encryption:
+Rather than a SOPS-encrypted Secret, this is a plain manifest whose credentials are injected at reconcile time via Flux `postBuild` substitution from `cluster-secrets` (the same pattern Loki uses for its Garage S3 keys). Because the file contains only `${...}` placeholders and no ciphertext, it is intentionally **not** named `*.sops.yaml` and does not trip the SOPS pre-commit hook.
+
 ```yaml
 apiVersion: v1
 kind: Secret
@@ -112,8 +113,8 @@ stringData:
     config:
       bucket: thanos
       endpoint: garage.storage.svc.cluster.local:3900
-      access_key: <GARAGE_THANOS_KEY_ID value>
-      secret_key: <GARAGE_THANOS_SECRET_KEY value>
+      access_key: ${GARAGE_THANOS_KEY_ID}
+      secret_key: ${GARAGE_THANOS_SECRET_KEY}
       insecure: true
 ```
 
@@ -239,6 +240,8 @@ spec:
   wait: false
   dependsOn:
     - name: kube-prometheus-stack
+    - name: garage
+      namespace: storage
   postBuild:
     substituteFrom:
       - kind: Secret
