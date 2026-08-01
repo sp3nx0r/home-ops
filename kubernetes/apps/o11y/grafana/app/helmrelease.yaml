@@ -29,6 +29,8 @@ spec:
     envFromSecrets:
       - name: grafana-secret
     grafana.ini:
+      news:
+        news_feed_enabled: false
       server:
         root_url: https://grafana.securimancy.com
       analytics:
