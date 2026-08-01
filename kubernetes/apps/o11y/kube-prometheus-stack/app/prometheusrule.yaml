@@ -70,3 +70,98 @@ spec:
               The exporter service may be down or unreachable.
           labels:
             severity: warning
+    - name: pvc-capacity.rules
+      rules:
+        # Earlier, daily-rate-based warning than the chart's built-in
+        # KubePersistentVolumeFillingUp (which only fires once <15% free over a
+        # noisy 6h window). Projects a fill within 7 days from the last 24h of
+        # growth for any iscsi PVC already past 50% used. Volsync mover PVCs are
+        # excluded because they are only mounted during backup runs, so their
+        # kubelet_volume_stats series are intermittent and break predict_linear.
+        # data-garage-0 is handled separately below with a longer horizon.
+        - alert: PersistentVolumePredictedToFill
+          expr: |-
+            (
+              kubelet_volume_stats_used_bytes{job="kubelet", metrics_path="/metrics", persistentvolumeclaim!~"volsync-.*", persistentvolumeclaim!="data-garage-0"}
+                /
+              kubelet_volume_stats_capacity_bytes{job="kubelet", metrics_path="/metrics", persistentvolumeclaim!~"volsync-.*", persistentvolumeclaim!="data-garage-0"}
+            ) > 0.50
+            and
+            predict_linear(kubelet_volume_stats_available_bytes{job="kubelet", metrics_path="/metrics", persistentvolumeclaim!~"volsync-.*", persistentvolumeclaim!="data-garage-0"}[24h], 7 * 24 * 3600) < 0
+            unless on (namespace, persistentvolumeclaim)
+            kube_persistentvolumeclaim_labels{label_excluded_from_alerts="true"} == 1
+          for: 6h
+          annotations:
+            summary: >-
+              PVC {{ $labels.namespace }}/{{ $labels.persistentvolumeclaim }} is projected to fill within ~7 days
+            description: >-
+              {{ $labels.persistentvolumeclaim }} in {{ $labels.namespace }} is
+              {{ $value | humanizePercentage }} full and, at its current daily growth rate,
+              is projected to run out of space within 7 days. The iscsi storage class supports
+              online expansion: bump the size in the owning HelmRelease/manifest, then
+              `kubectl -n {{ $labels.namespace }} patch pvc {{ $labels.persistentvolumeclaim }}
+              --type merge -p '{"spec":{"resources":{"requests":{"storage":"<new-size>"}}}}'`.
+          labels:
+            severity: warning
+        - alert: PersistentVolumeHighUtilization
+          expr: |-
+            (
+              kubelet_volume_stats_used_bytes{job="kubelet", metrics_path="/metrics", persistentvolumeclaim!~"volsync-.*"}
+                /
+              kubelet_volume_stats_capacity_bytes{job="kubelet", metrics_path="/metrics", persistentvolumeclaim!~"volsync-.*"}
+            ) > 0.90
+            unless on (namespace, persistentvolumeclaim)
+            kube_persistentvolumeclaim_labels{label_excluded_from_alerts="true"} == 1
+          for: 1h
+          annotations:
+            summary: >-
+              PVC {{ $labels.namespace }}/{{ $labels.persistentvolumeclaim }} is over 90% full
+            description: >-
+              {{ $labels.persistentvolumeclaim }} in {{ $labels.namespace }} has been above
+              90% utilization ({{ $value | humanizePercentage }}) for over an hour. Consider
+              expanding the claim before it reaches the chart's critical (97%) threshold.
+          labels:
+            severity: warning
+        # data-garage-0 backs Garage S3, which Loki and Thanos write to, so it
+        # grows steadily. Give a longer 14-day heads-up than the generic rule
+        # since expanding it also affects Volsync backup sizing.
+        - alert: GarageDataVolumePredictedToFill
+          expr: |-
+            (
+              kubelet_volume_stats_used_bytes{job="kubelet", metrics_path="/metrics", namespace="storage", persistentvolumeclaim="data-garage-0"}
+                /
+              kubelet_volume_stats_capacity_bytes{job="kubelet", metrics_path="/metrics", namespace="storage", persistentvolumeclaim="data-garage-0"}
+            ) > 0.50
+            and
+            predict_linear(kubelet_volume_stats_available_bytes{job="kubelet", metrics_path="/metrics", namespace="storage", persistentvolumeclaim="data-garage-0"}[24h], 14 * 24 * 3600) < 0
+          for: 6h
+          annotations:
+            summary: >-
+              Garage S3 data volume (data-garage-0) is projected to fill within ~14 days
+            description: >-
+              data-garage-0 is {{ $value | humanizePercentage }} full and trending to run out
+              within 14 days at its current daily growth rate. Loki and Thanos both write here.
+              Expand it in the garage HelmRelease (persistence size) and patch the live PVC, and
+              revisit the Volsync ReplicationSource cacheCapacity if the working set has grown.
+          labels:
+            severity: warning
+        # Prometheus caps its TSDB at retentionSize (5GB) on a 10Gi PVC, so it
+        # should sit around ~50%. Sustained usage above 75% means retention is
+        # not being honored (e.g. WAL bloat) or the volume needs resizing.
+        - alert: PrometheusTSDBVolumeHighUtilization
+          expr: |-
+            (
+              kubelet_volume_stats_used_bytes{job="kubelet", metrics_path="/metrics", namespace="o11y", persistentvolumeclaim=~"prometheus-kube-prometheus-stack-db-.*"}
+                /
+              kubelet_volume_stats_capacity_bytes{job="kubelet", metrics_path="/metrics", namespace="o11y", persistentvolumeclaim=~"prometheus-kube-prometheus-stack-db-.*"}
+            ) > 0.75
+          for: 30m
+          annotations:
+            summary: >-
+              Prometheus TSDB volume is over 75% full
+            description: >-
+              {{ $labels.persistentvolumeclaim }} is {{ $value | humanizePercentage }} full.
+              With retentionSize=5GB on a 10Gi PVC it should stay near 50%; investigate WAL/
+              retention or raise storageSpec + retentionSize in the kube-prometheus-stack HelmRelease.
+          labels:
+            severity: warning
