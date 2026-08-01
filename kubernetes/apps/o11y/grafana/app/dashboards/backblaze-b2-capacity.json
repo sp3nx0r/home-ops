@@ -231,8 +231,7 @@
       "title": "Bucket Size Over Time",
       "targets": [
         {
-          "expr": "sort_desc(label_replace(backblaze_b2_path_size_bytes, \"bucket_short\", \"$1\", \"bucket\", \"sp3nx0r-(.*)\"))",
-          "instant": true,
+          "expr": "label_replace(backblaze_b2_path_size_bytes, \"bucket_short\", \"$1\", \"bucket\", \"sp3nx0r-(.*)\")",
           "legendFormat": "{{ bucket_short }}",
           "refId": "A"
         }
