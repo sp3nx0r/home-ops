@@ -173,6 +173,11 @@ spec:
         createSecret: false
         secretName: thanos-objstore-secret
         secretKey: objstore.yml
+      thanosRules:
+        enabled: true
+        alertOverrides:
+          ThanosCompactHalted:
+            severity: critical
 
     kube-prometheus-stack:
       enabled: false
@@ -281,6 +286,12 @@ Add the following variables to cluster-secrets (SOPS-encrypted):
 - `GARAGE_THANOS_KEY_ID` -- S3 access key for the thanos bucket
 - `GARAGE_THANOS_SECRET_KEY` -- S3 secret key for the thanos bucket
 
+### 9. Garage: Volsync backup
+
+**New files:** `kubernetes/apps/storage/garage/app/volsync.yaml`, `kubernetes/apps/storage/garage/app/volsync-secret.sops.yaml`
+
+Garage runs single-node RF=1, so the `thanos` bucket (and loki/pocket-id) lives on one iSCSI PVC. To back it up, `ReplicationSource`s snapshot `data-garage-0` and `meta-garage-0` hourly to the shared Kopia repo on NFS, with matching `ReplicationDestination`s (`garage-data-dst`/`garage-meta-dst`) for restore. This mirrors the cluster's `components/volsync` settings (retention, `zstd-fastest`, `copyMethod: Snapshot`, mover security context) but is written explicitly because Garage's StatefulSet PVCs are not named `${APP}`. `garage-volsync-secret` reuses the shared `KOPIA_PASSWORD`. `garage/ks.yaml` gains `dependsOn: volsync` (volsync-system), and both files are added to `garage/app/kustomization.yaml`.
+
 ## Retention Summary
 
 | Layer | Duration | Purpose |
@@ -303,7 +314,8 @@ Add the following variables to cluster-secrets (SOPS-encrypted):
 
 | Scenario | Impact | Recovery |
 |----------|--------|----------|
-| Prometheus pod restart | Lose last ~2h (unuploaded block). Sidecar had already shipped older blocks to Garage. | Automatic -- Store Gateway serves historical data immediately. |
+| Prometheus pod restart / reschedule | No metric loss -- the TSDB/WAL is on an iSCSI PVC that reattaches. | Automatic. |
+| Prometheus WAL PVC lost | Lose the in-progress head block (up to ~2h). Older blocks were already shipped to Garage. | Store Gateway serves historical data immediately; the recent gap is unavoidable. |
 | Garage iSCSI read-only | Sidecar upload failures; Store Gateway reads still work for existing data. | Blocks queue in Prometheus until Garage is writable; gap fills on recovery. |
 | Store Gateway PVC read-only | Can't update local index cache; existing cache still serves. | Restart after PVC recovers. |
 | Thanos Query Frontend down | Grafana queries fail. | Stateless pod -- restarts in seconds. Alertmanager routes directly from Prometheus, unaffected. |
