@@ -14,6 +14,9 @@ spec:
     namespace: flux-system
   targetNamespace: storage
   wait: true
+  dependsOn:
+    - name: volsync
+      namespace: volsync-system
   postBuild:
     substituteFrom:
       - name: cluster-secrets
