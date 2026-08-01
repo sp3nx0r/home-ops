@@ -280,13 +280,6 @@ spec:
             - name: DS_PROMETHEUS
               value: Prometheus
       logs:
-        loki-logs:
-          # renovate: depName="Logging Dashboard via Loki v3"
-          gnetId: 24574
-          revision: 2
-          datasource:
-            - name: DS_LOKI
-              value: Loki
         loki-metrics:
           # renovate: depName="Loki Metrics Dashboard"
           gnetId: 17781
