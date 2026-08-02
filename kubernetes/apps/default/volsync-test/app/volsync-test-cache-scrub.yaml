@@ -1,4 +1,9 @@
 # yaml-language-server: $schema=https://kubernetesjsonschema.dev/v1.18.0-standalone-strict/all.json
+# The Kopia mover caches repository index blobs as many tiny files under
+# /cache/index-blobs. That cache is only evicted by total bytes, so the file
+# count keeps climbing until it exhausts the volume's inodes and trips
+# KubePersistentVolumeInodesFillingUp. Deleting the disposable cache PVC once
+# per day bounds the inode count; VolSync recreates it on the next mover run.
 ---
 apiVersion: v1
 kind: ServiceAccount
