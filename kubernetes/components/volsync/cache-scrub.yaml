@@ -138,9 +138,12 @@ spec:
               resources:
                 requests:
                   cpu: 10m
-                  memory: 32Mi
-                limits:
                   memory: 64Mi
+                limits:
+                  # kubectl (client-go discovery + delete/get) peaks well above
+                  # 64Mi; a tight limit OOMKills the mover after it has already
+                  # issued the delete, failing the Job. 256Mi leaves headroom.
+                  memory: 256Mi
               securityContext:
                 allowPrivilegeEscalation: false
                 readOnlyRootFilesystem: true
