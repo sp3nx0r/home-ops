@@ -1,0 +1,155 @@
+# yaml-language-server: $schema=https://kubernetesjsonschema.dev/v1.18.0-standalone-strict/all.json
+# The Kopia mover caches repository index blobs as many tiny files under
+# /cache/index-blobs. Kopia evicts that cache by total bytes, never by file
+# count, so on a small ext4 cache PVC the file count exhausts inodes long
+# before the byte cap and trips KubePersistentVolumeInodesFillingUp. Deleting
+# the disposable cache PVC once per day bounds the inode count; VolSync
+# recreates it (owned by the ReplicationSource) on the next scheduled sync.
+#
+# Only ${APP} is substituted by Flux (brace form). All shell variables use the
+# bare $var form, which Flux's envsubst leaves untouched.
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ${APP}-cache-scrub
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: ${APP}-cache-scrub
+rules:
+  - apiGroups:
+      - batch
+    resources:
+      - jobs
+    resourceNames:
+      - volsync-src-${APP}
+    verbs:
+      - get
+  - apiGroups:
+      - ""
+    resources:
+      - persistentvolumeclaims
+    resourceNames:
+      - volsync-src-${APP}-cache
+    verbs:
+      - get
+      - delete
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ${APP}-cache-scrub
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: ${APP}-cache-scrub
+subjects:
+  - kind: ServiceAccount
+    name: ${APP}-cache-scrub
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: ${APP}-cache-scrub
+spec:
+  timeZone: America/Chicago
+  schedule: "30 0 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      # Covers the jitter sleep (up to 900s) plus the delete and Bound poll.
+      activeDeadlineSeconds: 1200
+      ttlSecondsAfterFinished: 86400
+      template:
+        spec:
+          serviceAccountName: ${APP}-cache-scrub
+          automountServiceAccountToken: true
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1001
+            runAsGroup: 1001
+            fsGroup: 1001
+          initContainers:
+            # Spread the fleet's scrubs across a window so ~20 cache PVC
+            # deletes do not hit the CSI/API server at once, mirroring the
+            # volsync-mover-jitter init container used for the movers.
+            - name: jitter
+              image: ghcr.io/home-operations/busybox:1.38.0@sha256:7e2c04dd50ede647bf4a7a4c8dbd629dd4971cd139b9b88fb22bfc3c7a6c13df
+              imagePullPolicy: IfNotPresent
+              command:
+                - /bin/sh
+                - -c
+                - sleep $(shuf -i 0-900 -n 1)
+              resources:
+                requests:
+                  cpu: 10m
+                  memory: 16Mi
+                limits:
+                  memory: 32Mi
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop:
+                    - ALL
+          containers:
+            - name: scrub
+              image: bitnami/kubectl:latest@sha256:9e369df7ab3386b736d162348f167bcc02cb4ba3f5203e9151be854437d6e0af
+              env:
+                - name: POD_NAMESPACE
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.namespace
+              command:
+                - /bin/sh
+                - -ec
+              args:
+                - |
+                  mover_job="volsync-src-${APP}"
+                  cache_pvc="volsync-src-${APP}-cache"
+
+                  mover_active="$(kubectl -n "$POD_NAMESPACE" get job "$mover_job" -o jsonpath='{.status.active}' --ignore-not-found)"
+                  if [ -n "$mover_active" ] && [ "$mover_active" != "0" ]; then
+                    echo "VolSync mover $mover_job is active; skipping cache scrub"
+                    exit 0
+                  fi
+
+                  echo "deleting disposable Kopia cache PVC $cache_pvc"
+                  kubectl -n "$POD_NAMESPACE" delete pvc "$cache_pvc" --ignore-not-found --wait=false
+
+                  deadline=$((SECONDS + 120))
+                  while [ "$SECONDS" -lt "$deadline" ]; do
+                    phase="$(kubectl -n "$POD_NAMESPACE" get pvc "$cache_pvc" -o jsonpath='{.status.phase}' --ignore-not-found)"
+                    if [ "$phase" = "Bound" ]; then
+                      echo "cache PVC $cache_pvc recreated and Bound"
+                      exit 0
+                    fi
+                    sleep 5
+                  done
+
+                  echo "cache PVC $cache_pvc not yet recreated; VolSync restores it on the next sync"
+                  exit 0
+              resources:
+                requests:
+                  cpu: 10m
+                  memory: 32Mi
+                limits:
+                  memory: 64Mi
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop:
+                    - ALL
+              volumeMounts:
+                - name: tmp
+                  mountPath: /tmp
+          volumes:
+            - name: tmp
+              emptyDir: {}

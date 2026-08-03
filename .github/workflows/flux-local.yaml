@@ -40,6 +40,9 @@ jobs:
         with:
           args: test --enable-helm --all-namespaces --path /github/workspace/kubernetes/flux/cluster -v
 
+      - name: Run VolSync cache scrub manifest test
+        run: bash tests/volsync-cache-scrub.sh
+
   diff:
     name: Flux Local Diff
     needs: pre-job

@@ -19,7 +19,11 @@ spec:
   postBuild:
     substitute:
       APP: volsync-test
-      VOLSYNC_CAPACITY: 2Gi
+      # Kopia's local cache is evicted by total bytes, never by file count, so
+      # the many tiny index-blob files exhaust ext4 inodes long before the byte
+      # cap. 4Gi ~= 262k inodes, giving headroom above the observed peak between
+      # the daily cache scrub runs.
+      VOLSYNC_CAPACITY: 4Gi
       VOLSYNC_UID: "1000"
       VOLSYNC_GID: "1000"
     substituteFrom:
