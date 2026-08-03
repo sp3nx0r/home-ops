@@ -193,6 +193,26 @@ role_binding_is_exact() {
   ' <<<"$1"
 }
 
+init_containers() {
+  awk '
+    function indentation(line) {
+      match(line, /[^[:space:]]/)
+      return RSTART - 1
+    }
+    /^[[:space:]]*initContainers:$/ {
+      in_block = 1
+      block_indentation = indentation($0)
+      next
+    }
+    in_block {
+      if ($0 ~ /^[[:space:]]*$/) next
+      line_indentation = indentation($0)
+      if (line_indentation < block_indentation || (line_indentation == block_indentation && $0 !~ /^[[:space:]]*-[[:space:]]/)) exit
+      print
+    }
+  ' <<<"$1"
+}
+
 scrub_container() {
   awk '
     function indentation(line) {
@@ -260,13 +280,26 @@ require_pattern "$cronjob" '^[[:space:]]*timeZone:[[:space:]]*America/Chicago[[:
 require_pattern "$cronjob" '^[[:space:]]*schedule:[[:space:]]*"?30 0 \* \* \*"?[[:space:]]*$' 'schedule 30 0 * * *'
 require_pattern "$cronjob" '^[[:space:]]*concurrencyPolicy:[[:space:]]*Forbid[[:space:]]*$' 'concurrencyPolicy Forbid'
 require_pattern "$cronjob" '^[[:space:]]*backoffLimit:[[:space:]]*0[[:space:]]*$' 'backoffLimit 0'
-require_pattern "$cronjob" '^[[:space:]]*activeDeadlineSeconds:[[:space:]]*300[[:space:]]*$' 'activeDeadlineSeconds 300'
+require_pattern "$cronjob" '^[[:space:]]*activeDeadlineSeconds:[[:space:]]*1200[[:space:]]*$' 'activeDeadlineSeconds 1200'
 require_pattern "$cronjob" '^[[:space:]]*ttlSecondsAfterFinished:[[:space:]]*86400[[:space:]]*$' 'ttlSecondsAfterFinished 86400'
 require_pattern "$cronjob" '^[[:space:]]*serviceAccountName:[[:space:]]*volsync-test-cache-scrub[[:space:]]*$' 'serviceAccountName volsync-test-cache-scrub'
 require_pattern "$cronjob" '^[[:space:]]*automountServiceAccountToken:[[:space:]]*true[[:space:]]*$' 'automountServiceAccountToken true'
-if grep -Eq '^[[:space:]]*initContainers:$' <<<"$cronjob"; then
-  fail "unexpected scrub init container"
-fi
+# A jitter init container spreads the fleet's scrubs, mirroring the mover
+# jitter. Exactly one init container (jitter) is expected.
+require_pattern "$cronjob" '^[[:space:]]*initContainers:[[:space:]]*$' 'jitter initContainers block'
+jitter="$(init_containers "$cronjob")"
+init_container_count="$(awk '
+  function indentation(line) { match(line, /[^[:space:]]/); return RSTART - 1 }
+  BEGIN { item_indent = -1 }
+  $0 ~ /^[[:space:]]*-[[:space:]]/ {
+    if (item_indent == -1) item_indent = indentation($0)
+    if (indentation($0) == item_indent) count++
+  }
+  END { print count + 0 }
+' <<<"$jitter")"
+[[ "$init_container_count" == 1 ]] || fail "expected exactly one init container, found $init_container_count"
+require_pattern "$jitter" '^[[:space:]]*name:[[:space:]]*jitter[[:space:]]*$' 'jitter init container name'
+require_pattern "$jitter" 'sleep \$\(shuf -i 0-900 -n 1\)' 'jitter random sleep'
 
 scrub="$(scrub_container "$cronjob")"
 [[ -n "$scrub" ]] || fail "missing single scrub container"

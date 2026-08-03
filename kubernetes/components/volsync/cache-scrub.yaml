@@ -62,7 +62,8 @@ spec:
   jobTemplate:
     spec:
       backoffLimit: 0
-      activeDeadlineSeconds: 300
+      # Covers the jitter sleep (up to 900s) plus the delete and Bound poll.
+      activeDeadlineSeconds: 1200
       ttlSecondsAfterFinished: 86400
       template:
         spec:
@@ -74,6 +75,29 @@ spec:
             runAsUser: 1001
             runAsGroup: 1001
             fsGroup: 1001
+          initContainers:
+            # Spread the fleet's scrubs across a window so ~20 cache PVC
+            # deletes do not hit the CSI/API server at once, mirroring the
+            # volsync-mover-jitter init container used for the movers.
+            - name: jitter
+              image: ghcr.io/home-operations/busybox:1.38.0@sha256:7e2c04dd50ede647bf4a7a4c8dbd629dd4971cd139b9b88fb22bfc3c7a6c13df
+              imagePullPolicy: IfNotPresent
+              command:
+                - /bin/sh
+                - -c
+                - sleep $(shuf -i 0-900 -n 1)
+              resources:
+                requests:
+                  cpu: 10m
+                  memory: 16Mi
+                limits:
+                  memory: 32Mi
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop:
+                    - ALL
           containers:
             - name: scrub
               image: bitnami/kubectl:latest@sha256:9e369df7ab3386b736d162348f167bcc02cb4ba3f5203e9151be854437d6e0af
