@@ -1,7 +1,13 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2016 # single-quoted grep/sed patterns are literal by design
 set -euo pipefail
 
-rendered="$(kubectl kustomize kubernetes/apps/default/volsync-test/app)"
+# The cache scrub now lives in the shared components/volsync component and is
+# templated with ${APP}. Render a representative consumer (volsync-test) and
+# substitute ${APP} the way Flux's postBuild would, so the assertions below run
+# against concrete resource names.
+component="kubernetes/components/volsync/cache-scrub.yaml"
+rendered="$(kubectl kustomize kubernetes/apps/default/volsync-test/app | sed 's/${APP}/volsync-test/g')"
 
 fail() {
   printf 'FAIL: %s\n' "$1" >&2
@@ -21,6 +27,12 @@ document() {
 require_pattern() {
   if ! grep -Eq -- "$2" <<<"$1"; then
     fail "missing required field: $3"
+  fi
+}
+
+reject_pattern() {
+  if grep -Eq -- "$2" <<<"$1"; then
+    fail "forbidden content present: $3"
   fi
 }
 
@@ -234,52 +246,6 @@ command_lines() {
   ' <<<"$1"
 }
 
-args_script() {
-  awk '
-    function indentation(line) {
-      match(line, /[^[:space:]]/)
-      return RSTART - 1
-    }
-    function append(line) {
-      script = script == "" ? line : script "\n" line
-    }
-    BEGIN { script_indentation = -1 }
-    /^[[:space:]]*(-[[:space:]]+)?args:$/ { in_args = 1; next }
-    in_args && !in_script {
-      if ($0 ~ /^[[:space:]]*$/) next
-      if ($0 ~ /^[[:space:]]*-[[:space:]]+\|[[:space:]]*$/) {
-        block_indentation = indentation($0)
-        in_script = 1
-        next
-      }
-      invalid = 1
-      exit
-    }
-    in_script {
-      if ($0 ~ /^[[:space:]]*$/) {
-        append("")
-        next
-      }
-      line_indentation = indentation($0)
-      if (line_indentation <= block_indentation) {
-        if (line_indentation == block_indentation && $0 ~ /^[[:space:]]*-[[:space:]]/) invalid = 1
-        exit
-      }
-      if (script_indentation == -1) script_indentation = line_indentation
-      if (line_indentation < script_indentation) {
-        invalid = 1
-        exit
-      }
-      append(substr($0, script_indentation + 1))
-    }
-    END { if (in_script && !invalid) print script }
-  ' <<<"$1"
-}
-
-normalize_script() {
-  sed -E "s/jsonpath='\{([^']+)\}'/jsonpath={\1}/g" <<<"$1"
-}
-
 cronjob="$(document CronJob volsync-test-cache-scrub)"
 role="$(document Role volsync-test-cache-scrub)"
 service_account="$(document ServiceAccount volsync-test-cache-scrub)"
@@ -301,12 +267,29 @@ require_pattern "$cronjob" '^[[:space:]]*automountServiceAccountToken:[[:space:]
 if grep -Eq '^[[:space:]]*initContainers:$' <<<"$cronjob"; then
   fail "unexpected scrub init container"
 fi
+
 scrub="$(scrub_container "$cronjob")"
 [[ -n "$scrub" ]] || fail "missing single scrub container"
 expected_command=$'- /bin/sh\n- -ec'
 [[ "$(command_lines "$scrub")" == "$expected_command" ]] || fail "scrub command must be /bin/sh -ec"
-expected_args_script=$'namespace="default"\nmover_job="volsync-src-volsync-test"\ncache_pvc="volsync-src-volsync-test-cache"\n\nmover_active="$(kubectl -n "$namespace" get job "$mover_job" -o jsonpath={.status.active})"\nif [ "${mover_active:-0}" != "0" ]; then\n  echo "VolSync mover is active; skipping cache scrub"\n  exit 0\nfi\n\nkubectl -n "$namespace" delete pvc "$cache_pvc" --ignore-not-found\n\ndeadline=$((SECONDS + 300))\nwhile [ "$SECONDS" -lt "$deadline" ]; do\n  phase="$(kubectl -n "$namespace" get pvc "$cache_pvc" -o jsonpath={.status.phase})"\n  if [ "$phase" = "Bound" ]; then\n    echo "cache PVC is Bound"\n    exit 0\n  fi\n  sleep 5\ndone\n\necho "cache PVC did not become Bound within five minutes" >&2\nexit 1'
-[[ "$(normalize_script "$(args_script "$scrub")")" == "$expected_args_script" ]] || fail "scrub args script does not match required control flow"
+
+# Behavioral contract of the scrub script.
+require_pattern "$scrub" 'mover_job="volsync-src-volsync-test"' 'mover job target'
+require_pattern "$scrub" 'cache_pvc="volsync-src-volsync-test-cache"' 'cache PVC target'
+require_pattern "$scrub" 'get job "\$mover_job" -o jsonpath=.\{\.status\.active\}. --ignore-not-found' 'reads mover job active status'
+require_pattern "$scrub" 'if \[ -n "\$mover_active" \] && \[ "\$mover_active" != "0" \]; then' 'skips while mover is active'
+require_pattern "$scrub" 'delete pvc "\$cache_pvc" --ignore-not-found' 'deletes only the cache PVC'
+require_pattern "$scrub" 'kubectl -n "\$POD_NAMESPACE"' 'operates in its own namespace via downward API'
+# The cache is disposable; a deferred recreation must not fail the job.
+reject_pattern "$scrub" 'exit 1' 'scrub must not fail on deferred cache recreation'
+# Guard against re-hardcoding a namespace instead of the downward-API value.
+reject_pattern "$scrub" 'namespace="default"' 'namespace must not be hardcoded'
+
+# Flux postBuild envsubst rewrites the ${VAR} brace form (e.g. ${mover_active:-0}
+# would collapse to its default). Every ${...} token in the component MUST be
+# the intended ${APP}; anything else is a shell variable that Flux would clobber.
+unexpected_vars="$(grep -oE '\$\{[^}]*\}' "$component" | grep -vx '${APP}' || true)"
+[[ -z "$unexpected_vars" ]] || fail "Flux-unsafe \${...} tokens in $component: $unexpected_vars"
 
 role_has_exact_least_privilege "$role" || fail "Role rules do not match required least privilege"
 role_binding_is_exact "$role_binding" || fail "RoleBinding does not grant the required Role to the scrub ServiceAccount"
@@ -365,3 +348,5 @@ scrub_binding_count="$(awk '
   END { print count + 0 }
 ' <<<"$rendered")"
 [[ "$scrub_binding_count" == 1 ]] || fail "scrub ServiceAccount has unexpected RoleBinding"
+
+printf 'OK: volsync cache scrub component contract verified\n'

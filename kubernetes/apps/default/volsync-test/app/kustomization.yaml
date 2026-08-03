@@ -7,4 +7,3 @@ components:
 resources:
   - ./deployment.yaml
   - ./pvc.yaml
-  - ./volsync-test-cache-scrub.yaml

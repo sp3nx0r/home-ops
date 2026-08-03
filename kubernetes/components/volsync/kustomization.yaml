@@ -10,3 +10,4 @@ resources:
   - ./secret.yaml
   - ./replicationsource.yaml
   - ./replicationdestination.yaml
+  - ./cache-scrub.yaml
