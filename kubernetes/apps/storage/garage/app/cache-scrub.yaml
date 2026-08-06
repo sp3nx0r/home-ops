@@ -1,0 +1,171 @@
+# yaml-language-server: $schema=https://kubernetesjsonschema.dev/v1.18.0-standalone-strict/all.json
+# Garage is backed up by two ReplicationSources (garage-data, garage-meta)
+# defined in ./volsync.yaml, so it cannot consume the shared single-${APP}
+# components/volsync/cache-scrub.yaml. This dedicated scrub mirrors that
+# component but covers both sources in one CronJob.
+#
+# The Kopia mover caches repository index blobs as many tiny files. Kopia
+# evicts that cache by total bytes, never by file count, so on a small ext4
+# cache PVC the file count exhausts inodes long before the byte cap and trips
+# KubePersistentVolumeInodesFillingUp. Deleting the disposable cache PVCs once
+# per day bounds the inode count; VolSync recreates them (owned by the
+# ReplicationSources) on the next scheduled sync.
+#
+# This manifest intentionally contains NO ${...} tokens: garage's ks.yaml has
+# no ${APP} substitute, and every shell variable uses the bare $var form that
+# Flux's envsubst leaves untouched.
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: garage-cache-scrub
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: garage-cache-scrub
+rules:
+  - apiGroups:
+      - batch
+    resources:
+      - jobs
+    resourceNames:
+      - volsync-src-garage-data
+      - volsync-src-garage-meta
+    verbs:
+      - get
+  - apiGroups:
+      - ""
+    resources:
+      - persistentvolumeclaims
+    resourceNames:
+      - volsync-src-garage-data-cache
+      - volsync-src-garage-meta-cache
+    verbs:
+      - get
+      - delete
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: garage-cache-scrub
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: garage-cache-scrub
+subjects:
+  - kind: ServiceAccount
+    name: garage-cache-scrub
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: garage-cache-scrub
+spec:
+  timeZone: America/Chicago
+  schedule: "30 0 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      # Covers the jitter sleep (up to 900s) plus a delete and Bound poll for
+      # each of the two sources (garage-data, garage-meta).
+      activeDeadlineSeconds: 1500
+      ttlSecondsAfterFinished: 86400
+      template:
+        spec:
+          serviceAccountName: garage-cache-scrub
+          automountServiceAccountToken: true
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1001
+            runAsGroup: 1001
+            fsGroup: 1001
+          initContainers:
+            # Spread the fleet's scrubs across a window so the cache PVC deletes
+            # do not hit the CSI/API server at once, mirroring the
+            # volsync-mover-jitter init container used for the movers.
+            - name: jitter
+              image: ghcr.io/home-operations/busybox:1.38.0@sha256:7e2c04dd50ede647bf4a7a4c8dbd629dd4971cd139b9b88fb22bfc3c7a6c13df
+              imagePullPolicy: IfNotPresent
+              command:
+                - /bin/sh
+                - -c
+                - sleep $(shuf -i 0-900 -n 1)
+              resources:
+                requests:
+                  cpu: 10m
+                  memory: 16Mi
+                limits:
+                  memory: 32Mi
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop:
+                    - ALL
+          containers:
+            - name: scrub
+              image: bitnami/kubectl:latest@sha256:9e369df7ab3386b736d162348f167bcc02cb4ba3f5203e9151be854437d6e0af
+              env:
+                - name: POD_NAMESPACE
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.namespace
+              command:
+                - /bin/sh
+                - -ec
+              args:
+                - |
+                  for src in garage-data garage-meta; do
+                    mover_job="volsync-src-$src"
+                    cache_pvc="volsync-src-$src-cache"
+
+                    mover_active="$(kubectl -n "$POD_NAMESPACE" get job "$mover_job" -o jsonpath='{.status.active}' --ignore-not-found)"
+                    if [ -n "$mover_active" ] && [ "$mover_active" != "0" ]; then
+                      echo "VolSync mover $mover_job is active; skipping $cache_pvc"
+                      continue
+                    fi
+
+                    echo "deleting disposable Kopia cache PVC $cache_pvc"
+                    kubectl -n "$POD_NAMESPACE" delete pvc "$cache_pvc" --ignore-not-found --wait=false
+
+                    phase=""
+                    deadline=$((SECONDS + 120))
+                    while [ "$SECONDS" -lt "$deadline" ]; do
+                      phase="$(kubectl -n "$POD_NAMESPACE" get pvc "$cache_pvc" -o jsonpath='{.status.phase}' --ignore-not-found)"
+                      if [ "$phase" = "Bound" ]; then
+                        echo "cache PVC $cache_pvc recreated and Bound"
+                        break
+                      fi
+                      sleep 5
+                    done
+
+                    if [ "$phase" != "Bound" ]; then
+                      echo "cache PVC $cache_pvc not yet recreated; VolSync restores it on the next sync"
+                    fi
+                  done
+              resources:
+                requests:
+                  cpu: 10m
+                  memory: 64Mi
+                limits:
+                  # kubectl (client-go discovery + delete/get) peaks well above
+                  # 64Mi; a tight limit OOMKills the mover after it has already
+                  # issued the delete, failing the Job. 256Mi leaves headroom.
+                  memory: 256Mi
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop:
+                    - ALL
+              volumeMounts:
+                - name: tmp
+                  mountPath: /tmp
+          volumes:
+            - name: tmp
+              emptyDir: {}
