@@ -44,7 +44,7 @@ spec:
 
         - alert: BackblazeBucketNewestObjectStale
           expr: |-
-            (time() * 1000 - backblaze_b2_path_last_upload_seconds) / 1000 > 14 * 24 * 60 * 60
+            (time() * 1000 - backblaze_b2_path_last_upload_seconds{bucket!="sp3nx0r-backups-archive"}) / 1000 > 14 * 24 * 60 * 60
           for: 1h
           annotations:
             summary: >-
@@ -53,7 +53,8 @@ spec:
               The newest object currently visible in {{ $labels.bucket }} is
               older than 14 days. This does not prove the TrueNAS Cloud Sync job
               failed to run; a successful sync with no changed files will not
-              advance this metric.
+              advance this metric. The low-churn archive bucket is excluded
+              from this alert.
           labels:
             severity: warning
 
