@@ -843,15 +843,17 @@
     - name: Download nginx-prometheus-exporter # noqa: yaml[line-length]
       vars:
         _base: "https://github.com/nginxinc/nginx-prometheus-exporter/releases/download"
-        _file: "nginx-prometheus-exporter_{{ nginx_exporter_version }}_linux_amd64.tar.gz"
+        _file: "nginx-prometheus-exporter_{{ nginx_exporter_version[1:] }}_linux_amd64.tar.gz"
       ansible.builtin.unarchive:
-        src: "{{ _base }}/v{{ nginx_exporter_version }}/{{ _file }}"
+        src: "{{ _base }}/{{ nginx_exporter_version }}/{{ _file }}"
         dest: /usr/local/bin
         remote_src: true
         include:
           - nginx-prometheus-exporter
         mode: "0755"
-      when: _nginx_exporter_version.rc != 0 or nginx_exporter_version not in (_nginx_exporter_version.stdout | default(''))
+      when: >-
+        _nginx_exporter_version.rc != 0 or
+        nginx_exporter_version[1:] not in (_nginx_exporter_version.stdout | default(''))
       notify: restart nginx-exporter
       tags: [monitoring]
 
