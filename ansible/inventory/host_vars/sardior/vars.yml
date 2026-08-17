@@ -194,7 +194,7 @@ nginx_exporter_port: 9113
 # renovate: datasource=github-releases depName=prometheus/node_exporter
 node_exporter_version: v1.12.1
 # renovate: datasource=github-releases depName=nginxinc/nginx-prometheus-exporter
-nginx_exporter_version: "1.5.1"
+nginx_exporter_version: v1.5.3
 
 # -- Packages ---------------------------------------------------------------
 ms_s1_packages:
