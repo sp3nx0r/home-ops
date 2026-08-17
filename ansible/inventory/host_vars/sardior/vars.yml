@@ -42,11 +42,8 @@ ollama_load_timeout: 30m
 ollama_flash_attention: true
 ollama_api_key: "{{ vault_ollama_api_key }}"
 ollama_models:
-  - qwen3-coder:30b
-  - qwen3.5:35b
-  - frob/qwen3.5-instruct:35b
-  - gemma4:e4b
-  - gemma3:27b
+  - qwen3-coder-next:30b
+  - qwen3.8:28b
 
 # -- Bun --------------------------------------------------------------------
 # renovate: datasource=github-releases depName=oven-sh/bun
