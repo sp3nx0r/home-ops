@@ -67,7 +67,7 @@ The way Flux works for me here is it will recursively search the `kubernetes/app
 │   ├── 📁 kube-system     # cilium, coredns, spegel, reloader, etc.
 │   ├── 📁 media           # plex, tautulli, arr stack
 │   ├── 📁 network         # envoy-gateway, cloudflared, external-dns
-│   └── 📁 o11y            # prometheus, grafana, alertmanager, unpoller
+│   └── 📁 o11y            # prometheus, grafana, alertmanager, kromgo, unpoller
 ├── 📁 bootstrap      # bootstrap resources
 └── 📁 flux           # flux system configuration
 📁 talos              # talos machine configuration
@@ -89,6 +89,7 @@ The monitoring stack is built on [kube-prometheus-stack](https://github.com/prom
 - **Prometheus** - Metrics collection with 14-day retention
 - **Alertmanager** - Critical alerts routed to Discord
 - **Grafana** - Dashboards for Cilium, Envoy, Flux, External DNS, Node Exporter, Cert Manager, UniFi, and more
+- **Kromgo** - Prometheus-backed SVG badges for live Talos, Kubernetes, and Flux versions (README badges and gallery at `kromgo.securimancy.com`)
 - **Unpoller** - UniFi network metrics exporter
 - **TrueNAS Exporter** - NAS metrics via WebSocket API
 - **Flux Notifications** - Error-level reconciliation events sent to Discord

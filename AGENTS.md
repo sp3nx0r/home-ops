@@ -60,7 +60,7 @@ kubernetes/apps/<namespace>/<app-name>/
 |------------------|------------------------------------------------------------|
 | `media`          | Media stack — Plex, Sonarr, Radarr, qBittorrent, etc.     |
 | `network`        | Ingress, DNS, tunnels — Envoy Gateway, Cloudflare, CoreDNS |
-| `o11y`           | Observability — Grafana, Loki, Prometheus, Vector          |
+| `o11y`           | Observability — Grafana, Loki, Prometheus, Kromgo, Vector  |
 | `security`       | Auth — Pocket ID (OIDC)                                    |
 | `storage`        | Distributed storage — Garage (S3)                          |
 | `cert-manager`   | TLS certificate automation                                 |

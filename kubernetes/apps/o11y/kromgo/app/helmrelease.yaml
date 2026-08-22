@@ -44,6 +44,11 @@ spec:
           sectionName: https
       hostnames:
         - "kromgo.${SECRET_DOMAIN}"
+    monitoring:
+      serviceMonitor:
+        enabled: true
+        interval: 30s
+        scrapeTimeout: 10s
     resources:
       requests:
         cpu: 10m
