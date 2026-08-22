@@ -88,6 +88,8 @@ spec:
         hostnames:
           - "plex.${SECRET_DOMAIN}"
         parentRefs:
+          - name: envoy-internal
+            namespace: network
           - name: envoy-external
             namespace: network
         rules:
