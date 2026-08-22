@@ -78,7 +78,12 @@ The way Flux works for me here is it will recursively search the `kubernetes/app
 
 ## DNS
 
-Two instances of [ExternalDNS](https://github.com/kubernetes-sigs/external-dns) are running in the cluster. One syncs private DNS records to my UniFi Dream Machine using [external-dns-unifi-webhook](https://github.com/kashalls/external-dns-unifi-webhook), while the other syncs public DNS to Cloudflare. This is managed by creating `HTTPRoute` resources with the appropriate `envoy-internal` or `envoy-external` gateway references.
+Two instances of [ExternalDNS](https://github.com/kubernetes-sigs/external-dns) are running in the cluster:
+
+- **Cloudflare** (`cloudflare-external-dns`) — public DNS for `HTTPRoute` resources on the `envoy-external` gateway.
+- **UniFi** (`unifi-external-dns`) — private DNS on the Dream Machine for `envoy-internal` routes, plus static records in `kubernetes/apps/network/unifi-dns/app/dnsendpoint.yaml`.
+
+When adding a new **`envoy-external`** hostname, Cloudflare DNS is automatic, but **Gatus still needs a private DNS record** — it probes from inside the cluster via CoreDNS → UniFi, which does not sync external routes. Add a CNAME to `external.securimancy.com` in `dnsendpoint.yaml` (see `kromgo.securimancy.com` for the pattern). Without it, the service may work publicly while Gatus and Alertmanager report it down.
 
 ---
 

@@ -27,3 +27,7 @@ spec:
       recordType: A
       targets:
         - 192.168.5.22
+    - dnsName: kromgo.securimancy.com
+      recordType: CNAME
+      targets:
+        - external.securimancy.com
