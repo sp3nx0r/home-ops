@@ -22,7 +22,7 @@ spec:
             env:
               TZ: America/Chicago
               PLEX_ADVERTISE_URL: http://192.168.5.21:32400,https://plex.${SECRET_DOMAIN}:443,http://plex.media.svc.cluster.local:32400
-              PLEX_NO_AUTH_NETWORKS: 192.168.1.0/24,192.168.5.0/24
+              PLEX_NO_AUTH_NETWORKS: 192.168.0.0/24,192.168.1.0/24,192.168.5.0/24
             probes:
               liveness:
                 enabled: true
