@@ -1,4 +1,6 @@
 ---
+# Recyclarr sync for TRaSH Guides quality profiles and custom formats.
+# LG Direct Play goal: prefer AAC / EAC3 (DD+), avoid DTS / TrueHD / FLAC / PCM.
 sonarr:
   series:
     base_url: http://sonarr.media.svc.cluster.local
@@ -21,29 +23,105 @@ sonarr:
       type: series
 
     quality_profiles:
-      - trash_id: 72dae194fc92bf828f32cde7744e51a1
+      - trash_id: 72dae194fc92bf828f32cde7744e51a1 # WEB-1080p (default for LG)
         reset_unmatched_scores:
           enabled: true
-      - trash_id: d1498e7d189fbe6c7110ceaabb7473e6
+      - trash_id: d1498e7d189fbe6c7110ceaabb7473e6 # WEB-2160p (selective / premium)
         reset_unmatched_scores:
           enabled: true
 
+    custom_format_groups:
+      add:
+        - trash_id: d920fd959d220306888f40b6f38e1578 # Season Packs
+          assign_scores_to:
+            - trash_id: 72dae194fc92bf828f32cde7744e51a1
+            - trash_id: d1498e7d189fbe6c7110ceaabb7473e6
+        - trash_id: 158188097a58d7687dee647e04af0da3 # Golden Rule HD
+          assign_scores_to:
+            - trash_id: 72dae194fc92bf828f32cde7744e51a1
+            - trash_id: d1498e7d189fbe6c7110ceaabb7473e6
+
     custom_formats:
+      # Release quality
       - trash_ids:
-          - 5d9fd1b1e06cd8a475462f40214b7df6
+          - 5d9fd1b1e06cd8a475462f40214b7df6 # FLUX
         assign_scores_to:
           - trash_id: 72dae194fc92bf828f32cde7744e51a1
             score: 100
           - trash_id: d1498e7d189fbe6c7110ceaabb7473e6
             score: 100
       - trash_ids:
-          - 32b367365729d530ca1c124a0b180c64
-          - 82d40da2bc6923f41e14394075dd4b03
-          - e1a997ddb54e3ecbfe06341ad323c458
-          - 06d66ab109d4d2eddb2794d21526d140
+          - 32b367365729d530ca1c124a0b180c64 # Bad Dual Groups
+          - 82d40da2bc6923f41e14394075dd4b03 # No-RlsGroup
+          - e1a997ddb54e3ecbfe06341ad323c458 # Obfuscated
+          - 06d66ab109d4d2eddb2794d21526d140 # Retags
         assign_scores_to:
           - trash_id: 72dae194fc92bf828f32cde7744e51a1
           - trash_id: d1498e7d189fbe6c7110ceaabb7473e6
+
+      # Season packs (boost for seasonpackerr)
+      - trash_ids:
+          - 3bc5f395426614e155e585a2f056cdf1 # Season Pack
+        assign_scores_to:
+          - trash_id: 72dae194fc92bf828f32cde7744e51a1
+            score: 100
+          - trash_id: d1498e7d189fbe6c7110ceaabb7473e6
+            score: 100
+
+      # LG Direct Play: prefer AAC and EAC3 (DD+)
+      - trash_ids:
+          - a50b8a0c62274a7c38b09a9619ba9d86 # AAC
+        assign_scores_to:
+          - trash_id: 72dae194fc92bf828f32cde7744e51a1
+            score: 3000
+          - trash_id: d1498e7d189fbe6c7110ceaabb7473e6
+            score: 3000
+      - trash_ids:
+          - 63487786a8b01b7f20dd2bc90dd4a477 # DD+ / EAC3
+        assign_scores_to:
+          - trash_id: 72dae194fc92bf828f32cde7744e51a1
+            score: 500
+          - trash_id: d1498e7d189fbe6c7110ceaabb7473e6
+            score: 500
+
+      # LG Direct Play: avoid audio that forces Plex remux on the TV
+      - trash_ids:
+          - 5964f2a8b3be407d083498e4459d05d0 # DTS
+          - c429417a57ea8c41d57e6990a8b0033f # DTS-HD MA
+          - cfa5fbd8f02a86fc55d8d223d06a5e1f # DTS-HD HRA
+          - c1a25cd67b5d2e08287c957b1eb903ec # DTS-ES
+          - 9d00418ba386a083fbf4d58235fc37ef # DTS X
+          - 1808e4b9cee74e064dfae3f1db99dbfe # TrueHD
+          - 0d7824bb924701997f874e7ff7d4844a # TrueHD ATMOS
+        assign_scores_to:
+          - trash_id: 72dae194fc92bf828f32cde7744e51a1
+            score: -15000
+          - trash_id: d1498e7d189fbe6c7110ceaabb7473e6
+            score: -15000
+      - trash_ids:
+          - 851bd64e04c9374c51102be3dd9ae4cc # FLAC
+          - 30f70576671ca933adbdcfc736a69718 # PCM
+        assign_scores_to:
+          - trash_id: 72dae194fc92bf828f32cde7744e51a1
+            score: -10000
+          - trash_id: d1498e7d189fbe6c7110ceaabb7473e6
+            score: -10000
+
+      # HDR: avoid DV without HDR10 fallback on 2160p profile
+      - trash_ids:
+          - 9b27ab6498ec0f31a3353992e19434ca # DV (w/o HDR fallback)
+        assign_scores_to:
+          - trash_id: d1498e7d189fbe6c7110ceaabb7473e6
+            score: -10000
+
+      # Prefer HEVC when otherwise equal (LG Direct Plays HEVC well)
+      - trash_ids:
+          - 47435ece6b99a0b477caf360e79ba0bb # x265 (HD)
+        assign_scores_to:
+          - trash_id: 72dae194fc92bf828f32cde7744e51a1
+            score: 300
+          - trash_id: d1498e7d189fbe6c7110ceaabb7473e6
+            score: 300
 
 radarr:
   movies:
@@ -64,18 +142,78 @@ radarr:
       type: sqp-uhd
 
     quality_profiles:
-      - trash_id: 5128baeb2b081b72126bc8482b2a86a0
+      - trash_id: 90a3370d2d30cbaf08d9c23b856a12c8 # [SQP] SQP-1 WEB (1080p) — LG default
+        reset_unmatched_scores:
+          enabled: true
+      - trash_id: 5128baeb2b081b72126bc8482b2a86a0 # [SQP] SQP-1 (2160p) — premium
         reset_unmatched_scores:
           enabled: true
 
+    custom_format_groups:
+      add:
+        - trash_id: ff204bbcecdd487d1cefcefdbf0c278d # Golden Rule UHD
+          assign_scores_to:
+            - trash_id: 5128baeb2b081b72126bc8482b2a86a0
+        - trash_id: f8bf8eab4617f12dfdbd16303d8da245 # Golden Rule HD
+          assign_scores_to:
+            - trash_id: 90a3370d2d30cbaf08d9c23b856a12c8
+
     custom_formats:
+      # Release quality
       - trash_ids:
-          - 957d0f44b592285f26449575e8b1167e
-          - b6832f586342ef70d9c128d40c07b872
-          - cc444569854e9de0b084ab2b8b1532b2
-          - ae9b7c9ebde1f3bd336a8cbd1ec4c5e5
-          - 7357cf5161efbf8c4d5d0c30b4815ee2
-          - 5c44f52a8714fdd79bb4d98e2673be1f
-          - f537cf427b64c38c8e36298f657e4828
+          - 957d0f44b592285f26449575e8b1167e # Special Edition
+          - b6832f586342ef70d9c128d40c07b872 # Bad Dual Groups
+          - cc444569854e9de0b084ab2b8b1532b2 # Black and White Editions
+          - ae9b7c9ebde1f3bd336a8cbd1ec4c5e5 # No-RlsGroup
+          - 7357cf5161efbf8c4d5d0c30b4815ee2 # Obfuscated
+          - 5c44f52a8714fdd79bb4d98e2673be1f # Retags
+          - f537cf427b64c38c8e36298f657e4828 # Scene
+        assign_scores_to:
+          - trash_id: 90a3370d2d30cbaf08d9c23b856a12c8
+          - trash_id: 5128baeb2b081b72126bc8482b2a86a0
+
+      # LG Direct Play: prefer AAC and EAC3 (DD+)
+      - trash_ids:
+          - 240770601cc226190c367ef59aba7463 # AAC
+        assign_scores_to:
+          - trash_id: 90a3370d2d30cbaf08d9c23b856a12c8
+            score: 3000
+          - trash_id: 5128baeb2b081b72126bc8482b2a86a0
+            score: 3000
+      - trash_ids:
+          - 185f1dd7264c4562b9022d963ac37424 # DD+ / EAC3
+        assign_scores_to:
+          - trash_id: 90a3370d2d30cbaf08d9c23b856a12c8
+            score: 500
+          - trash_id: 5128baeb2b081b72126bc8482b2a86a0
+            score: 500
+
+      # LG Direct Play: avoid audio that forces Plex remux on the TV
+      - trash_ids:
+          - 1c1a4c5e823891c75bc50380a6866f73 # DTS
+          - dcf3ec6938fa32445f590a4da84256cd # DTS-HD MA
+          - 8e109e50e0a0b83a5098b056e13bf6db # DTS-HD HRA
+          - f9f847ac70a0af62ea4a08280b859636 # DTS-ES
+          - 2f22d89048b01681dde8afe203bf2e95 # DTS X
+          - 3cafb66171b47f226146a0770576870f # TrueHD
+          - 496f355514737f7d83bf7aa4d24f8169 # TrueHD ATMOS
+        assign_scores_to:
+          - trash_id: 90a3370d2d30cbaf08d9c23b856a12c8
+            score: -15000
+          - trash_id: 5128baeb2b081b72126bc8482b2a86a0
+            score: -15000
+      - trash_ids:
+          - a570d4a0e56a2874b64e5bfa55202a1b # FLAC
+          - e7c2fcae07cbada050a0af3357491d7b # PCM
+        assign_scores_to:
+          - trash_id: 90a3370d2d30cbaf08d9c23b856a12c8
+            score: -10000
+          - trash_id: 5128baeb2b081b72126bc8482b2a86a0
+            score: -10000
+
+      # HDR: avoid DV without HDR10 fallback on 2160p profile
+      - trash_ids:
+          - 923b6abef9b17f937fab56cfcf89e1f1 # DV (w/o HDR fallback)
         assign_scores_to:
           - trash_id: 5128baeb2b081b72126bc8482b2a86a0
+            score: -10000
