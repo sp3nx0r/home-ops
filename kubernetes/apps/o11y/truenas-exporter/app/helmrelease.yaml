@@ -16,7 +16,7 @@ spec:
           app:
             image:
               repository: ghcr.io/unknowlars/truenas-scale-api-prometheus-exporter
-              tag: latest
+              tag: 2026.03.29-bf8ede9@sha256:1fb579d1f17908e60208d197b709f6299604d9b727342d09c0d4d8a147b4a6a5
             env:
               TZ: America/Chicago
               PYTHONDONTWRITEBYTECODE: "1"

@@ -8,8 +8,8 @@ tasks:
     interactive: true
     cmd: >-
       kubectl run -n {{.NS}} browse-pvc-{{.CLAIM}} -it --rm --restart=Never
-      --image=docker.io/library/alpine:latest
-      --overrides='{"spec":{"containers":[{"name":"browse-pvc-{{.CLAIM}}","image":"docker.io/library/alpine:latest","stdin":true,"tty":true,"command":["/bin/sh"],"workingDir":"/mnt","volumeMounts":[{"mountPath":"/mnt","name":"data"}]}],"volumes":[{"name":"data","persistentVolumeClaim":{"claimName":"{{.CLAIM}}"}}]}}'
+      --image=docker.io/library/alpine:3.24.1@sha256:79ff19e9084a00eece421b2523fb93e22d730e2c0e525905de047e848e56d95f
+      --overrides='{"spec":{"containers":[{"name":"browse-pvc-{{.CLAIM}}","image":"docker.io/library/alpine:3.24.1@sha256:79ff19e9084a00eece421b2523fb93e22d730e2c0e525905de047e848e56d95f","stdin":true,"tty":true,"command":["/bin/sh"],"workingDir":"/mnt","volumeMounts":[{"mountPath":"/mnt","name":"data"}]}],"volumes":[{"name":"data","persistentVolumeClaim":{"claimName":"{{.CLAIM}}"}}]}}'
     vars:
       NS: '{{.NS | default "default"}}'
     requires:

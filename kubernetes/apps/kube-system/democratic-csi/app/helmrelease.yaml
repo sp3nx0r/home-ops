@@ -14,6 +14,10 @@ spec:
         name: democratic-csi
   interval: 1h
   values:
+    controller:
+      driver:
+        image:
+          tag: latest@sha256:944d0e65077efbd9c1fdf23997eec8fac4b4bfb7c3de400f63a0a849c5ced
     csiDriver:
       name: org.democratic-csi.iscsi
     storageClasses:
@@ -29,6 +33,8 @@ spec:
     node:
       hostPID: true
       driver:
+        image:
+          tag: latest@sha256:944d0e65077efbd9c1fdf23997eec8fac4b4bfb7c3de400f63a0a849c5ced
         extraEnv:
           - name: ISCSIADM_HOST_STRATEGY
             value: nsenter

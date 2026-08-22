@@ -16,8 +16,7 @@ spec:
           app:
             image:
               repository: atdr.meo.ws/archiveteam/warrior-dockerfile
-              tag: latest
-              pullPolicy: Always
+              tag: latest@sha256:ef212e47037a8de8425cc3f56629890d3e0aad7b630ddbc8aff0189e3efa2e37
             env:
               DOWNLOADER: securimancer
               WARRIOR_ID: securimancer
