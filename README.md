@@ -8,9 +8,9 @@ _... managed with Flux, Renovate, and GitHub Actions_
 
 <div align="center">
 
-[![Talos](https://img.shields.io/badge/talos-v1.13.0-blue?style=for-the-badge&logo=talos&logoColor=white)](https://talos.dev)&nbsp;&nbsp;
-[![Kubernetes](https://img.shields.io/badge/kubernetes-v1.35.4-blue?style=for-the-badge&logo=kubernetes&logoColor=white)](https://kubernetes.io)&nbsp;&nbsp;
-[![Flux](https://img.shields.io/badge/flux-v2.8.6-blue?style=for-the-badge&logo=flux&logoColor=white)](https://fluxcd.io)&nbsp;&nbsp;
+[![Talos](https://kromgo.securimancy.com/badges/talos_version)](https://talos.dev)&nbsp;&nbsp;
+[![Kubernetes](https://kromgo.securimancy.com/badges/kubernetes_version)](https://kubernetes.io)&nbsp;&nbsp;
+[![Flux](https://kromgo.securimancy.com/badges/flux_version)](https://fluxcd.io)&nbsp;&nbsp;
 [![Renovate](https://img.shields.io/badge/renovate-enabled-blue?style=for-the-badge&logo=renovatebot&logoColor=white)](https://github.com/sp3nx0r/home-ops/issues?q=label%3Arenovate)
 
 </div>
@@ -67,7 +67,7 @@ The way Flux works for me here is it will recursively search the `kubernetes/app
 │   ├── 📁 kube-system     # cilium, coredns, spegel, reloader, etc.
 │   ├── 📁 media           # plex, tautulli, arr stack
 │   ├── 📁 network         # envoy-gateway, cloudflared, external-dns
-│   └── 📁 o11y            # prometheus, grafana, alertmanager, unpoller
+│   └── 📁 o11y            # prometheus, grafana, alertmanager, kromgo, unpoller
 ├── 📁 bootstrap      # bootstrap resources
 └── 📁 flux           # flux system configuration
 📁 talos              # talos machine configuration
@@ -89,6 +89,7 @@ The monitoring stack is built on [kube-prometheus-stack](https://github.com/prom
 - **Prometheus** - Metrics collection with 14-day retention
 - **Alertmanager** - Critical alerts routed to Discord
 - **Grafana** - Dashboards for Cilium, Envoy, Flux, External DNS, Node Exporter, Cert Manager, UniFi, and more
+- **Kromgo** - Prometheus-backed SVG badges for live Talos, Kubernetes, and Flux versions (README badges and gallery at `kromgo.securimancy.com`)
 - **Unpoller** - UniFi network metrics exporter
 - **TrueNAS Exporter** - NAS metrics via WebSocket API
 - **Flux Notifications** - Error-level reconciliation events sent to Discord
