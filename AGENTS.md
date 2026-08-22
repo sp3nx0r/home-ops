@@ -82,6 +82,7 @@ kubernetes/apps/<namespace>/<app-name>/
 - **Gateway API** via Envoy Gateway, not legacy Ingress resources.
 - HelmRelease values use `route:` (from app-template) with `parentRefs` pointing to gateway names in the `network` namespace.
 - Gatus health checks are configured via annotations: `gatus.home-operations.com/endpoint`.
+- **`envoy-external` + Gatus**: Cloudflare external-dns publishes public records automatically, but UniFi private DNS only syncs `envoy-internal` routes. Gatus probes from inside the cluster, so each new external hostname also needs a UniFi CNAME in `kubernetes/apps/network/unifi-dns/app/dnsendpoint.yaml` (typically to `external.${SECRET_DOMAIN}`).
 - LoadBalancer IPs are assigned via Cilium L2 announcements: `lbipam.cilium.io/ips` annotation.
 
 ## Secrets and Encryption
