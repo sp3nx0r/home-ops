@@ -5,6 +5,8 @@ metadata:
   name: volsync-test
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: volsync-test
