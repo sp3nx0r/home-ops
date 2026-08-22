@@ -8,9 +8,9 @@ _... managed with Flux, Renovate, and GitHub Actions_
 
 <div align="center">
 
-[![Talos](https://img.shields.io/badge/talos-v1.13.0-blue?style=for-the-badge&logo=talos&logoColor=white)](https://talos.dev)&nbsp;&nbsp;
-[![Kubernetes](https://img.shields.io/badge/kubernetes-v1.35.4-blue?style=for-the-badge&logo=kubernetes&logoColor=white)](https://kubernetes.io)&nbsp;&nbsp;
-[![Flux](https://img.shields.io/badge/flux-v2.8.6-blue?style=for-the-badge&logo=flux&logoColor=white)](https://fluxcd.io)&nbsp;&nbsp;
+[![Talos](https://kromgo.securimancy.com/badges/talos_version)](https://talos.dev)&nbsp;&nbsp;
+[![Kubernetes](https://kromgo.securimancy.com/badges/kubernetes_version)](https://kubernetes.io)&nbsp;&nbsp;
+[![Flux](https://kromgo.securimancy.com/badges/flux_version)](https://fluxcd.io)&nbsp;&nbsp;
 [![Renovate](https://img.shields.io/badge/renovate-enabled-blue?style=for-the-badge&logo=renovatebot&logoColor=white)](https://github.com/sp3nx0r/home-ops/issues?q=label%3Arenovate)
 
 </div>
