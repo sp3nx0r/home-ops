@@ -42,8 +42,6 @@ SecurityPolicy resources live alongside the apps they protect:
 ```
 kubernetes/apps/media/qui/app/securitypolicy.yaml
 kubernetes/apps/media/qui/app/oidc-secret.sops.yaml
-kubernetes/apps/zeroclaw/zeroclaw/app/securitypolicy.yaml
-kubernetes/apps/zeroclaw/zeroclaw/app/oidc-secret.sops.yaml
 ```
 
 Grafana uses native OIDC — no SecurityPolicy. Its client secret is in `grafana-secret`.
@@ -446,7 +444,6 @@ auth.generic_oauth:
 |-----------|-----------|-------------------------|-------------------------------------------|
 | Grafana | o11y | Native `generic_oauth` | Role mapping via `grafana_admin` group |
 | Qui | media | Envoy SecurityPolicy | Gateway-level OIDC |
-| Zeroclaw | zeroclaw | Envoy SecurityPolicy | Gateway-level OIDC |
 
 Apps without SecurityPolicies (e.g., Plex, Headlamp, OpenWebUI) remain accessible without authentication.
 

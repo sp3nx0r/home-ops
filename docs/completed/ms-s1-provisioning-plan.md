@@ -43,23 +43,6 @@ The MS-S1 originally ran Proxmox VE with two unprivileged LXC containers:
   hell, no idempotency, no proper change detection
 - ~600-line playbook dominated by indirection
 
-### OpenClaw → ZeroClaw in Kubernetes
-
-OpenClaw (CT 101) was the only reason the MS-S1 needed multi-container management,
-a firewall, and Proxmox. With a functioning 3-node Talos cluster, the AI agent
-workload moves to Kubernetes as ZeroClaw:
-
-| Concern | Proxmox (old) | Kubernetes (new) |
-|---------|---------------|------------------|
-| Network isolation | Proxmox `.fw` files | CiliumNetworkPolicy (declarative, version-controlled) |
-| Persistent storage | LXC rootfs on local-lvm | iSCSI PVC on HL8 NAS + VolSync snapshots |
-| Backup | rsync-to-git cron hack | VolSync + Backblaze B2 (existing pipeline) |
-| Scheduling | Pinned to MS-S1 | Any of 3 MS-A2 nodes (16C/32T, 32 GB each) |
-| Updates | SSH + `pct exec` | Container image via Renovate + Flux |
-| Management model | Ansible playbook | GitOps (same as all other workloads) |
-
-With OpenClaw gone, the MS-S1 becomes a single-purpose Ollama inference server.
-
 ### Why Ubuntu 26.04 LTS
 
 - **Kernel 7.0** — latest AMD GPU support for RDNA 3.5 (Radeon 8060S)
@@ -75,7 +58,7 @@ With OpenClaw gone, the MS-S1 becomes a single-purpose Ollama inference server.
 Talos Cluster (MS-A2 ×3)
 ┌──────────────────────────────────────────┐
 │  Open WebUI ──→ ollama.securimancy.com   │
-│  ZeroClaw   ──→ ollama.securimancy.com   │
+│  Hermes Agent─→ ollama.securimancy.com   │
 │                    │                     │
 │  envoy-internal ───┘                     │
 │    (TLS termination, wildcard cert)      │
@@ -83,7 +66,7 @@ Talos Cluster (MS-A2 ×3)
 │  ollama-proxy Service ──→ 192.168.5.70   │
 │    (EndpointSlice)          :11435       │
 │                                          │
-│  (CiliumNetworkPolicy on ZeroClaw        │
+│  (CiliumNetworkPolicy on agent           │
 │   restricts egress, allows Ollama)       │
 └──────────────────────────────────────────┘
             │
@@ -97,7 +80,7 @@ sardior (MS-S1 MAX) — 192.168.5.70
 └── LUKS + TPM2 auto-unlock (Clevis, PCR7/sha256)
 
 HL8 NAS (TrueNAS SCALE) — 192.168.5.40
-  └── iSCSI PVCs for ZeroClaw persistent data
+  └── iSCSI PVCs for agent persistent data
   └── NFS exports for k8s workloads
   └── NUT server (UPS monitoring)
 ```
