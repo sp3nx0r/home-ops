@@ -4,6 +4,9 @@
 
 **ISCSIVolumeReadOnly** — an ext4 filesystem on a Democratic-CSI iSCSI volume has device errors, indicating the filesystem was remounted read-only (`emergency_ro`) or encountered I/O failures.
 
+For planned TrueNAS upgrades, use [runbook-truenas-upgrade.md](runbook-truenas-upgrade.md)
+to preemptively drain iSCSI workloads and avoid this failure mode.
+
 ## When this fires
 
 The Linux kernel detected I/O errors or an aborted ext4 journal on an iSCSI-backed PVC. The `node_filesystem_device_error` metric reports `1` for affected volumes. Common triggers:

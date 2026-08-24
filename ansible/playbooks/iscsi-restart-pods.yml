@@ -1,12 +1,14 @@
 ---
-# Restart workloads using iSCSI-backed PVCs.
-# Used after TrueNAS reboot / iSCSI reconnection to force volume unstage/restage
-# and e2fsck recovery (requires checkFilesystem enabled in democratic-csi).
+# Manage workloads using iSCSI-backed PVCs during NAS maintenance.
+# Used before/after TrueNAS reboot to cleanly unstage volumes and run
+# e2fsck recovery on restage (requires checkFilesystem in democratic-csi).
 #
 # Usage:
-#   task ansible:iscsi:restart
+#   task ansible:iscsi:drain     # pre-upgrade: scale down + save state
+#   task ansible:iscsi:restore   # post-upgrade: scale up from saved state
+#   task ansible:iscsi:restart   # all-in-one drain + restore (post-outage recovery)
 #
-- name: Restart workloads on iSCSI volumes
+- name: Manage workloads on iSCSI volumes
   hosts: localhost
   connection: local
   gather_facts: false
@@ -15,314 +17,492 @@
     storage_class: iscsi
     grace_period: 30
     confirm_restart: "{{ lookup('pipe', 'test -t 0 && echo true || echo false') | bool }}"
+    maintenance_mode: full
+    state_file: "{{ lookup('env', 'HOME') }}/.cache/home-ops/iscsi-maintenance-state.json"
     volsync_controller_namespace: volsync-system
     volsync_controller_deployment: volsync
+    operator_workloads:
+      - namespace: o11y
+        api_version: monitoring.coreos.com/v1
+        kind: Prometheus
+        name: kube-prometheus-stack
+        statefulset_name: prometheus-kube-prometheus-stack
 
   tasks:
-    - name: Capture current VolSync controller replica count
-      ansible.builtin.command:
-        cmd: >-
-          kubectl --namespace {{ volsync_controller_namespace }}
-          get deployment {{ volsync_controller_deployment }}
-          --output=jsonpath={.spec.replicas}
-      register: _volsync_replicas
-      changed_when: false
+    - name: Validate maintenance mode
+      ansible.builtin.assert:
+        that:
+          - maintenance_mode in ['full', 'drain', 'restore']
+        fail_msg: "maintenance_mode must be full, drain, or restore"
 
-    - name: Record original VolSync controller replica count
-      ansible.builtin.set_fact:
-        _original_volsync_replicas: "{{ (_volsync_replicas.stdout | default('1', true)) | int }}"
+    - name: Load saved maintenance state
+      when: maintenance_mode == 'restore'
+      block:
+        - name: Check maintenance state file exists
+          ansible.builtin.stat:
+            path: "{{ state_file }}"
+          register: _state_stat
 
-    - name: Scale VolSync controller down
-      ansible.builtin.command:
-        cmd: >-
-          kubectl --namespace {{ volsync_controller_namespace }}
-          scale deployment/{{ volsync_controller_deployment }} --replicas=0
-      changed_when: true
-      when: _original_volsync_replicas | int > 0
+        - name: Fail if maintenance state file is missing
+          ansible.builtin.fail:
+            msg: >-
+              State file {{ state_file }} not found.
+              Run `task ansible:iscsi:drain` before restore.
+          when: not _state_stat.stat.exists
 
-    - name: Wait for VolSync controller scale down
-      ansible.builtin.command:
-        cmd: >-
-          kubectl --namespace {{ volsync_controller_namespace }}
-          rollout status deployment/{{ volsync_controller_deployment }} --timeout=120s
-      changed_when: false
-      when: _original_volsync_replicas | int > 0
+        - name: Read maintenance state file
+          ansible.builtin.slurp:
+            src: "{{ state_file }}"
+          register: _state_slurp
+
+        - name: Parse maintenance state
+          ansible.builtin.set_fact:
+            _iscsi_restart: "{{ _state_slurp.content | b64decode | from_json }}"
+            _original_volsync_replicas: "{{ (_state_slurp.content | b64decode | from_json).volsync_replicas | default(1) | int }}"
 
     - name: Discover iSCSI-backed workloads
-      ansible.builtin.command:
-        cmd: python3 -
-        stdin: |
-          import json
-          import subprocess
+      when: maintenance_mode in ['full', 'drain']
+      block:
+        - name: Capture current VolSync controller replica count
+          ansible.builtin.command:
+            cmd: >-
+              kubectl --namespace {{ volsync_controller_namespace }}
+              get deployment {{ volsync_controller_deployment }}
+              --output=jsonpath={.spec.replicas}
+          register: _volsync_replicas
+          changed_when: false
 
-          storage_class = "{{ storage_class }}"
+        - name: Record original VolSync controller replica count
+          ansible.builtin.set_fact:
+            _original_volsync_replicas: "{{ (_volsync_replicas.stdout | default('1', true)) | int }}"
 
-          def kubectl(*args):
-              return json.loads(subprocess.check_output(["kubectl", *args], text=True))
+        - name: Discover iSCSI-backed workloads
+          ansible.builtin.command:
+            cmd: python3 -
+            stdin: |
+              import json
+              import subprocess
 
-          pvs = kubectl("get", "pv", "-o", "json")["items"]
-          pods = kubectl("get", "pods", "--all-namespaces", "-o", "json")["items"]
-          replicasets = kubectl("get", "replicasets", "--all-namespaces", "-o", "json")["items"]
-          deployments = kubectl("get", "deployments", "--all-namespaces", "-o", "json")["items"]
-          statefulsets = kubectl("get", "statefulsets", "--all-namespaces", "-o", "json")["items"]
+              storage_class = "{{ storage_class }}"
 
-          iscsi_pvcs = set()
-          for pv in pvs:
-              spec = pv.get("spec", {})
-              claim = spec.get("claimRef")
-              if spec.get("storageClassName") == storage_class and claim:
-                  iscsi_pvcs.add((claim["namespace"], claim["name"]))
+              def kubectl(*args):
+                  return json.loads(subprocess.check_output(["kubectl", *args], text=True))
 
-          replicaset_owner = {}
-          for rs in replicasets:
-              namespace = rs["metadata"]["namespace"]
-              name = rs["metadata"]["name"]
-              for owner in rs["metadata"].get("ownerReferences", []):
-                  if owner.get("controller") and owner.get("kind") == "Deployment":
-                      replicaset_owner[(namespace, name)] = owner["name"]
+              pvs = kubectl("get", "pv", "-o", "json")["items"]
+              pods = kubectl("get", "pods", "--all-namespaces", "-o", "json")["items"]
+              replicasets = kubectl("get", "replicasets", "--all-namespaces", "-o", "json")["items"]
+              deployments = kubectl("get", "deployments", "--all-namespaces", "-o", "json")["items"]
+              statefulsets = kubectl("get", "statefulsets", "--all-namespaces", "-o", "json")["items"]
 
-          replica_count = {}
-          for deployment in deployments:
-              namespace = deployment["metadata"]["namespace"]
-              name = deployment["metadata"]["name"]
-              replica_count[(namespace, "deployment", name)] = deployment.get("spec", {}).get("replicas", 1)
+              iscsi_pvcs = set()
+              for pv in pvs:
+                  spec = pv.get("spec", {})
+                  claim = spec.get("claimRef")
+                  if spec.get("storageClassName") == storage_class and claim:
+                      iscsi_pvcs.add((claim["namespace"], claim["name"]))
 
-          for statefulset in statefulsets:
-              namespace = statefulset["metadata"]["namespace"]
-              name = statefulset["metadata"]["name"]
-              replica_count[(namespace, "statefulset", name)] = statefulset.get("spec", {}).get("replicas", 1)
+              replicaset_owner = {}
+              for rs in replicasets:
+                  namespace = rs["metadata"]["namespace"]
+                  name = rs["metadata"]["name"]
+                  for owner in rs["metadata"].get("ownerReferences", []):
+                      if owner.get("controller") and owner.get("kind") == "Deployment":
+                          replicaset_owner[(namespace, name)] = owner["name"]
 
-          workloads = {}
-          affected_pods = []
-          orphan_jobs = {}
-          orphan_pods = []
+              replica_count = {}
+              for deployment in deployments:
+                  namespace = deployment["metadata"]["namespace"]
+                  name = deployment["metadata"]["name"]
+                  replica_count[(namespace, "deployment", name)] = deployment.get("spec", {}).get("replicas", 1)
 
-          for pod in pods:
-              phase = pod.get("status", {}).get("phase")
-              if phase in {"Succeeded", "Failed"}:
-                  continue
+              for statefulset in statefulsets:
+                  namespace = statefulset["metadata"]["namespace"]
+                  name = statefulset["metadata"]["name"]
+                  replica_count[(namespace, "statefulset", name)] = statefulset.get("spec", {}).get("replicas", 1)
 
-              namespace = pod["metadata"]["namespace"]
-              name = pod["metadata"]["name"]
-              uses_iscsi = False
+              workloads = {}
+              affected_pods = []
+              orphan_jobs = {}
+              orphan_pods = []
 
-              for volume in pod.get("spec", {}).get("volumes", []):
-                  claim = volume.get("persistentVolumeClaim")
-                  if claim and (namespace, claim["claimName"]) in iscsi_pvcs:
-                      uses_iscsi = True
-                      break
+              for pod in pods:
+                  phase = pod.get("status", {}).get("phase")
+                  if phase in {"Succeeded", "Failed"}:
+                      continue
 
-              if not uses_iscsi:
-                  continue
+                  namespace = pod["metadata"]["namespace"]
+                  name = pod["metadata"]["name"]
+                  uses_iscsi = False
 
-              affected_pods.append({"namespace": namespace, "name": name})
-              owners = [
-                  owner for owner in pod["metadata"].get("ownerReferences", [])
-                  if owner.get("controller")
-              ]
+                  for volume in pod.get("spec", {}).get("volumes", []):
+                      claim = volume.get("persistentVolumeClaim")
+                      if claim and (namespace, claim["claimName"]) in iscsi_pvcs:
+                          uses_iscsi = True
+                          break
 
-              if not owners:
-                  orphan_pods.append({"namespace": namespace, "name": name})
-                  continue
+                  if not uses_iscsi:
+                      continue
 
-              owner = owners[0]
-              key = None
+                  affected_pods.append({"namespace": namespace, "name": name})
+                  owners = [
+                      owner for owner in pod["metadata"].get("ownerReferences", [])
+                      if owner.get("controller")
+                  ]
 
-              if owner["kind"] == "Job":
-                  orphan_jobs[(namespace, owner["name"])] = {
-                      "namespace": namespace,
-                      "name": owner["name"],
-                  }
-                  continue
+                  if not owners:
+                      orphan_pods.append({"namespace": namespace, "name": name})
+                      continue
 
-              if owner["kind"] == "ReplicaSet":
-                  deployment = replicaset_owner.get((namespace, owner["name"]))
-                  if deployment:
-                      key = (namespace, "deployment", deployment)
-              elif owner["kind"] == "StatefulSet":
-                  key = (namespace, "statefulset", owner["name"])
+                  owner = owners[0]
+                  key = None
 
-              if key:
-                  workloads[key] = {
-                      "namespace": key[0],
-                      "kind": key[1],
-                      "name": key[2],
-                      "replicas": replica_count.get(key, 1),
-                  }
-              else:
-                  orphan_pods.append({"namespace": namespace, "name": name})
+                  if owner["kind"] == "Job":
+                      orphan_jobs[(namespace, owner["name"])] = {
+                          "namespace": namespace,
+                          "name": owner["name"],
+                      }
+                      continue
 
-          print(json.dumps({
-              "pvc_count": len(iscsi_pvcs),
-              "workloads": sorted(workloads.values(), key=lambda item: (item["namespace"], item["kind"], item["name"])),
-              "affected_pods": sorted(affected_pods, key=lambda item: (item["namespace"], item["name"])),
-              "orphan_jobs": sorted(orphan_jobs.values(), key=lambda item: (item["namespace"], item["name"])),
-              "orphan_pods": sorted(orphan_pods, key=lambda item: (item["namespace"], item["name"])),
-          }))
-      register: _discovery
-      changed_when: false
+                  if owner["kind"] == "ReplicaSet":
+                      deployment = replicaset_owner.get((namespace, owner["name"]))
+                      if deployment:
+                          key = (namespace, "deployment", deployment)
+                  elif owner["kind"] == "StatefulSet":
+                      key = (namespace, "statefulset", owner["name"])
 
-    - name: Store discovery result
-      ansible.builtin.set_fact:
-        _iscsi_restart: "{{ _discovery.stdout | from_json }}"
+                  if key:
+                      workloads[key] = {
+                          "namespace": key[0],
+                          "kind": key[1],
+                          "name": key[2],
+                          "replicas": replica_count.get(key, 1),
+                      }
+                  else:
+                      orphan_pods.append({"namespace": namespace, "name": name})
 
-    - name: Display iSCSI PVC count
-      ansible.builtin.debug:
-        msg: "Found {{ _iscsi_restart.pvc_count }} iSCSI-backed PVCs"
+              print(json.dumps({
+                  "pvc_count": len(iscsi_pvcs),
+                  "workloads": sorted(workloads.values(), key=lambda item: (item["namespace"], item["kind"], item["name"])),
+                  "affected_pods": sorted(affected_pods, key=lambda item: (item["namespace"], item["name"])),
+                  "orphan_jobs": sorted(orphan_jobs.values(), key=lambda item: (item["namespace"], item["name"])),
+                  "orphan_pods": sorted(orphan_pods, key=lambda item: (item["namespace"], item["name"])),
+              }))
+          register: _discovery
+          changed_when: false
 
-    - name: End play if no iSCSI PVCs found
-      ansible.builtin.meta: end_play
-      when: _iscsi_restart.pvc_count | int == 0
+        - name: Store discovery result
+          ansible.builtin.set_fact:
+            _iscsi_restart: "{{ _discovery.stdout | from_json }}"
 
-    - name: End play if no affected workloads found
-      ansible.builtin.meta: end_play
-      when:
-        - _iscsi_restart.workloads | length == 0
-        - _iscsi_restart.orphan_jobs | length == 0
-        - _iscsi_restart.orphan_pods | length == 0
+        - name: Display iSCSI PVC count
+          ansible.builtin.debug:
+            msg: "Found {{ _iscsi_restart.pvc_count }} iSCSI-backed PVCs"
 
-    - name: Display affected workloads
-      ansible.builtin.debug:
-        msg: "Will restart {{ item.kind }}/{{ item.name }} in {{ item.namespace }}; original replicas={{ item.replicas }}"
-      loop: "{{ _iscsi_restart.workloads }}"
-      loop_control:
-        label: "{{ item.namespace }}/{{ item.kind }}/{{ item.name }}"
+        - name: End play if no iSCSI PVCs found
+          ansible.builtin.meta: end_play
+          when: _iscsi_restart.pvc_count | int == 0
 
-    - name: Display orphan jobs
-      ansible.builtin.debug:
-        msg: "Will delete orphan job {{ item.namespace }}/{{ item.name }}"
-      loop: "{{ _iscsi_restart.orphan_jobs }}"
-      loop_control:
-        label: "{{ item.namespace }}/{{ item.name }}"
+        - name: End play if no affected workloads found
+          ansible.builtin.meta: end_play
+          when:
+            - _iscsi_restart.workloads | length == 0
+            - _iscsi_restart.orphan_jobs | length == 0
+            - _iscsi_restart.orphan_pods | length == 0
 
-    - name: Display orphan pods
-      ansible.builtin.debug:
-        msg: "Will delete orphan pod {{ item.namespace }}/{{ item.name }}"
-      loop: "{{ _iscsi_restart.orphan_pods }}"
-      loop_control:
-        label: "{{ item.namespace }}/{{ item.name }}"
+        - name: Display affected workloads
+          ansible.builtin.debug:
+            msg: "Will manage {{ item.kind }}/{{ item.name }} in {{ item.namespace }}; original replicas={{ item.replicas }}"
+          loop: "{{ _iscsi_restart.workloads }}"
+          loop_control:
+            label: "{{ item.namespace }}/{{ item.kind }}/{{ item.name }}"
 
-    - name: Confirm restart
-      ansible.builtin.pause:
-        prompt: >-
-          About to scale down {{ _iscsi_restart.workloads | length }} workloads
-          and delete {{ _iscsi_restart.orphan_jobs | length }} orphan jobs
-          plus {{ _iscsi_restart.orphan_pods | length }} orphan pods.
-          Press Enter to continue or Ctrl+C to abort
-      when: confirm_restart | bool
+        - name: Display orphan jobs
+          ansible.builtin.debug:
+            msg: "Will delete orphan job {{ item.namespace }}/{{ item.name }}"
+          loop: "{{ _iscsi_restart.orphan_jobs }}"
+          loop_control:
+            label: "{{ item.namespace }}/{{ item.name }}"
 
-    - name: Scale down affected workloads
-      ansible.builtin.command:
-        cmd: >-
-          kubectl scale {{ item.kind }}/{{ item.name }}
-          -n {{ item.namespace }}
-          --replicas=0
-      loop: "{{ _iscsi_restart.workloads }}"
-      loop_control:
-        label: "{{ item.namespace }}/{{ item.kind }}/{{ item.name }}"
-      changed_when: true
+        - name: Display orphan pods
+          ansible.builtin.debug:
+            msg: "Will delete orphan pod {{ item.namespace }}/{{ item.name }}"
+          loop: "{{ _iscsi_restart.orphan_pods }}"
+          loop_control:
+            label: "{{ item.namespace }}/{{ item.name }}"
 
-    - name: Delete orphan jobs
-      ansible.builtin.command:
-        cmd: >-
-          kubectl delete job -n {{ item.namespace }} {{ item.name }}
-          --wait=false
-          --ignore-not-found=true
-      loop: "{{ _iscsi_restart.orphan_jobs }}"
-      loop_control:
-        label: "{{ item.namespace }}/{{ item.name }}"
-      changed_when: true
-      failed_when: false
+        - name: Confirm maintenance action
+          ansible.builtin.pause:
+            prompt: >-
+              About to scale down {{ _iscsi_restart.workloads | length }} workloads
+              and delete {{ _iscsi_restart.orphan_jobs | length }} orphan jobs
+              plus {{ _iscsi_restart.orphan_pods | length }} orphan pods.
+              Press Enter to continue or Ctrl+C to abort
+          when:
+            - confirm_restart | bool
+            - maintenance_mode in ['full', 'drain']
 
-    - name: Delete orphan pods
-      ansible.builtin.command:
-        cmd: >-
-          kubectl delete pod -n {{ item.namespace }} {{ item.name }}
-          --grace-period=0
-          --force
-          --wait=false
-          --ignore-not-found=true
-      loop: "{{ _iscsi_restart.orphan_pods }}"
-      loop_control:
-        label: "{{ item.namespace }}/{{ item.name }}"
-      changed_when: true
-      failed_when: false
+    - name: Drain iSCSI workloads
+      when: maintenance_mode in ['full', 'drain']
+      block:
+        - name: Scale VolSync controller down
+          ansible.builtin.command:
+            cmd: >-
+              kubectl --namespace {{ volsync_controller_namespace }}
+              scale deployment/{{ volsync_controller_deployment }} --replicas=0
+          changed_when: true
+          when: _original_volsync_replicas | int > 0
 
-    - name: Wait for affected pods to terminate
-      ansible.builtin.command:
-        cmd: >-
-          kubectl wait pod/{{ item.name }}
-          -n {{ item.namespace }}
-          --for=delete
-          --timeout=180s
-      loop: "{{ _iscsi_restart.affected_pods }}"
-      loop_control:
-        label: "{{ item.namespace }}/{{ item.name }}"
-      changed_when: false
-      failed_when: false
-      register: _pod_delete_wait
+        - name: Wait for VolSync controller scale down
+          ansible.builtin.command:
+            cmd: >-
+              kubectl --namespace {{ volsync_controller_namespace }}
+              rollout status deployment/{{ volsync_controller_deployment }} --timeout=120s
+          changed_when: false
+          when: _original_volsync_replicas | int > 0
 
-    - name: Scale up affected workloads
-      ansible.builtin.command:
-        cmd: >-
-          kubectl scale {{ item.kind }}/{{ item.name }}
-          -n {{ item.namespace }}
-          --replicas={{ item.replicas }}
-      loop: "{{ _iscsi_restart.workloads }}"
-      loop_control:
-        label: "{{ item.namespace }}/{{ item.kind }}/{{ item.name }}"
-      changed_when: true
+        - name: Scale down operator-managed workloads
+          ansible.builtin.command:
+            cmd: >-
+              kubectl --namespace {{ item.namespace }}
+              patch {{ item.kind | lower }} {{ item.name }}
+              --type merge
+              --patch '{"spec":{"replicas":0}}'
+          loop: "{{ operator_workloads }}"
+          loop_control:
+            label: "{{ item.namespace }}/{{ item.kind }}/{{ item.name }}"
+          changed_when: true
+          when: maintenance_mode in ['full', 'drain']
 
-    - name: Wait for affected workloads to roll out
-      ansible.builtin.command:
-        cmd: >-
-          kubectl rollout status {{ item.kind }}/{{ item.name }}
-          -n {{ item.namespace }}
-          --timeout=180s
-      loop: "{{ _iscsi_restart.workloads }}"
-      loop_control:
-        label: "{{ item.namespace }}/{{ item.kind }}/{{ item.name }}"
-      changed_when: false
-      failed_when: false
-      register: _rollout_wait
+        - name: Wait for operator-managed pods to terminate
+          ansible.builtin.command:
+            cmd: >-
+              kubectl --namespace {{ item.namespace }}
+              wait pod
+              --selector=app.kubernetes.io/name=prometheus
+              --for=delete
+              --timeout=180s
+          loop: "{{ operator_workloads }}"
+          loop_control:
+            label: "{{ item.namespace }}/{{ item.kind }}/{{ item.name }}"
+          changed_when: false
+          failed_when: false
+          when: maintenance_mode in ['full', 'drain']
 
-    - name: Report pods that failed to terminate
-      ansible.builtin.debug:
-        msg: "WARNING: {{ item.item.namespace }}/{{ item.item.name }} - {{ item.stderr | default('timeout or error') }}"
-      loop: "{{ _pod_delete_wait.results }}"
-      loop_control:
-        label: "{{ item.item.namespace }}/{{ item.item.name }}"
-      when: item.rc | default(1) != 0
+        - name: Scale down affected workloads
+          ansible.builtin.command:
+            cmd: >-
+              kubectl scale {{ item.kind }}/{{ item.name }}
+              -n {{ item.namespace }}
+              --replicas=0
+          loop: "{{ _iscsi_restart.workloads }}"
+          loop_control:
+            label: "{{ item.namespace }}/{{ item.kind }}/{{ item.name }}"
+          changed_when: true
+          when: >-
+            operator_workloads | length == 0
+            or not (
+              item.namespace == operator_workloads[0].namespace
+              and item.kind | lower == 'statefulset'
+              and item.name == operator_workloads[0].statefulset_name
+            )
 
-    - name: Report workloads that failed to roll out
-      ansible.builtin.debug:
-        msg: "WARNING: {{ item.item.namespace }}/{{ item.item.kind }}/{{ item.item.name }} - {{ item.stderr | default('timeout or error') }}"
-      loop: "{{ _rollout_wait.results }}"
-      loop_control:
-        label: "{{ item.item.namespace }}/{{ item.item.kind }}/{{ item.item.name }}"
-      when: item.rc | default(1) != 0
+        - name: Delete orphan jobs
+          ansible.builtin.command:
+            cmd: >-
+              kubectl delete job -n {{ item.namespace }} {{ item.name }}
+              --wait=false
+              --ignore-not-found=true
+          loop: "{{ _iscsi_restart.orphan_jobs }}"
+          loop_control:
+            label: "{{ item.namespace }}/{{ item.name }}"
+          changed_when: true
+          failed_when: false
 
-    - name: Restore VolSync controller replica count
-      ansible.builtin.command:
-        cmd: >-
-          kubectl --namespace {{ volsync_controller_namespace }}
-          scale deployment/{{ volsync_controller_deployment }} --replicas={{ _original_volsync_replicas }}
-      changed_when: true
-      when: _original_volsync_replicas | int > 0
+        - name: Delete orphan pods
+          ansible.builtin.command:
+            cmd: >-
+              kubectl delete pod -n {{ item.namespace }} {{ item.name }}
+              --grace-period=0
+              --force
+              --wait=false
+              --ignore-not-found=true
+          loop: "{{ _iscsi_restart.orphan_pods }}"
+          loop_control:
+            label: "{{ item.namespace }}/{{ item.name }}"
+          changed_when: true
+          failed_when: false
 
-    - name: Wait for VolSync controller rollout
-      ansible.builtin.command:
-        cmd: >-
-          kubectl --namespace {{ volsync_controller_namespace }}
-          rollout status deployment/{{ volsync_controller_deployment }} --timeout=120s
-      changed_when: false
-      when: _original_volsync_replicas | int > 0
+        - name: Wait for affected pods to terminate
+          ansible.builtin.command:
+            cmd: >-
+              kubectl wait pod/{{ item.name }}
+              -n {{ item.namespace }}
+              --for=delete
+              --timeout=180s
+          loop: "{{ _iscsi_restart.affected_pods }}"
+          loop_control:
+            label: "{{ item.namespace }}/{{ item.name }}"
+          changed_when: false
+          failed_when: false
+          register: _pod_delete_wait
 
-    - name: Summary
-      vars:
-        _ready: "{{ _rollout_wait.results | selectattr('rc', 'defined') | selectattr('rc', 'eq', 0) | list | length }}"
-      ansible.builtin.debug:
-        msg: >-
-          Restart complete. {{ _ready }}/{{ _iscsi_restart.workloads | length }} workloads rolled out,
-          and VolSync restored to {{ _original_volsync_replicas }} replicas.
-          Run 'kubectl get pods -A | grep -v Running' to check remaining issues.
+        - name: Report pods that failed to terminate
+          ansible.builtin.debug:
+            msg: "WARNING: {{ item.item.namespace }}/{{ item.item.name }} - {{ item.stderr | default('timeout or error') }}"
+          loop: "{{ _pod_delete_wait.results }}"
+          loop_control:
+            label: "{{ item.item.namespace }}/{{ item.item.name }}"
+          when: item.rc | default(1) != 0
+
+        - name: Ensure state directory exists
+          ansible.builtin.file:
+            path: "{{ state_file | dirname }}"
+            state: directory
+            mode: "0700"
+          when: maintenance_mode == 'drain'
+
+        - name: Save maintenance state
+          ansible.builtin.copy:
+            dest: "{{ state_file }}"
+            mode: "0600"
+            content: "{{ _maintenance_state | to_nice_json }}"
+          vars:
+            _maintenance_state:
+              pvc_count: "{{ _iscsi_restart.pvc_count }}"
+              workloads: "{{ _iscsi_restart.workloads }}"
+              affected_pods: "{{ _iscsi_restart.affected_pods }}"
+              orphan_jobs: "{{ _iscsi_restart.orphan_jobs }}"
+              orphan_pods: "{{ _iscsi_restart.orphan_pods }}"
+              volsync_replicas: "{{ _original_volsync_replicas }}"
+              operator_workloads: "{{ operator_workloads }}"
+          when: maintenance_mode == 'drain'
+
+        - name: Drain summary
+          ansible.builtin.debug:
+            msg: >-
+              Drain complete. {{ _iscsi_restart.workloads | length }} workloads scaled to 0,
+              VolSync scaled to 0 (saved original={{ _original_volsync_replicas }}).
+              State saved to {{ state_file }}.
+          when: maintenance_mode == 'drain'
+
+    - name: Restore iSCSI workloads
+      when: maintenance_mode in ['full', 'restore']
+      block:
+        - name: Confirm restore
+          ansible.builtin.pause:
+            prompt: >-
+              About to restore {{ _iscsi_restart.workloads | length }} workloads
+              from saved state. Press Enter to continue or Ctrl+C to abort
+          when:
+            - confirm_restart | bool
+            - maintenance_mode == 'restore'
+
+        - name: Resolve operator workloads for restore
+          ansible.builtin.set_fact:
+            _operator_workloads: >-
+              {{ _iscsi_restart.operator_workloads
+                 | default(operator_workloads, true) }}
+
+        - name: Build operator restore entries
+          ansible.builtin.set_fact:
+            _operator_restore_items: >-
+              {{ _operator_restore_items | default([]) + [{
+                'namespace': item.namespace,
+                'kind': item.kind,
+                'name': item.name,
+                'replicas': (
+                  _iscsi_restart.workloads
+                  | selectattr('namespace', 'equalto', item.namespace)
+                  | selectattr('kind', 'equalto', 'statefulset')
+                  | selectattr('name', 'equalto', item.statefulset_name)
+                  | map(attribute='replicas')
+                  | first
+                  | default(1)
+                )
+              }] }}
+          loop: "{{ _operator_workloads }}"
+          loop_control:
+            label: "{{ item.namespace }}/{{ item.kind }}/{{ item.name }}"
+
+        - name: Restore operator-managed workloads
+          ansible.builtin.command:
+            cmd: >-
+              kubectl --namespace {{ item.namespace }}
+              patch {{ item.kind | lower }} {{ item.name }}
+              --type merge
+              --patch '{"spec":{"replicas":{{ item.replicas }}}}'
+          loop: "{{ _operator_restore_items | default([]) }}"
+          loop_control:
+            label: "{{ item.namespace }}/{{ item.kind }}/{{ item.name }}"
+          changed_when: true
+          when: _operator_restore_items | default([]) | length > 0
+
+        - name: Scale up affected workloads
+          ansible.builtin.command:
+            cmd: >-
+              kubectl scale {{ item.kind }}/{{ item.name }}
+              -n {{ item.namespace }}
+              --replicas={{ item.replicas }}
+          loop: "{{ _iscsi_restart.workloads }}"
+          loop_control:
+            label: "{{ item.namespace }}/{{ item.kind }}/{{ item.name }}"
+          changed_when: true
+          when: >-
+            _operator_workloads | length == 0
+            or not (
+              item.namespace == _operator_workloads[0].namespace
+              and item.kind | lower == 'statefulset'
+              and item.name == (_operator_workloads[0].statefulset_name | default(''))
+            )
+
+        - name: Wait for affected workloads to roll out
+          ansible.builtin.command:
+            cmd: >-
+              kubectl rollout status {{ item.kind }}/{{ item.name }}
+              -n {{ item.namespace }}
+              --timeout=180s
+          loop: "{{ _iscsi_restart.workloads }}"
+          loop_control:
+            label: "{{ item.namespace }}/{{ item.kind }}/{{ item.name }}"
+          changed_when: false
+          failed_when: false
+          register: _rollout_wait
+
+        - name: Report workloads that failed to roll out
+          ansible.builtin.debug:
+            msg: "WARNING: {{ item.item.namespace }}/{{ item.item.kind }}/{{ item.item.name }} - {{ item.stderr | default('timeout or error') }}"
+          loop: "{{ _rollout_wait.results }}"
+          loop_control:
+            label: "{{ item.item.namespace }}/{{ item.item.kind }}/{{ item.item.name }}"
+          when: item.rc | default(1) != 0
+
+        - name: Restore VolSync controller replica count
+          ansible.builtin.command:
+            cmd: >-
+              kubectl --namespace {{ volsync_controller_namespace }}
+              scale deployment/{{ volsync_controller_deployment }} --replicas={{ _original_volsync_replicas }}
+          changed_when: true
+          when: _original_volsync_replicas | int > 0
+
+        - name: Wait for VolSync controller rollout
+          ansible.builtin.command:
+            cmd: >-
+              kubectl --namespace {{ volsync_controller_namespace }}
+              rollout status deployment/{{ volsync_controller_deployment }} --timeout=120s
+          changed_when: false
+          when: _original_volsync_replicas | int > 0
+
+        - name: Remove maintenance state file
+          ansible.builtin.file:
+            path: "{{ state_file }}"
+            state: absent
+          when: maintenance_mode == 'restore'
+
+        - name: Summary
+          vars:
+            _ready: "{{ _rollout_wait.results | selectattr('rc', 'defined') | selectattr('rc', 'eq', 0) | list | length }}"
+          ansible.builtin.debug:
+            msg: >-
+              Restore complete. {{ _ready }}/{{ _iscsi_restart.workloads | length }} workloads rolled out,
+              and VolSync restored to {{ _original_volsync_replicas }} replicas.
+              Run 'kubectl get pods -A | grep -v Running' to check remaining issues.

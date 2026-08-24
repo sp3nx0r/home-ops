@@ -63,11 +63,29 @@ tasks:
     preconditions:
       - test -f {{.ANSIBLE_VENV}}/bin/ansible-playbook
 
-  iscsi:restart:
-    desc: Restart pods using iSCSI PVCs (after NAS reboot / iSCSI recovery)
+  iscsi:drain:
+    desc: Scale down iSCSI workloads before NAS maintenance (saves replica state)
     interactive: true
     dir: '{{.ANSIBLE_DIR}}'
-    cmd: '{{.ANSIBLE_VENV}}/bin/ansible-playbook playbooks/iscsi-restart-pods.yml {{.CLI_ARGS}}'
+    cmd: '{{.ANSIBLE_VENV}}/bin/ansible-playbook playbooks/iscsi-restart-pods.yml -e maintenance_mode=drain {{.CLI_ARGS}}'
+    preconditions:
+      - test -f {{.ANSIBLE_VENV}}/bin/ansible-playbook
+      - which kubectl
+
+  iscsi:restore:
+    desc: Scale iSCSI workloads back up after NAS maintenance
+    interactive: true
+    dir: '{{.ANSIBLE_DIR}}'
+    cmd: '{{.ANSIBLE_VENV}}/bin/ansible-playbook playbooks/iscsi-restart-pods.yml -e maintenance_mode=restore {{.CLI_ARGS}}'
+    preconditions:
+      - test -f {{.ANSIBLE_VENV}}/bin/ansible-playbook
+      - which kubectl
+
+  iscsi:restart:
+    desc: Drain and restore iSCSI workloads in one pass (post-outage recovery)
+    interactive: true
+    dir: '{{.ANSIBLE_DIR}}'
+    cmd: '{{.ANSIBLE_VENV}}/bin/ansible-playbook playbooks/iscsi-restart-pods.yml -e maintenance_mode=full {{.CLI_ARGS}}'
     preconditions:
       - test -f {{.ANSIBLE_VENV}}/bin/ansible-playbook
       - which kubectl
