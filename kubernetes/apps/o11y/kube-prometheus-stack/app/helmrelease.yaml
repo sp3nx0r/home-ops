@@ -61,12 +61,13 @@ spec:
                   **Since:** {{ .StartsAt.Format "Jan 02 15:04 MST" }}{{ if .Annotations.runbook_url }} | **Runbook:** [link]({{ .Annotations.runbook_url }}){{ end }}
 
                   {{- end }}
-          - name: zeroclaw
-            webhook_configs:
-              - url: http://alert-to-zeroclaw.o11y.svc.cluster.local:8080/alert
-                send_resolved: false
+          # Uncomment with kube-agent deployment:
+          # - name: kube-agent
+          #   webhook_configs:
+          #     - url: http://kube-agent.kube-agent.svc.cluster.local:8080/alert
+          #       send_resolved: false
         route:
-          receiver: discord
+          receiver: blackhole
           group_by:
             - alertname
             - namespace
@@ -84,12 +85,13 @@ spec:
               matchers:
                 - severity =~ critical|warning
               group_wait: 30s
-              continue: true
-            - receiver: zeroclaw
-              matchers:
-                - severity =~ critical|warning
-              group_wait: 2m
-              repeat_interval: 24h
+              # continue: true  # re-enable with kube-agent route below
+            # Uncomment with kube-agent deployment:
+            # - receiver: kube-agent
+            #   matchers:
+            #     - severity =~ critical|warning
+            #   group_wait: 2m
+            #   repeat_interval: 24h
 
     kubeEtcd:
       service:
