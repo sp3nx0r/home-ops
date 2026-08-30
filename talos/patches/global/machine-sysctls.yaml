@@ -16,9 +16,9 @@ machine:
     net.ipv4.tcp_congestion_control: bbr       # Google BBR — better throughput on 10G
     net.ipv4.tcp_fastopen: "3"                 # TCP Fast Open for client + server
     net.ipv4.tcp_mtu_probing: "1"              # Discover path MTU (needed for jumbo frames)
-    net.ipv4.tcp_rmem: 4096 87380 33554432     # TCP receive buffer min/default/max
+    net.ipv4.tcp_rmem: 4096 131072 67108864    # TCP receive buffer min/default/max — max matches rmem_max
     net.ipv4.tcp_slow_start_after_idle: "0"    # Preserve congestion window after idle
-    net.ipv4.tcp_wmem: 4096 65536 33554432     # TCP send buffer min/default/max
+    net.ipv4.tcp_wmem: 4096 65536 67108864     # TCP send buffer min/default/max — max matches wmem_max
     sunrpc.tcp_max_slot_table_entries: "128"    # NFS max concurrent RPCs
     sunrpc.tcp_slot_table_entries: "128"        # NFS concurrent RPCs per connection
 
