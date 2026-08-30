@@ -88,6 +88,12 @@
       commitMessageTopic: "image {{depName}}",
     },
     {
+      description: "Hold CoreDNS chart on 1.46.2 (CoreDNS 1.13.1) — coredns/coredns#8390 autopath/serve_stale regression",
+      matchDatasources: ["docker"],
+      matchPackageNames: ["ghcr.io/coredns/charts/coredns"],
+      enabled: false,
+    },
+    {
       matchDatasources: ["helm"],
       semanticCommitScope: "helm",
       commitMessageTopic: "chart {{depName}}",
