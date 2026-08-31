@@ -37,6 +37,15 @@ spec:
             equal:
               - alertname
               - namespace
+          # A node being Unreachable is the root cause of the paired NotReady
+          # alert; suppress NotReady for the same node so a node outage surfaces
+          # as one signal instead of two near-identical warnings.
+          - source_matchers:
+              - alertname = KubeNodeUnreachable
+            target_matchers:
+              - alertname = KubeNodeNotReady
+            equal:
+              - node
         receivers:
           - name: blackhole
           - name: discord
@@ -81,6 +90,18 @@ spec:
             - receiver: blackhole
               matchers:
                 - alertname = Watchdog
+            # Node / infrastructure down. Grouped per-node and re-notified
+            # hourly (instead of the global 12h repeat) so a node that stays
+            # down keeps nagging until it recovers. Must precede the generic
+            # discord route below so these win the more aggressive repeat.
+            - receiver: discord
+              matchers:
+                - alertname =~ "KubeNodeNotReady|KubeNodeUnreachable|KubeNodeReadinessFlapping|KubeletInstanceUnreachable|TalosUpgradeNodeFailed"
+              group_by:
+                - alertname
+                - node
+              group_wait: 30s
+              repeat_interval: 1h
             - receiver: discord
               matchers:
                 - severity =~ critical|warning
