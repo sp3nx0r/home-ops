@@ -28,7 +28,7 @@ spec:
           resolve-ip:
             image:
               repository: curlimages/curl
-              tag: 8.21.0@sha256:1ab04d023ece37e6ec991bf3306ad04e0ef0084e94a5c6b6563cfcb9563169db
+              tag: 8.22.0@sha256:43366cd60f226c7655181a0f7e85c468a41d182fdd2dc2c1c3b872a2b9d05d7a
             command: ["/bin/sh", "-c"]
             args:
               - |
