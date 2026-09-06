@@ -100,7 +100,7 @@ spec:
                     - ALL
           containers:
             - name: scrub
-              image: bitnami/kubectl:latest@sha256:c12989b8ecaecbd9d9a49828bfdb727ef222a6747a8984701e2a3cdf9c1cb168
+              image: bitnami/kubectl:latest@sha256:b29d8c1665b70817259ceecaea16ab27aab6368b48daf485d19436c809067492
               env:
                 - name: POD_NAMESPACE
                   valueFrom:
