@@ -19,8 +19,6 @@ machine:
     net.ipv4.tcp_rmem: 4096 131072 67108864    # TCP receive buffer min/default/max — max matches rmem_max
     net.ipv4.tcp_slow_start_after_idle: "0"    # Preserve congestion window after idle
     net.ipv4.tcp_wmem: 4096 65536 67108864     # TCP send buffer min/default/max — max matches wmem_max
-    sunrpc.tcp_max_slot_table_entries: "128"    # NFS max concurrent RPCs
-    sunrpc.tcp_slot_table_entries: "128"        # NFS concurrent RPCs per connection
 
     # -- Network hardening --
     # NOTE: rp_filter intentionally omitted — Cilium needs rp_filter=0 on its
