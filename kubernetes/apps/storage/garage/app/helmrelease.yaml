@@ -42,7 +42,7 @@ spec:
     persistence:
       enabled: true
       meta:
-        size: 1Gi
+        size: 5Gi
         storageClass: iscsi
       data:
         size: 50Gi
