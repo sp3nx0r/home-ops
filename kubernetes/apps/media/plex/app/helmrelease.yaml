@@ -96,6 +96,12 @@ spec:
           - backendRefs:
               - identifier: app
                 port: *port
+            filters:
+              - type: RequestHeaderModifier
+                requestHeaderModifier:
+                  set:
+                    - name: X-Plex-Http-Pipeline
+                      value: infinite
     persistence:
       config:
         existingClaim: plex
