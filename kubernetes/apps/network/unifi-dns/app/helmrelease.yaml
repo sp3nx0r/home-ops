@@ -46,7 +46,6 @@ spec:
     sources:
       - crd
       - gateway-httproute
-      - service
     txtOwnerId: main
     txtPrefix: k8s.main.
     domainFilters:
