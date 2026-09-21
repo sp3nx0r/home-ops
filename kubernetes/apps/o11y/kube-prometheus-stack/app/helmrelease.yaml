@@ -190,8 +190,9 @@ spec:
         resources:
           requests:
             cpu: 100m
+            memory: 4Gi
           limits:
-            memory: 2Gi
+            memory: 4Gi
 
     prometheus-node-exporter:
       fullnameOverride: node-exporter
