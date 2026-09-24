@@ -54,22 +54,22 @@ flowchart TB
 
 Under `kubernetes/apps/kube-agent/`:
 
-| File | Purpose |
-|------|---------|
-| `namespace.yaml`, `kustomization.yaml` | New namespace (Flux auto-discovers the dir; no top-level registration needed). |
-| `kube-agent/ks.yaml` | Flux Kustomization; `dependsOn` ollama-proxy; injects `cluster-secrets`. |
-| `app/helmrelease.yaml` | bjw-s `app-template`: `seed-cron` initContainer + Hermes `app` container + Python `bridge` sidecar sharing the data PVC. Model points at `ollama-proxy`. |
-| `app/home-configmap.yaml` | Hermes `config.yaml`, `SOUL.md`, `AGENTS.md`, and `seed-cron.sh` (idempotent `hermes cron create`). |
-| `app/skills/{k8s-triage,github-pr}.yaml` | The triage and PR-authoring skills (single `SKILL.md` with frontmatter). |
-| `app/bridge-configmap.yaml` | `adapter.py` — writes Alertmanager webhooks to `/opt/data/inbox`. |
-| `app/rbac.yaml` | Read-only `kube-agent-investigator` ClusterRole + binding. |
-| `app/pvc.yaml` | 5Gi iSCSI PVC for Hermes home (profiles, cron state, inbox, cloned repo). |
-| `app/ciliumnetworkpolicy.yaml` | FQDN-scoped egress; ingress from Alertmanager only. |
-| `app/prometheusrule.yaml` | Metric triggers (OOMKilled, ImagePull failures, restart rate). |
-| `app/secret.sops.yaml` | GitHub App (`GITHUB_APP_ID` / `_INSTALLATION_ID` / `_PRIVATE_KEY` / `_BOT_EMAIL`) + `DISCORD_WEBHOOK_URL`. |
-| `docker/kube-agent/Dockerfile` | Thin image: Hermes + kubectl/gh/git/flux/yq/openssl. |
-| `docker/kube-agent/gh-app-token` | Mints a ~1h GitHub App installation token per run. |
-| `.github/workflows/build-kube-agent-image.yaml` | Builds/pushes the image to GHCR. |
+| File                                            | Purpose                                                                                                                                                  |
+| ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `namespace.yaml`, `kustomization.yaml`          | New namespace (Flux auto-discovers the dir; no top-level registration needed).                                                                           |
+| `kube-agent/ks.yaml`                            | Flux Kustomization; `dependsOn` ollama-proxy; injects `cluster-secrets`.                                                                                 |
+| `app/helmrelease.yaml`                          | bjw-s `app-template`: `seed-cron` initContainer + Hermes `app` container + Python `bridge` sidecar sharing the data PVC. Model points at `ollama-proxy`. |
+| `app/home-configmap.yaml`                       | Hermes `config.yaml`, `SOUL.md`, `AGENTS.md`, and `seed-cron.sh` (idempotent `hermes cron create`).                                                      |
+| `app/skills/{k8s-triage,github-pr}.yaml`        | The triage and PR-authoring skills (single `SKILL.md` with frontmatter).                                                                                 |
+| `app/bridge-configmap.yaml`                     | `adapter.py` — writes Alertmanager webhooks to `/opt/data/inbox`.                                                                                        |
+| `app/rbac.yaml`                                 | Read-only `kube-agent-investigator` ClusterRole + binding.                                                                                               |
+| `app/pvc.yaml`                                  | 5Gi iSCSI PVC for Hermes home (profiles, cron state, inbox, cloned repo).                                                                                |
+| `app/ciliumnetworkpolicy.yaml`                  | FQDN-scoped egress; ingress from Alertmanager only.                                                                                                      |
+| `app/prometheusrule.yaml`                       | Metric triggers (OOMKilled, ImagePull failures, restart rate).                                                                                           |
+| `app/secret.sops.yaml`                          | GitHub App (`GITHUB_APP_ID` / `_INSTALLATION_ID` / `_PRIVATE_KEY` / `_BOT_EMAIL`) + `DISCORD_WEBHOOK_URL`.                                               |
+| `docker/kube-agent/Dockerfile`                  | Thin image: Hermes + kubectl/gh/git/flux/yq/openssl.                                                                                                     |
+| `docker/kube-agent/gh-app-token`                | Mints a ~1h GitHub App installation token per run.                                                                                                       |
+| `.github/workflows/build-kube-agent-image.yaml` | Builds/pushes the image to GHCR.                                                                                                                         |
 
 The Alertmanager receiver + route live in
 `kubernetes/apps/o11y/kube-prometheus-stack/app/helmrelease.yaml` (a `kube-agent`
@@ -105,12 +105,13 @@ carries no `telemetry`/`OTEL_*` config and the egress policy has no OTLP port �
 so nothing is emitted and nothing is dropped. Visibility comes from the agent's
 stdout (already shipped to Loki by Vector as `{namespace="kube-agent"}`) plus
 kube-state-metrics for restarts. Re-enabling tracing later means deploying Tempo
-+ a Vector OTLP source + baking the otel plugin into the image — out of scope.
+
+- a Vector OTLP source + baking the otel plugin into the image — out of scope.
 
 **2. Sandboxing — no kernel sandbox; harden the real surface instead.** gVisor
 would require rebuilding the Talos **secureboot schematic**, registering a CRI
 handler, weakening a KSPP sysctl cluster-wide, and rolling-rebooting all three
-nodes — to mitigate the *wrong* threat. In a single-operator cluster the real
+nodes — to mitigate the _wrong_ threat. In a single-operator cluster the real
 risk is **prompt injection** (from alert text / pod logs) → GitHub-token exfil or
 a malicious PR, which a kernel sandbox does not address. `kubernetes-sigs/agent-sandbox`
 is young and provides no isolation itself (it just sets `runtimeClassName`).
@@ -131,7 +132,7 @@ non-root breaks first-boot and root-gateway is refused unless via the
 entrypoint); compensated by read-only RBAC, no Secret reads, and FQDN egress.
 `gateway run --no-supervise` makes a gateway crash exit the pod so Kubernetes
 restarts it. `context_length: 64000` is set because Hermes refuses <64k. Local
-qwen is treated as *propose, never trust*: PRs open as **draft** behind the human
+qwen is treated as _propose, never trust_: PRs open as **draft** behind the human
 merge gate.
 
 ## Guardrails (defense in depth)
@@ -157,37 +158,37 @@ merge gate.
    public (or grant the cluster pull access). The base tag is digest-pinned in
    the Dockerfile.
 2. **Create the GitHub App** (`Settings → Developer settings → GitHub Apps`):
-   - Name `home-ops-agent`; **uncheck** the webhook "Active" box; install on this
-     account only.
-   - Repository permissions: **Contents: Read and write**, **Pull requests: Read
-     and write** (Metadata: read is implicit). Nothing else.
-   - Generate a **private key** (`.pem`), note the **App ID**, install on
-     `sp3nx0r/home-ops` only, and note the **Installation ID** (from the install
-     URL `…/installations/<id>`).
-   - Optionally capture the bot user id for the commit email:
-     `gh api '/users/home-ops-agent[bot]' --jq .id`.
+    - Name `home-ops-agent`; **uncheck** the webhook "Active" box; install on this
+      account only.
+    - Repository permissions: **Contents: Read and write**, **Pull requests: Read
+      and write** (Metadata: read is implicit). Nothing else.
+    - Generate a **private key** (`.pem`), note the **App ID**, install on
+      `sp3nx0r/home-ops` only, and note the **Installation ID** (from the install
+      URL `…/installations/<id>`).
+    - Optionally capture the bot user id for the commit email:
+      `gh api '/users/home-ops-agent[bot]' --jq .id`.
 3. **Populate the secret** and re-encrypt:
-   ```bash
-   f=kubernetes/apps/kube-agent/kube-agent/app/secret.sops.yaml
-   sops --decrypt "$f" > /tmp/ka.yaml
-   # edit /tmp/ka.yaml: set GITHUB_APP_ID, GITHUB_APP_INSTALLATION_ID,
-   #   GITHUB_APP_PRIVATE_KEY (full .pem), GITHUB_APP_BOT_EMAIL, DISCORD_WEBHOOK_URL
-   cp /tmp/ka.yaml "$f" && sops --encrypt --in-place "$f" && rm /tmp/ka.yaml
-   ```
+    ```bash
+    f=kubernetes/apps/kube-agent/kube-agent/app/secret.sops.yaml
+    sops --decrypt "$f" > /tmp/ka.yaml
+    # edit /tmp/ka.yaml: set GITHUB_APP_ID, GITHUB_APP_INSTALLATION_ID,
+    #   GITHUB_APP_PRIVATE_KEY (full .pem), GITHUB_APP_BOT_EMAIL, DISCORD_WEBHOOK_URL
+    cp /tmp/ka.yaml "$f" && sops --encrypt --in-place "$f" && rm /tmp/ka.yaml
+    ```
 4. **Add a `main` branch ruleset** (`Settings → Rules → Rulesets → New branch
-   ruleset`): target the default branch, **bypass list empty**, require a PR +
+ruleset`): target the default branch, **bypass list empty**, require a PR +
    1 approval, require the `flux-local` status check, block force-push and
    deletion.
 5. **Ensure the Ollama backend serves ≥64k context** for the configured model
    (`OLLAMA_CONTEXT_LENGTH=64000` / `num_ctx`); Hermes refuses to start below 64k
    and `/api/show` reports the model max, not the effective `num_ctx`.
 6. **Reconcile Flux** and watch it come up:
-   ```bash
-   task reconcile
-   kubectl -n kube-agent get pods
-   kubectl -n kube-agent logs job/kube-agent -c seed-cron   # cron seeding
-   kubectl -n kube-agent logs deploy/kube-agent -c app      # gateway
-   ```
+    ```bash
+    just reconcile
+    kubectl -n kube-agent get pods
+    kubectl -n kube-agent logs job/kube-agent -c seed-cron   # cron seeding
+    kubectl -n kube-agent logs deploy/kube-agent -c app      # gateway
+    ```
 
 ## Validation seams (verify against the running image)
 

@@ -8,36 +8,36 @@ Planned maintenance procedure for upgrading TrueNAS SCALE on the HL8 NAS
 TrueNAS reboots during upgrade take down both NFS exports and iSCSI targets.
 The cluster reacts differently to each:
 
-| Storage path | Apps | During outage | After recovery |
-|--------------|------|---------------|----------------|
+| Storage path                      | Apps                                                          | During outage                                                        | After recovery                                                         |
+| --------------------------------- | ------------------------------------------------------------- | -------------------------------------------------------------------- | ---------------------------------------------------------------------- |
 | **iSCSI** (`storageClass: iscsi`) | ~51 PVCs — Prometheus, Grafana, Garage, Pocket ID, Loki, etc. | Pods get I/O errors; ext4 may remount **read-only** (`emergency_ro`) | Requires clean unmount + `e2fsck` via democratic-csi `checkFilesystem` |
-| **NFS** (`192.168.5.40`) | Media stack, Kopia repo, app configs | Hard mounts **hang** (block I/O) until NAS returns | Usually self-heals; no filesystem repair needed |
-| **Encrypted datasets** | All of the above | Locked until passphrase entered | Run `task ansible:nas:unlock` |
+| **NFS** (`192.168.5.40`)          | Media stack, Kopia repo, app configs                          | Hard mounts **hang** (block I/O) until NAS returns                   | Usually self-heals; no filesystem repair needed                        |
+| **Encrypted datasets**            | All of the above                                              | Locked until passphrase entered                                      | Run `just ansible nas-unlock`                                          |
 
 **Do not cordon or drain Talos nodes.** The iSCSI initiator on each node retries
 sessions automatically. Only scale down **workloads** that hold iSCSI PVCs.
 
 ### Lessons from prior maintenance
 
-| Date | Event | Outcome |
-|------|-------|---------|
-| May 2026 | CVE patch to 25.10.3.1 (reboot, no preemptive drain) | Cluster self-healed after `task ansible:nas:unlock`; brief alert storm |
-| May 2026 | NAS reboot without preemptive drain | iSCSI ext4 volumes went read-only; mass pod restart + `e2fsck` recovery needed; led to `task ansible:iscsi:restart` |
-| Aug 2026 | Planned upgrade with preemptive drain | `task ansible:iscsi:restore` brought 27 workloads back; a few pods failed on first mount timing — pod restart was enough; **Volsync restore was not needed** |
+| Date     | Event                                                | Outcome                                                                                                                                                      |
+| -------- | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| May 2026 | CVE patch to 25.10.3.1 (reboot, no preemptive drain) | Cluster self-healed after `just ansible nas-unlock`; brief alert storm                                                                                       |
+| May 2026 | NAS reboot without preemptive drain                  | iSCSI ext4 volumes went read-only; mass pod restart + `e2fsck` recovery needed; led to `just ansible iscsi-restart`                                          |
+| Aug 2026 | Planned upgrade with preemptive drain                | `just ansible iscsi-restore` brought 27 workloads back; a few pods failed on first mount timing — pod restart was enough; **Volsync restore was not needed** |
 
 **Recommendation:** Always **preemptively drain** iSCSI workloads before a
 TrueNAS reboot. This cleanly unstages volumes before targets disappear and
 avoids read-only filesystem corruption.
 
 **Do not run Volsync/Kopia restore** as part of a normal TrueNAS upgrade.
-Volsync is paused during drain and resumes automatically when `task ansible:iscsi:restore`
+Volsync is paused during drain and resumes automatically when `just ansible iscsi-restore`
 completes. Backup restore is only for actual data loss or corruption that survives
 a pod restart (see [runbook-restore-pvc.md](../backup-and-recovery/runbook-restore-pvc.md)).
 
 ## Prerequisites
 
 - Cluster access: `KUBECONFIG=/opt/home-ops/kubeconfig`
-- Ansible venv initialized: `task ansible:init`
+- Ansible venv initialized: `just ansible init`
 - TrueNAS SSH access: `ssh truenas_admin@192.168.5.40`
 - Encryption passphrase available (4 datasets: `tank/backups`, `tank/homelab`, `tank/media`, `tank/scratch`)
 - Maintenance window (~30–60 min for patch upgrades; longer for major versions)
@@ -71,7 +71,7 @@ Scale down all deployments/statefulsets using iSCSI PVCs and pause Volsync.
 Replica counts are saved to `~/.cache/home-ops/iscsi-maintenance-state.json`.
 
 ```bash
-task ansible:iscsi:drain
+just ansible iscsi-drain
 ```
 
 Verify nothing is holding iSCSI volumes:
@@ -97,7 +97,7 @@ during the reboot but recover once NFS is back.
 
 Optional: pause TrueNAS Cloud Sync tasks in the UI (Data Protection → Cloud Sync)
 to avoid a failed sync run during the outage. Ansible will re-enable them on the
-next `task ansible:nas` run if needed.
+next `just ansible nas` run if needed.
 
 ### Phase 2 — Upgrade TrueNAS
 
@@ -121,7 +121,7 @@ done
 All four encrypted top-level datasets lock on reboot.
 
 ```bash
-task ansible:nas:unlock
+just ansible nas-unlock
 ```
 
 This unlocks `tank/backups`, `tank/homelab`, `tank/media`, and `tank/scratch`,
@@ -145,19 +145,19 @@ Bring workloads back from saved replica counts using the Ansible playbook
 during volume restage.
 
 ```bash
-task ansible:iscsi:restore
+just ansible iscsi-restore
 ```
 
 This reads replica counts from `~/.cache/home-ops/iscsi-maintenance-state.json`
-(written by `task ansible:iscsi:drain`), scales each deployment/statefulset back
+(written by `just ansible iscsi-drain`), scales each deployment/statefulset back
 up, restores the Volsync controller, and waits for rollouts. It does **not**
 restore PVC data from Kopia — it only brings workloads back online.
 
-| Task | When to use |
-|------|-------------|
-| `task ansible:iscsi:drain` | Pre-upgrade — scale down iSCSI workloads, save state |
-| `task ansible:iscsi:restore` | Post-upgrade — scale workloads back up from saved state |
-| `task ansible:iscsi:restart` | Skipped drain, or unplanned outage — drain + restore in one pass |
+| Task                         | When to use                                                      |
+| ---------------------------- | ---------------------------------------------------------------- |
+| `just ansible iscsi-drain`   | Pre-upgrade — scale down iSCSI workloads, save state             |
+| `just ansible iscsi-restore` | Post-upgrade — scale workloads back up from saved state          |
+| `just ansible iscsi-restart` | Skipped drain, or unplanned outage — drain + restore in one pass |
 
 If `iscsi:restore` hangs on rollout timeouts, check failing pods individually
 (see troubleshooting below) rather than reaching for Volsync restore.
@@ -204,7 +204,7 @@ still settling, or a dependency like Garage wasn't ready yet):
 kubectl delete pod -n <namespace> <pod-name>
 
 # Or re-run the full bring-up (safe if state file still exists)
-task ansible:iscsi:restore
+just ansible iscsi-restore
 ```
 
 Apps that depend on other services (Loki/Pocket ID → Garage S3) may need a pod
@@ -221,25 +221,25 @@ corruption, see [runbook-restore-pvc.md](../backup-and-recovery/runbook-restore-
 ssh truenas_admin@192.168.5.40 'midclt call system.info | jq .version'
 
 # Reconcile Ansible config if the upgrade changed defaults you manage
-task ansible:nas:dry-run
+just ansible nas-dry-run
 
 # Force Flux pull if anything drifted during maintenance
-task reconcile
+just reconcile
 ```
 
 ## Quick reference (TL;DR)
 
 ```bash
 # 1. Drain
-task ansible:iscsi:drain
+just ansible iscsi-drain
 
 # 2. Upgrade + reboot in TrueNAS UI
 
 # 3. Unlock
-task ansible:nas:unlock
+just ansible nas-unlock
 
 # 4. Restore
-task ansible:iscsi:restore
+just ansible iscsi-restore
 
 # 5. Verify
 kubectl get pods -A | grep -vE 'Running|Completed'
@@ -251,8 +251,8 @@ For a very short reboot where you accept possible ext4 read-only mounts, you
 can skip the preemptive drain and run the all-in-one recovery after unlock:
 
 ```bash
-task ansible:nas:unlock
-task ansible:iscsi:restart
+just ansible nas-unlock
+just ansible iscsi-restart
 ```
 
 This scales down, restages with `e2fsck`, and scales back up in one pass. It
