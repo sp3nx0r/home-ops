@@ -42,9 +42,10 @@ glob = ["*.yaml", "*.yml"]
 run = "oxfmt {staged_files}"
 stage_fixed = true
 
-[pre-commit.commands.mise-lock]
-glob = [".mise.toml", ".mise/config.toml", ".mise/conf.d/*.toml"]
-run = "mise lock && git add .mise/mise.lock"
+# NOTE: We intentionally do NOT re-lock (`mise lock`) on pre-commit. It adds
+# ~5s+ of network resolution to every commit that touches .mise files. The
+# lockfile is kept current by `mise install` (run whenever you change a tool
+# version) and by Renovate. To check for drift manually: `mise lock --dry-run`.
 
 [pre-commit.commands.zizmor]
 glob = [".github/workflows/*.yaml", ".github/actions/**/action.yaml"]
