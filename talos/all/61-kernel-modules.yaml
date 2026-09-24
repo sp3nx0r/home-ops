@@ -1,0 +1,8 @@
+---
+apiVersion: v1alpha1
+kind: KernelModuleConfig
+name: iscsi_tcp
+---
+apiVersion: v1alpha1
+kind: KernelModuleConfig
+name: libiscsi

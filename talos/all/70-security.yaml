@@ -1,0 +1,8 @@
+# Talos 1.14 defaults to running kubelet and pods in a sandboxed PID/mount
+# namespace, which breaks workloads that rely on hostPID or host mounts
+# (node-exporter, democratic-csi / in-tree iSCSI). Opt out to preserve the
+# behaviour the cluster runs on today.
+---
+apiVersion: v1alpha1
+kind: SecurityProfileConfig
+workloadIsolation: false

@@ -1,0 +1,83 @@
+machine:
+  features:
+    # Control-plane only: lets the system-upgrade-controller (Tuppr) reach the
+    # Talos API with os:admin for node upgrades.
+    kubernetesTalosAPIAccess:
+      enabled: true
+      allowedRoles:
+        - os:admin
+      allowedKubernetesNamespaces:
+        - system-upgrade
+cluster:
+  etcd:
+    extraArgs:
+      listen-metrics-urls: http://0.0.0.0:2381
+    advertisedSubnets:
+      - 192.168.5.0/24
+---
+# Allow scheduling on control-plane nodes (hyper-converged cluster).
+apiVersion: v1alpha1
+kind: KubeNodeConfig
+taints:
+  node-role.kubernetes.io/control-plane:
+    $patch: delete
+---
+# No PodSecurity admission plugin (matches the running cluster).
+apiVersion: v1alpha1
+kind: KubeAdmissionControlConfig
+name: PodSecurity
+$patch: delete
+---
+apiVersion: v1alpha1
+kind: KubeAPIServerConfig
+certExtraSANs:
+  - 127.0.0.1
+  - 192.168.5.254
+  - cluster.securimancy.com
+extraArgs:
+  # https://kubernetes.io/docs/tasks/extend-kubernetes/configure-aggregation-layer/
+  enable-aggregator-routing: "true"
+---
+apiVersion: v1alpha1
+kind: KubeControllerManagerConfig
+extraArgs:
+  bind-address: 0.0.0.0
+---
+apiVersion: v1alpha1
+kind: KubeSchedulerConfig
+extraArgs:
+  bind-address: 0.0.0.0
+  # NOTE: PodTopologySpread scheduler config intentionally omitted — it triggers
+  # a Talos DeepCopyJSONValue panic with integer fields.
+  # https://github.com/siderolabs/talos/issues/13473
+---
+# Disable the built-in CNI and kube-proxy; the cluster uses Cilium.
+apiVersion: v1alpha1
+kind: KubeFlannelCNIConfig
+$patch: delete
+---
+apiVersion: v1alpha1
+kind: KubeProxyConfig
+enabled: false
+---
+apiVersion: v1alpha1
+kind: KubeCoreDNSConfig
+enabled: false
+---
+# Trust Pocket ID (OIDC) tokens forwarded by Headlamp. Native Talos 1.14
+# structured authentication; additive to cert / service-account auth.
+apiVersion: v1alpha1
+kind: KubeAuthenticationConfig
+configuration:
+  jwt:
+    - issuer:
+        url: "https://id.securimancy.com"
+        audiences:
+          - "d08cc81f-49e2-4815-be35-437ff02a8403"
+      claimMappings:
+        username:
+          claim: email
+          prefix: "oidc:"
+        groups:
+          claim: groups
+          prefix: "oidc:"

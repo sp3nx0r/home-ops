@@ -1,0 +1,32 @@
+machine:
+  # Talos-API RBAC and XFS project quotas stay as v1alpha1 machine features
+  # (no dedicated typed document in Talos 1.14, no conflict).
+  features:
+    rbac: true
+    diskQuotaSupport: true
+  # Kept in v1alpha1 form on purpose: the cluster's system disks are already
+  # LUKS2/TPM encrypted, and this exactly matches the running config so the
+  # migration introduces no disk-encryption change.
+  systemDiskEncryption:
+    state:
+      provider: luks2
+      keys:
+        - slot: 0
+          tpm: {}
+    ephemeral:
+      provider: luks2
+      keys:
+        - slot: 0
+          tpm: {}
+  files:
+    - op: overwrite
+      path: /etc/nfsmount.conf
+      permissions: 0o644
+      content: |
+        [ NFSMount_Global_Options ]
+        nfsvers=4.2
+        hard=True
+        nconnect=16
+        noatime=True
+        rsize=1048576
+        wsize=1048576
