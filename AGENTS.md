@@ -20,9 +20,9 @@ kubernetes/           Flux GitOps manifests (the primary workload)
   components/         Reusable Kustomize Components (sops, volsync)
   flux/               Flux system bootstrap (cluster Kustomization)
 ansible/              Ansible playbooks and inventory (TrueNAS, infrastructure)
-talos/                Talos Linux node configs (talhelper)
-scripts/              Helper scripts (bootstrap, pre-commit hooks)
-.taskfiles/           Task runner definitions (ansible, kubernetes, talos, volsync)
+talos/                Talos Linux node configs (topf)
+scripts/              Helper scripts (bootstrap, sops/trufflehog hooks)
+justfile              Task runner entrypoint; per-area recipes live in <area>/mod.just
 .github/workflows/    CI — flux-local validation, label sync
 docs/                 Plans, runbooks, and architecture docs
 ```
@@ -56,19 +56,19 @@ kubernetes/apps/<namespace>/<app-name>/
 
 ### Namespaces
 
-| Namespace        | Purpose                                                    |
-|------------------|------------------------------------------------------------|
-| `media`          | Media stack — Plex, Sonarr, Radarr, qBittorrent, etc.     |
-| `network`        | Ingress, DNS, tunnels — Envoy Gateway, Cloudflare, CoreDNS |
-| `o11y`           | Observability — Grafana, Loki, Prometheus, Kromgo, Vector  |
-| `security`       | Auth — Pocket ID (OIDC)                                    |
-| `storage`        | Distributed storage — Garage (S3)                          |
-| `cert-manager`   | TLS certificate automation                                 |
-| `external-secrets` | External secret management                               |
-| `kube-system`    | Core cluster services — Cilium, CoreDNS, metrics-server    |
-| `flux-system`    | Flux controllers and bootstrap                             |
-| `volsync-system` | Volsync backup operator                                    |
-| `default`        | Misc tools — IT-Tools, Ollama, SearXNG, OpenWebUI          |
+| Namespace          | Purpose                                                    |
+| ------------------ | ---------------------------------------------------------- |
+| `media`            | Media stack — Plex, Sonarr, Radarr, qBittorrent, etc.      |
+| `network`          | Ingress, DNS, tunnels — Envoy Gateway, Cloudflare, CoreDNS |
+| `o11y`             | Observability — Grafana, Loki, Prometheus, Kromgo, Vector  |
+| `security`         | Auth — Pocket ID (OIDC)                                    |
+| `storage`          | Distributed storage — Garage (S3)                          |
+| `cert-manager`     | TLS certificate automation                                 |
+| `external-secrets` | External secret management                                 |
+| `kube-system`      | Core cluster services — Cilium, CoreDNS, metrics-server    |
+| `flux-system`      | Flux controllers and bootstrap                             |
+| `volsync-system`   | Volsync backup operator                                    |
+| `default`          | Misc tools — IT-Tools, Ollama, SearXNG, OpenWebUI          |
 
 ### Reusable Components
 
@@ -91,8 +91,8 @@ kubernetes/apps/<namespace>/<app-name>/
 - Files matching `*.sops.yaml` or `*.sops.yml` MUST be encrypted. A pre-commit hook (`scripts/pre-commit-check-sops.sh`) enforces this.
 - **Never commit plaintext secrets.** If you create or modify a `*.sops.yaml` file, encrypt it with `sops --encrypt --in-place <file>`.
 - `.sops.yaml` at the repo root defines encryption rules per path:
-  - `kubernetes/**` and `bootstrap/**` — encrypts only `data` and `stringData` fields
-  - `talos/**` and `ansible/**` — encrypts the entire file (`mac_only_encrypted`)
+    - `kubernetes/**` and `bootstrap/**` — encrypts only `data` and `stringData` fields
+    - `talos/**` and `ansible/**` — encrypts the entire file (`mac_only_encrypted`)
 - A TruffleHog pre-commit hook scans for leaked secrets on every commit.
 
 ## Talos Linux
@@ -108,9 +108,9 @@ kubernetes/apps/<namespace>/<app-name>/
 ## Infrastructure
 
 - **NAS**: TrueNAS SCALE at `192.168.5.40`, NFS exports under `/mnt/tank/`
-  - Media: `/mnt/tank/media`
-  - App configs: `/mnt/tank/homelab/k8s-exports/<app>-config`
-  - Kopia repo: `/mnt/tank/homelab/kopia`
+    - Media: `/mnt/tank/media`
+    - App configs: `/mnt/tank/homelab/k8s-exports/<app>-config`
+    - Kopia repo: `/mnt/tank/homelab/kopia`
 - **CNI**: Cilium (eBPF, kube-proxy replacement, L2 announcements)
 - **Storage classes**: `iscsi` for PVCs backed by Democratic-CSI
 - **DNS**: Two external-dns instances (Cloudflare public + UniFi private)
@@ -118,20 +118,35 @@ kubernetes/apps/<namespace>/<app-name>/
 
 ## Tooling
 
-Tools are version-pinned in `.mise.toml` and installed via mise (aqua backend). Key tools:
+Tools are version-pinned in `.mise/config.toml` (with a checksum lockfile at `.mise/mise.lock`) and installed via mise. Key tools:
 
-- `task` — Task runner (see `Taskfile.yaml`, `.taskfiles/`)
+- `just` — Task runner (root `justfile` + per-area `<area>/mod.just` modules)
+- `lefthook` — Git hook manager (`.lefthook.toml`); `mise` installs the hooks on `postinstall`
 - `flux` — Flux CLI for GitOps operations
 - `kubectl` / `helm` / `kustomize` — Kubernetes management
-- `talosctl` / `talhelper` — Talos node management
+- `talosctl` / `topf` — Talos node management
 - `sops` / `age` — Secret encryption
 - `kubeconform` — YAML schema validation
+- `gum` — Shell UI used by just recipes for structured logging (`gum log`)
 - `gh` — GitHub CLI for issues, PRs, checks, and releases
 
-Run `task` (no args) to list available commands. Common tasks:
-- `task reconcile` — Force Flux to pull latest changes
-- `task talos:*` — Talos node operations
-- `task volsync:*` — Backup/restore operations
+Run `just` (no args) to list available recipes. Recipes are grouped into modules
+invoked as `just <module> <recipe>`. Common commands:
+
+- `just reconcile` — Force Flux to pull latest changes
+- `just talos ...` — Talos node operations (apply, diff, upgrade)
+- `just volsync ...` — Backup/restore operations
+- `just kube ...` — Cluster helpers (sync, debug-node, browse-pvc)
+
+### Git hooks
+
+Pre-commit hooks are managed by lefthook (`.lefthook.toml`), not pre-commit. They:
+
+- Enforce SOPS encryption on `*.sops.yaml` files (`scripts/pre-commit-check-sops.sh`)
+- Scan for leaked secrets with TruffleHog
+- Format staged `justfile`, mise, JSON, Markdown, and YAML files
+- Re-lock `.mise/mise.lock`
+- Lint GitHub workflows (zizmor + actionlint) and shell scripts (shellcheck)
 
 ### Agent integrations
 

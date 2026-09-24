@@ -1,0 +1,59 @@
+[pre-commit]
+parallel = true
+skip = ["merge", "rebase"]
+
+# --- Security guarantees (ported from the previous pre-commit config) ---
+
+# Ensure every committed *.sops.yaml/*.sops.yml is actually encrypted.
+# The root .sops.yaml is SOPS *configuration* (plaintext), so it is excluded.
+[pre-commit.commands.check-sops-encrypted]
+glob = ["*.sops.yaml", "*.sops.yml"]
+exclude = ['^\.sops\.yaml$']
+run = "scripts/pre-commit-check-sops.sh {staged_files}"
+
+# Scan the repo for leaked secrets. Requires trufflehog on PATH.
+[pre-commit.commands.trufflehog]
+run = "TRUFFLEHOG_PRE_COMMIT=1 trufflehog git file://. --since-commit HEAD --fail --no-update"
+
+# --- Formatting + lint (aligned with onedr0p/cluster-template) ---
+
+[pre-commit.commands.format-just]
+glob = ["justfile", "*.just", ".justfile"]
+run = 'for f in {staged_files}; do just --justfile "$f" --fmt; done'
+stage_fixed = true
+
+[pre-commit.commands.format-mise]
+glob = [".mise.toml", ".mise/config.toml", ".mise/conf.d/*.toml"]
+run = "mise fmt"
+stage_fixed = true
+
+[pre-commit.commands.format-json]
+glob = ["*.json", "*.json5", "*.jsonc"]
+run = "oxfmt {staged_files}"
+stage_fixed = true
+
+[pre-commit.commands.format-markdown]
+glob = ["*.md", "*.markdown", "*.mdx"]
+run = "oxfmt {staged_files}"
+stage_fixed = true
+
+[pre-commit.commands.format-yaml]
+glob = ["*.yaml", "*.yml"]
+run = "oxfmt {staged_files}"
+stage_fixed = true
+
+[pre-commit.commands.mise-lock]
+glob = [".mise.toml", ".mise/config.toml", ".mise/conf.d/*.toml"]
+run = "mise lock && git add .mise/mise.lock"
+
+[pre-commit.commands.zizmor]
+glob = [".github/workflows/*.yaml", ".github/actions/**/action.yaml"]
+run = "zizmor --offline {staged_files}"
+
+[pre-commit.commands.actionlint]
+glob = [".github/workflows/*.yaml", ".github/workflows/*.yml"]
+run = "actionlint {staged_files}"
+
+[pre-commit.commands.shellcheck]
+glob = ["*.sh", "*.bash"]
+run = "shellcheck {staged_files}"

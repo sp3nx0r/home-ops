@@ -113,28 +113,28 @@ If restoring data into a different namespace than the original:
 
 ```yaml
 spec:
-  kopia:
-    sourceIdentity:
-      sourceName: <original-replicationsource-name>
-      sourceNamespace: <original-namespace>
+    kopia:
+        sourceIdentity:
+            sourceName: <original-replicationsource-name>
+            sourceNamespace: <original-namespace>
 ```
 
 Add this to the `ReplicationDestination` spec so Volsync can find the correct Kopia snapshot identity.
 
 ## Troubleshooting
 
-| Symptom | Cause | Fix |
-|---------|-------|-----|
-| `secret should have fields: [KOPIA_REPOSITORY KOPIA_PASSWORD]` | Missing or malformed volsync secret | Check `<app>-volsync-secret` has both fields |
-| `invalid repository password` | `KOPIA_PASSWORD` doesn't match the shared repo | All apps share one Kopia repo and one password, `KOPIA_PASSWORD` in `cluster-secrets` (`kubernetes/components/sops/cluster-secrets.sops.yaml`). The volsync component injects it into every `${APP}-volsync-secret` — verify that value is correct rather than setting a per-app password. |
-| Mover pod stuck in `ContainerCreating` | PVC still attached to running app pod | Scale down the app first |
-| `No repository configuration found` | `KOPIA_REPOSITORY` format wrong | Must be `filesystem:///mnt/repository` |
-| Restore completes but PVC is empty | Wrong snapshot identity | Check `sourceIdentity` or list snapshots in Kopia |
-| `Directory is empty skipping backup` | Source PVC had no data when snapshotted | Check that the app wrote data before the last backup ran |
+| Symptom                                                        | Cause                                          | Fix                                                                                                                                                                                                                                                                                        |
+| -------------------------------------------------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `secret should have fields: [KOPIA_REPOSITORY KOPIA_PASSWORD]` | Missing or malformed volsync secret            | Check `<app>-volsync-secret` has both fields                                                                                                                                                                                                                                               |
+| `invalid repository password`                                  | `KOPIA_PASSWORD` doesn't match the shared repo | All apps share one Kopia repo and one password, `KOPIA_PASSWORD` in `cluster-secrets` (`kubernetes/components/sops/cluster-secrets.sops.yaml`). The volsync component injects it into every `${APP}-volsync-secret` — verify that value is correct rather than setting a per-app password. |
+| Mover pod stuck in `ContainerCreating`                         | PVC still attached to running app pod          | Scale down the app first                                                                                                                                                                                                                                                                   |
+| `No repository configuration found`                            | `KOPIA_REPOSITORY` format wrong                | Must be `filesystem:///mnt/repository`                                                                                                                                                                                                                                                     |
+| Restore completes but PVC is empty                             | Wrong snapshot identity                        | Check `sourceIdentity` or list snapshots in Kopia                                                                                                                                                                                                                                          |
+| `Directory is empty skipping backup`                           | Source PVC had no data when snapshotted        | Check that the app wrote data before the last backup ran                                                                                                                                                                                                                                   |
 
 ## TODO
 
 - [ ] Test full suspend → restore → resume cycle with `volsync-test`
 - [ ] Document `previous` field for point-in-time restores
 - [ ] Document cross-namespace restore with `sourceIdentity`
-- [ ] Add Taskfile commands for common restore operations
+- [x] Add just recipes for common restore operations (see `just volsync`)

@@ -16,14 +16,14 @@ tank (RAIDZ1)
 └── raidz1-0: disk0, disk1, disk2, disk3, disk4
 ```
 
-| | Value |
-|---|---|
-| **Drives** | 5× 4TB (existing) |
-| **Layout** | Single RAIDZ1 vdev |
-| **Raw** | 20TB |
-| **Usable** | ~16TB |
-| **Parity** | 1 drive |
-| **Failure tolerance** | 1 drive |
+|                       | Value              |
+| --------------------- | ------------------ |
+| **Drives**            | 5× 4TB (existing)  |
+| **Layout**            | Single RAIDZ1 vdev |
+| **Raw**               | 20TB               |
+| **Usable**            | ~16TB              |
+| **Parity**            | 1 drive            |
+| **Failure tolerance** | 1 drive            |
 
 ### Why RAIDZ1 is acceptable here
 
@@ -47,27 +47,27 @@ tank/
 └── scratch/         # temp workspace
 ```
 
-| Dataset | compression | recordsize | atime | sync | Notes |
-|---------|-------------|------------|-------|------|-------|
-| `tank/backups` | zstd-3 | 1M | off | standard | Large sequential writes |
-| `tank/media` | lz4 | 1M | off | standard | Already-compressed media |
-| `tank/homelab/k8s-exports` | zstd-3 | 128K | off | standard | Mixed k8s PVC I/O |
-| `tank/scratch` | lz4 | 128K | off | disabled | Expendable temp data |
+| Dataset                    | compression | recordsize | atime | sync     | Notes                    |
+| -------------------------- | ----------- | ---------- | ----- | -------- | ------------------------ |
+| `tank/backups`             | zstd-3      | 1M         | off   | standard | Large sequential writes  |
+| `tank/media`               | lz4         | 1M         | off   | standard | Already-compressed media |
+| `tank/homelab/k8s-exports` | zstd-3      | 128K       | off   | standard | Mixed k8s PVC I/O        |
+| `tank/scratch`             | lz4         | 128K       | off   | disabled | Expendable temp data     |
 
 ### NFS Exports
 
-| Export Path | Allowed Network | Purpose |
-|-------------|-----------------|---------|
-| `/mnt/tank/homelab/k8s-exports` | 192.168.5.0/24 | Talos cluster PVCs |
-| `/mnt/tank/media` | 192.168.5.0/24 | Media clients (Plex, etc.) |
-| `/mnt/tank/backups` | 192.168.5.0/24 | Cluster backup targets |
+| Export Path                     | Allowed Network | Purpose                    |
+| ------------------------------- | --------------- | -------------------------- |
+| `/mnt/tank/homelab/k8s-exports` | 192.168.5.0/24  | Talos cluster PVCs         |
+| `/mnt/tank/media`               | 192.168.5.0/24  | Media clients (Plex, etc.) |
+| `/mnt/tank/backups`             | 192.168.5.0/24  | Cluster backup targets     |
 
 ### Automation
 
 Pool creation is manual (TrueNAS UI). Everything else is managed by Ansible:
 
 ```bash
-task ansible:configure
+just ansible nas
 ```
 
 See `ansible/README.md` for full prerequisites, manual steps, and tag usage.
@@ -80,15 +80,16 @@ Target configuration once drives are purchased. Wipe the temporary pool and rebu
 
 ### Drive Selection
 
-| Size | $/TB | Rebuild Time | Notes |
-|------|------|-------------|-------|
-| 12TB | ~$12–15/TB | ~10–16 hrs | Best value, lower density |
-| 16TB | ~$13–16/TB | ~14–24 hrs | Good balance |
-| **18TB** | **~$14–18/TB** | **~18–30 hrs** | **Sweet spot — recommended** |
-| 20TB | ~$16–20/TB | ~20–36+ hrs | Best density, longest rebuilds |
-| 22TB | ~$18–22/TB | ~24–48 hrs | What onedr0p runs (mirrored, HL15) |
+| Size     | $/TB           | Rebuild Time   | Notes                              |
+| -------- | -------------- | -------------- | ---------------------------------- |
+| 12TB     | ~$12–15/TB     | ~10–16 hrs     | Best value, lower density          |
+| 16TB     | ~$13–16/TB     | ~14–24 hrs     | Good balance                       |
+| **18TB** | **~$14–18/TB** | **~18–30 hrs** | **Sweet spot — recommended**       |
+| 20TB     | ~$16–20/TB     | ~20–36+ hrs    | Best density, longest rebuilds     |
+| 22TB     | ~$18–22/TB     | ~24–48 hrs     | What onedr0p runs (mirrored, HL15) |
 
 Recommended models:
+
 - **Seagate Exos X18 18TB** — enterprise, best cost efficiency, louder
 - **Seagate Exos X20 20TB** — max density, enterprise
 - **WD Red Pro 20TB** — NAS-grade, quieter, more expensive
@@ -101,13 +102,13 @@ tank
 └── raidz2-1: disk4, disk5, disk6, disk7
 ```
 
-| | Value |
-|---|---|
-| **Drives** | 8× 18TB (example) |
-| **Layout** | 2× 4-drive RAIDZ2 (striped) |
-| **Raw** | 144TB |
-| **Usable** | ~72TB |
-| **Parity** | 2 drives per vdev |
+|                       | Value                                             |
+| --------------------- | ------------------------------------------------- |
+| **Drives**            | 8× 18TB (example)                                 |
+| **Layout**            | 2× 4-drive RAIDZ2 (striped)                       |
+| **Raw**               | 144TB                                             |
+| **Usable**            | ~72TB                                             |
+| **Parity**            | 2 drives per vdev                                 |
 | **Failure tolerance** | 2 drives per vdev (4 total if failures are split) |
 
 ### Why 2× 4-wide RAIDZ2 over a single 8-wide RAIDZ2
@@ -124,11 +125,13 @@ tank
 
 onedr0p runs 6 mirrored pairs (12× 22TB) in an HL15 with 15 bays. That works
 because:
+
 - He has bays to spare (15 vs our 8)
 - His NAS serves both Ceph and NFS — IOPS matter
 - 50% capacity loss is acceptable with 264TB raw
 
 For our 8-bay HL8:
+
 - Mirrors would give 4 pairs × 18TB = **~72TB usable** — same as 2× RAIDZ2 but
   with less redundancy per pair (1 drive tolerance vs 2)
 - Our latency-sensitive workloads run on local NVMe (Rook-Ceph) — the NAS
@@ -151,24 +154,24 @@ tank/
 └── scratch/            # temp workspace
 ```
 
-| Dataset | compression | recordsize | atime | sync | Notes |
-|---------|-------------|------------|-------|------|-------|
-| `tank/backups/ceph` | zstd-3 | 1M | off | standard | Large sequential backup writes |
-| `tank/backups/clients` | zstd-5 | 1M | off | standard | Higher compression, backup data compresses well |
-| `tank/media` | lz4 | 1M | off | standard | Already-compressed video/audio |
-| `tank/homelab/k8s-exports` | zstd-3 | 128K | off | standard | Mixed k8s PVC I/O (Prometheus, databases, apps) |
-| `tank/homelab/vm-images` | zstd-3 | 64K | off | standard | Random I/O, small block writes |
-| `tank/scratch` | lz4 | 128K | off | disabled | Expendable temp data |
+| Dataset                    | compression | recordsize | atime | sync     | Notes                                           |
+| -------------------------- | ----------- | ---------- | ----- | -------- | ----------------------------------------------- |
+| `tank/backups/ceph`        | zstd-3      | 1M         | off   | standard | Large sequential backup writes                  |
+| `tank/backups/clients`     | zstd-5      | 1M         | off   | standard | Higher compression, backup data compresses well |
+| `tank/media`               | lz4         | 1M         | off   | standard | Already-compressed video/audio                  |
+| `tank/homelab/k8s-exports` | zstd-3      | 128K       | off   | standard | Mixed k8s PVC I/O (Prometheus, databases, apps) |
+| `tank/homelab/vm-images`   | zstd-3      | 64K        | off   | standard | Random I/O, small block writes                  |
+| `tank/scratch`             | lz4         | 128K       | off   | disabled | Expendable temp data                            |
 
 ### ZFS Snapshot Policy
 
-| Dataset | Hourly | Daily | Weekly | Monthly |
-|---------|--------|-------|--------|---------|
-| `tank/backups/ceph` | 24 | 14 | — | 3 |
-| `tank/backups/clients` | — | 7 | 4 | 6 |
-| `tank/media` | — | 7 | 4 | — |
-| `tank/homelab/k8s-exports` | 24 | 14 | 4 | 3 |
-| `tank/scratch` | — | — | — | — |
+| Dataset                    | Hourly | Daily | Weekly | Monthly |
+| -------------------------- | ------ | ----- | ------ | ------- |
+| `tank/backups/ceph`        | 24     | 14    | —      | 3       |
+| `tank/backups/clients`     | —      | 7     | 4      | 6       |
+| `tank/media`               | —      | 7     | 4      | —       |
+| `tank/homelab/k8s-exports` | 24     | 14    | 4      | 3       |
+| `tank/scratch`             | —      | —     | —      | —       |
 
 ### Automation
 
@@ -178,7 +181,7 @@ Pool creation is manual (TrueNAS UI: 2× RAIDZ2 vdevs, 4 disks each). Then:
 # Update phase in host vars
 # ansible/inventory/host_vars/hl8/vars.yml → truenas_phase: phase2
 
-task ansible:configure
+just ansible nas
 ```
 
 This creates all common + Phase 2 datasets, sets ZFS properties, and
@@ -199,21 +202,21 @@ Example shape (paths and capacity vary per volume):
 apiVersion: v1
 kind: PersistentVolume
 metadata:
-  name: example-nfs-pv
+    name: example-nfs-pv
 spec:
-  capacity:
-    storage: 100Gi
-  accessModes:
-    - ReadWriteMany
-  persistentVolumeReclaimPolicy: Retain
-  nfs:
-    server: 192.168.5.40
-    path: /mnt/tank/homelab/k8s-exports/<subdir>
-  mountOptions:
-    - nfsvers=4.2
-    - nconnect=8
-    - hard
-    - noatime
+    capacity:
+        storage: 100Gi
+    accessModes:
+        - ReadWriteMany
+    persistentVolumeReclaimPolicy: Retain
+    nfs:
+        server: 192.168.5.40
+        path: /mnt/tank/homelab/k8s-exports/<subdir>
+    mountOptions:
+        - nfsvers=4.2
+        - nconnect=8
+        - hard
+        - noatime
 ```
 
 Prometheus, databases, and other PVCs each use PVs like this. If a workload needs
@@ -230,13 +233,13 @@ and point a separate PV at that path.
 4. Boot TrueNAS, create new pool in UI: `tank`, 2× RAIDZ2 vdevs (4 disks each)
 5. Network auto-detection should pick up the SFP+ at 192.168.5.40/24
 6. Update `ansible/inventory/host_vars/hl8/vars.yml`:
-   ```yaml
-   truenas_phase: phase2
-   ```
+    ```yaml
+    truenas_phase: phase2
+    ```
 7. Re-run Ansible:
-   ```bash
-   task ansible:configure
-   ```
+    ```bash
+    just ansible nas
+    ```
 8. Restore data from external SSD / re-sync from cluster
 9. Verify Talos nodes reconnect to NFS
 
@@ -251,18 +254,18 @@ The HL8 runs as a **NUT master** for the CyberPower CP1500PFCLCD (USB HID).
 Ansible configures the UPS service and enables remote monitoring on port **3493**
 so the Talos k8s nodes can act as NUT clients.
 
-| Setting | Value |
-|---------|-------|
-| Mode | MASTER |
-| Driver | `usbhid-ups$CP1500EPFCLCD` |
-| Port | auto (USB) |
-| Monitor user | `upsmon` (password in SOPS) |
-| Remote monitor | Enabled (port 3493) |
-| Shutdown trigger | LOWBATT |
-| Power down after shutdown | Yes |
-| Host sync interval | 15s |
-| Shutdown timer | 30s |
-| No-comm warning | 300s |
+| Setting                   | Value                       |
+| ------------------------- | --------------------------- |
+| Mode                      | MASTER                      |
+| Driver                    | `usbhid-ups$CP1500EPFCLCD`  |
+| Port                      | auto (USB)                  |
+| Monitor user              | `upsmon` (password in SOPS) |
+| Remote monitor            | Enabled (port 3493)         |
+| Shutdown trigger          | LOWBATT                     |
+| Power down after shutdown | Yes                         |
+| Host sync interval        | 15s                         |
+| Shutdown timer            | 30s                         |
+| No-comm warning           | 300s                        |
 
 > **Driver format note:** TrueNAS requires the full `driver$model` string from
 > `midclt call ups.driver_choices`, not just the driver name. The CP1500PFCLCD
@@ -286,8 +289,8 @@ The `prometheus` user is a read-only service account in the
 (`truenas-scale-api-prometheus-exporter`) scrapes the TrueNAS API using an
 API key bound to this user.
 
-| Component | Location |
-|-----------|----------|
-| Exporter deployment | `kubernetes/apps/o11y/truenas-exporter/` |
-| API key secret | `kubernetes/apps/o11y/truenas-exporter/app/secret.sops.yaml` (SOPS-encrypted) |
-| User config | `ansible/inventory/host_vars/hl8/vars.yml` → `truenas_users[prometheus]` |
+| Component           | Location                                                                      |
+| ------------------- | ----------------------------------------------------------------------------- |
+| Exporter deployment | `kubernetes/apps/o11y/truenas-exporter/`                                      |
+| API key secret      | `kubernetes/apps/o11y/truenas-exporter/app/secret.sops.yaml` (SOPS-encrypted) |
+| User config         | `ansible/inventory/host_vars/hl8/vars.yml` → `truenas_users[prometheus]`      |

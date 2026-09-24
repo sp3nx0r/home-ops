@@ -18,15 +18,15 @@
 
 Restore in priority order — critical infrastructure first, media last.
 
-| Priority | Dataset | B2 bucket | Size estimate | Purpose |
-|----------|---------|-----------|---------------|---------|
-| 1 | `backups/truenas-config` | `sp3nx0r-backups-truenas-config` | Tiny | TrueNAS configuration database and secret seed |
-| 2 | `homelab/k8s-exports` | `sp3nx0r-homelab` | Small | Kubernetes NFS PVCs |
-| 3 | `homelab/kopia` | `sp3nx0r-homelab-kopia` | Small-medium | Volsync backup repo (needed to restore iSCSI PVC data) |
-| 4 | `homelab/k8s-iscsi` | N/A | Small | iSCSI zvols (do not restore from B2 file sync; use Kopia instead) |
-| 5 | `backups/workstations` + `backups/git-bundles` | `sp3nx0r-backups-workstation` | Medium | Workstation mirrors and Git bundles |
-| 6 | `backups/archive` | `sp3nx0r-backups-archive` | Variable | Long-lived archive data |
-| 7 | `media` | `sp3nx0r-media` | Large | Media library (lowest priority, largest download) |
+| Priority | Dataset                                        | B2 bucket                        | Size estimate | Purpose                                                           |
+| -------- | ---------------------------------------------- | -------------------------------- | ------------- | ----------------------------------------------------------------- |
+| 1        | `backups/truenas-config`                       | `sp3nx0r-backups-truenas-config` | Tiny          | TrueNAS configuration database and secret seed                    |
+| 2        | `homelab/k8s-exports`                          | `sp3nx0r-homelab`                | Small         | Kubernetes NFS PVCs                                               |
+| 3        | `homelab/kopia`                                | `sp3nx0r-homelab-kopia`          | Small-medium  | Volsync backup repo (needed to restore iSCSI PVC data)            |
+| 4        | `homelab/k8s-iscsi`                            | N/A                              | Small         | iSCSI zvols (do not restore from B2 file sync; use Kopia instead) |
+| 5        | `backups/workstations` + `backups/git-bundles` | `sp3nx0r-backups-workstation`    | Medium        | Workstation mirrors and Git bundles                               |
+| 6        | `backups/archive`                              | `sp3nx0r-backups-archive`        | Variable      | Long-lived archive data                                           |
+| 7        | `media`                                        | `sp3nx0r-media`                  | Large         | Media library (lowest priority, largest download)                 |
 
 ## Procedure
 
@@ -47,8 +47,8 @@ If you have a copy of the TrueNAS config database (from `tank/backups/truenas-co
 4. Run Ansible to rebuild all configuration:
 
 ```bash
-task ansible:init
-task ansible:configure
+just ansible init
+just ansible nas
 ```
 
 This recreates all datasets, NFS shares, snapshot tasks, users, services, iSCSI config, cloud sync tasks, and the config backup cron.
@@ -108,7 +108,7 @@ ssh nas 'sudo chown -R 1000:1000 /mnt/tank/homelab/kopia'
 
 ```bash
 # Bootstrap Talos nodes
-task talos:bootstrap
+just bootstrap talos
 
 # Flux will reconcile from git and redeploy all apps
 # Volsync ReplicationDestinations will restore iSCSI PVC data from the Kopia repo
@@ -124,13 +124,13 @@ task talos:bootstrap
 
 ## Estimated recovery time
 
-| Component | Estimate | Notes |
-|-----------|----------|-------|
-| TrueNAS install + Ansible | 1-2 hours | Hardware-dependent |
-| B2 download (k8s-exports + kopia) | Hours | Bandwidth-dependent |
-| B2 download (media) | Days | Could be 1TB+, deprioritize |
-| Kubernetes bootstrap | 30 minutes | Automated via Talos + Flux |
-| PVC restores via Volsync | Minutes per PVC | Runs automatically after Flux reconciles |
+| Component                         | Estimate        | Notes                                    |
+| --------------------------------- | --------------- | ---------------------------------------- |
+| TrueNAS install + Ansible         | 1-2 hours       | Hardware-dependent                       |
+| B2 download (k8s-exports + kopia) | Hours           | Bandwidth-dependent                      |
+| B2 download (media)               | Days            | Could be 1TB+, deprioritize              |
+| Kubernetes bootstrap              | 30 minutes      | Automated via Talos + Flux               |
+| PVC restores via Volsync          | Minutes per PVC | Runs automatically after Flux reconciles |
 
 ## Important notes
 
