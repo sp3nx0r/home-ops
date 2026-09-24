@@ -49,3 +49,11 @@ run = "mise lock && git add .mise/mise.lock"
 [pre-commit.commands.zizmor]
 glob = [".github/workflows/*.yaml", ".github/actions/**/action.yaml"]
 run = "zizmor --offline {staged_files}"
+
+[pre-commit.commands.actionlint]
+glob = [".github/workflows/*.yaml", ".github/workflows/*.yml"]
+run = "actionlint {staged_files}"
+
+[pre-commit.commands.shellcheck]
+glob = ["*.sh", "*.bash"]
+run = "shellcheck {staged_files}"

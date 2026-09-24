@@ -18,21 +18,22 @@ browse-pvc claim ns='default':
         --image="{{ alpine }}" \
         --overrides='{"spec":{"containers":[{"name":"browse-pvc-{{ claim }}","image":"{{ alpine }}","stdin":true,"tty":true,"command":["/bin/sh"],"workingDir":"/mnt","volumeMounts":[{"mountPath":"/mnt","name":"data"}]}],"volumes":[{"name":"data","persistentVolumeClaim":{"claimName":"{{ claim }}"}}]}}'
 
-[doc('Open a shell to a node [node=required] [ns=kube-system]')]
+[doc('Open a root debug shell on a node [node=required]')]
 [group('kube')]
-node-shell node ns='kube-system':
-    kubectl node-shell -n "{{ ns }}" -x "{{ node }}"
+debug-node node:
+    trap 'kubectl delete pod -n default -l app.kubernetes.io/managed-by=kubectl-debug --field-selector spec.nodeName={{ node }} --ignore-not-found --wait=false' EXIT
+    kubectl debug node/{{ node }} -n default -it --image="{{ alpine }}" --profile=sysadmin
 
-[doc('Force-sync all ExternalSecrets')]
+[arg('resource', pattern='hr|ks|gitrepo|ocirepo|es')]
+[doc('Force-reconcile Flux resources or ExternalSecrets [resource=hr|ks|gitrepo|ocirepo|es]')]
 [group('kube')]
-sync-secrets:
-    kubectl get externalsecret --all-namespaces --no-headers \
-        --output=jsonpath='{range .items[*]}{.metadata.namespace},{.metadata.name}{"\n"}{end}' \
-    | while IFS=, read -r ns name; do
-        [[ -z "$ns" ]] && continue
-        kubectl --namespace "$ns" annotate externalsecret "$name" \
-            "force-sync=$(date +%s)" --overwrite
-      done
+sync resource:
+    kubectl get {{ resource }} --all-namespaces --no-headers | while read -r ns name _; do
+        kubectl --namespace "$ns" annotate --field-manager flux-client-side-apply --overwrite {{ resource }} "$name" \
+            "force-sync=$(date +%s)" \
+            "reconcile.fluxcd.io/requestedAt=$(date +%s)" \
+            "reconcile.fluxcd.io/forceAt=$(date +%s)"
+    done
 
 [doc('Delete pods in a Failed/Pending/Succeeded phase')]
 [group('kube')]

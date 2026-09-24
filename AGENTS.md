@@ -136,7 +136,7 @@ invoked as `just <module> <recipe>`. Common commands:
 - `just reconcile` — Force Flux to pull latest changes
 - `just talos ...` — Talos node operations (apply, diff, upgrade)
 - `just volsync ...` — Backup/restore operations
-- `just kube ...` — Cluster helpers (sync-secrets, node-shell, browse-pvc)
+- `just kube ...` — Cluster helpers (sync, debug-node, browse-pvc)
 
 ### Git hooks
 
@@ -145,7 +145,8 @@ Pre-commit hooks are managed by lefthook (`.lefthook.toml`), not pre-commit. The
 - Enforce SOPS encryption on `*.sops.yaml` files (`scripts/pre-commit-check-sops.sh`)
 - Scan for leaked secrets with TruffleHog
 - Format staged `justfile`, mise, JSON, Markdown, and YAML files
-- Re-lock `.mise/mise.lock` and lint GitHub workflows with zizmor
+- Re-lock `.mise/mise.lock`
+- Lint GitHub workflows (zizmor + actionlint) and shell scripts (shellcheck)
 
 ### Agent integrations
 
