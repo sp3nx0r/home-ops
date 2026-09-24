@@ -44,6 +44,7 @@ ollama_api_key: "{{ vault_ollama_api_key }}"
 ollama_models:
   - qwen3-coder-next:30b
   - qwen3.8:28b
+  - huihui_ai/Qwen3.8-abliterated
 
 # -- Bun --------------------------------------------------------------------
 # renovate: datasource=github-releases depName=oven-sh/bun
@@ -70,7 +71,7 @@ dnd_llm_game_path: /opt/dnd-llm-game/dnd-llm-game
 dnd_llm_game_venv_path: "{{ dnd_llm_game_path }}/.venv"
 
 # -- STT Backend (Speaches / whisper.cpp) -----------------------------------
-stt_backend: whisper-cpp  # "speaches" or "whisper-cpp"
+stt_backend: whisper-cpp # "speaches" or "whisper-cpp"
 
 # Speaches (active by default)
 # renovate: datasource=github-releases depName=speaches-ai/speaches
