@@ -1,0 +1,19 @@
+# User-managed /etc files via the Talos 1.14 EtcFileConfig document. This
+# replaces the deprecated .machine.files entry that previously wrote
+# /etc/nfsmount.conf (the config document map lists EtcFileConfig as the
+# replacement for .machine.files). nfsmount.conf is an explicitly allowed,
+# non-Talos-managed path. Contents are byte-identical to the old machine.files
+# entry, so this is a representation change only.
+---
+apiVersion: v1alpha1
+kind: EtcFileConfig
+name: nfsmount.conf
+mode: 0o644
+contents: |
+  [ NFSMount_Global_Options ]
+  nfsvers=4.2
+  hard=True
+  nconnect=16
+  noatime=True
+  rsize=1048576
+  wsize=1048576

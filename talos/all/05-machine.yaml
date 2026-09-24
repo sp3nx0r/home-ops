@@ -1,21 +1,10 @@
 machine:
   # Talos-API RBAC and XFS project quotas stay as v1alpha1 machine features
-  # (no dedicated typed document in Talos 1.14, no conflict).
+  # (.machine.features has no typed replacement document in Talos 1.14).
   features:
     rbac: true
     diskQuotaSupport: true
   # System-disk encryption lives in VolumeConfig documents (see
-  # all/60-encryption.yaml) so we can set allowDiscards, which is only
-  # available in the Talos 1.14 multi-doc format.
-  files:
-    - op: overwrite
-      path: /etc/nfsmount.conf
-      permissions: 0o644
-      content: |
-        [ NFSMount_Global_Options ]
-        nfsvers=4.2
-        hard=True
-        nconnect=16
-        noatime=True
-        rsize=1048576
-        wsize=1048576
+  # all/60-encryption.yaml) and NFS mount defaults in an EtcFileConfig document
+  # (see all/51-etc-files.yaml); both .machine.systemDiskEncryption and
+  # .machine.files are deprecated in Talos 1.14.
