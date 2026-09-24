@@ -1,7 +1,9 @@
 ---
 # Cluster access for Pocket ID OIDC identities forwarded by Headlamp.
 # Subjects use the "oidc:" prefix mapped by the kube-apiserver
-# AuthenticationConfiguration (talos/patches/controller/cluster.yaml).
+# AuthenticationConfiguration (talos/control-plane/00-cluster.yaml).
+# Group names must match exactly what Pocket ID emits in the groups claim
+# (Pocket ID slugifies group names with underscores, e.g. k8s_admins).
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
@@ -13,7 +15,7 @@ roleRef:
 subjects:
   - apiGroup: rbac.authorization.k8s.io
     kind: Group
-    name: "oidc:k8s-viewers"
+    name: "oidc:k8s_viewers"
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -26,4 +28,4 @@ roleRef:
 subjects:
   - apiGroup: rbac.authorization.k8s.io
     kind: Group
-    name: "oidc:k8s-admins"
+    name: "oidc:k8s_admins"
