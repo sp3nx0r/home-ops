@@ -23,6 +23,7 @@ spec:
         externalSecret:
           enabled: true
           name: headlamp-oidc
+        scopes: "openid,profile,email,groups"
       extraArgs:
         - -oidc-callback-url=https://headlamp.securimancy.com/oidc-callback
         - -oidc-use-pkce=false
