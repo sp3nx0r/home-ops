@@ -127,7 +127,7 @@ Tools are version-pinned in `.mise/config.toml` (with a checksum lockfile at `.m
 - `talosctl` / `topf` — Talos node management
 - `sops` / `age` — Secret encryption
 - `kubeconform` — YAML schema validation
-- `gum` — Shell UI used by just recipes for logging/prompts
+- `gum` — Shell UI used by just recipes for structured logging (`gum log`)
 - `gh` — GitHub CLI for issues, PRs, checks, and releases
 
 Run `just` (no args) to list available recipes. Recipes are grouped into modules
