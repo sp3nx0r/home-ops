@@ -452,3 +452,11 @@ spec:
     grafana:
       enabled: false
       forceDeployDashboards: false
+
+    prometheus-adapter:
+      resources:
+        requests:
+          cpu: 100m
+          memory: 512Mi
+        limits:
+          memory: 1536Mi
