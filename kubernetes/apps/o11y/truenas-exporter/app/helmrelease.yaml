@@ -24,6 +24,7 @@ spec:
               TRUENAS_VERIFY_TLS: "false"
               EXPORTER_PORT: "9108"
               SCRAPE_INTERVAL_SECONDS: "30"
+              TRUENAS_TIMEOUT_SECONDS: "45"
               ENABLE_DATASET_METRICS: "true"
               ENABLE_TASK_METRICS: "true"
             envFrom:
