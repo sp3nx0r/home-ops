@@ -104,6 +104,7 @@ kubernetes/apps/<namespace>/<app-name>/
 - Generated configs land in `talos/clusterconfig/`
 - Global patches in `talos/patches/global/`, controller patches in `talos/patches/controller/`
 - Secure Boot enabled, TPM-based disk encryption (LUKS2)
+- **Reboots: always `talosctl reboot --mode powercycle`.** The default kexec reboot hangs before `apid` on this hardware (node pingable but `talosctl`/kube-api refused).
 
 ## Infrastructure
 
