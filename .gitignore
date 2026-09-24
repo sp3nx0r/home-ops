@@ -24,3 +24,6 @@ talosconfig
 .venv/
 .DS_Store
 Thumbs.db
+
+# topf render output
+talos/rendered/
