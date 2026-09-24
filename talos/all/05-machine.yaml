@@ -4,20 +4,9 @@ machine:
   features:
     rbac: true
     diskQuotaSupport: true
-  # Kept in v1alpha1 form on purpose: the cluster's system disks are already
-  # LUKS2/TPM encrypted, and this exactly matches the running config so the
-  # migration introduces no disk-encryption change.
-  systemDiskEncryption:
-    state:
-      provider: luks2
-      keys:
-        - slot: 0
-          tpm: {}
-    ephemeral:
-      provider: luks2
-      keys:
-        - slot: 0
-          tpm: {}
+  # System-disk encryption lives in VolumeConfig documents (see
+  # all/60-encryption.yaml) so we can set allowDiscards, which is only
+  # available in the Talos 1.14 multi-doc format.
   files:
     - op: overwrite
       path: /etc/nfsmount.conf

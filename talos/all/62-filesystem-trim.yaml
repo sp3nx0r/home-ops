@@ -1,0 +1,8 @@
+# Weekly fstrim of eligible filesystems. This matches the Talos 1.14 default
+# for freshly generated clusters; clusters upgraded from older versions (ours)
+# don't get it automatically. It reaches the LUKS2-encrypted STATE/EPHEMERAL
+# volumes only because allowDiscards is set on them (see all/60-encryption.yaml).
+---
+apiVersion: v1alpha1
+kind: FilesystemTrimConfig
+interval: 168h0m0s

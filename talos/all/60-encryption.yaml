@@ -1,0 +1,31 @@
+# System-disk encryption, moved from the deprecated v1alpha1
+# machine.systemDiskEncryption block to VolumeConfig documents so we can set
+# allowDiscards (only exposed in the Talos 1.14 multi-doc format).
+#
+# The luks2/TPM spec is reproduced exactly (provider + slot 0 TPM key), so this
+# is an open-time change only: the existing on-disk LUKS2 header is untouched
+# and nothing re-encrypts. allowDiscards passes TRIM/discard through to the
+# underlying NVMe when the volume is opened, so the weekly FilesystemTrimConfig
+# (all/62-filesystem-trim.yaml) can actually reclaim free blocks on these
+# encrypted volumes. Trade-off: freed-block patterns become distinguishable on
+# the raw device (a metadata side channel, not a plaintext leak).
+---
+apiVersion: v1alpha1
+kind: VolumeConfig
+name: STATE
+encryption:
+  provider: luks2
+  allowDiscards: true
+  keys:
+    - slot: 0
+      tpm: {}
+---
+apiVersion: v1alpha1
+kind: VolumeConfig
+name: EPHEMERAL
+encryption:
+  provider: luks2
+  allowDiscards: true
+  keys:
+    - slot: 0
+      tpm: {}
