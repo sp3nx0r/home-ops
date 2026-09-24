@@ -1,6 +1,11 @@
 min_version = "2026.7.0"
 
 [env]
+# Point npm's user config at a repo-local file so mise's npm backend (oxfmt,
+# node) resolves from the public registry regardless of a machine's global
+# ~/.npmrc (e.g. a corporate registry that lacks these public packages).
+# Applied whenever mise is activated / running (shells, shims, tasks, hooks).
+NPM_CONFIG_USERCONFIG = "{{config_root}}/.mise/npmrc"
 KUBECONFIG = "{{config_root}}/kubeconfig"
 SOPS_CONFIG = "{{config_root}}/.sops.yaml"
 SOPS_AGE_KEY_FILE = "{{config_root}}/age.key"
