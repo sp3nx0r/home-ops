@@ -23,9 +23,9 @@ spec:
         externalSecret:
           enabled: true
           name: headlamp-oidc
+          hasScopes: true
       extraArgs:
         - -oidc-callback-url=https://headlamp.securimancy.com/oidc-callback
-        - -oidc-use-pkce=false
     clusterRoleBinding:
       create: true
       clusterRoleName: view
