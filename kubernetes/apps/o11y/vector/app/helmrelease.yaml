@@ -28,6 +28,13 @@ spec:
           glob_minimum_cooldown_ms: 5000
         internal_metrics:
           type: internal_metrics
+        # kube-apiserver audit log. Talos writes it to a host file (not stdout),
+        # and Vector already hostPath-mounts /var/log, so it is readable here.
+        kube_audit:
+          type: file
+          include:
+            - /var/log/audit/kube/*.log
+          read_from: end
       transforms:
         kube_parse:
           type: remap
@@ -80,6 +87,33 @@ spec:
           condition: |
             msg = to_string(.message) ?? ""
             !contains(msg, "kube-probe") && !contains(msg, "Gatus/1.0")
+        # Parse each JSON audit event; tag it and set event-time from the audit
+        # stageTimestamp so Loki timestamps match when the request happened.
+        audit_parse:
+          type: remap
+          inputs: ["kube_audit"]
+          source: |
+            parsed, err = parse_json(.message)
+            if err == null && is_object(parsed) {
+              . = object!(parsed)
+            }
+            .source = "kube-audit"
+            ts, terr = parse_timestamp(.stageTimestamp, "%+")
+            if terr == null {
+              .timestamp = ts
+            }
+            .verb = to_string(.verb) ?? ""
+            .namespace = to_string(.objectRef.namespace) ?? ""
+        # Drop the RequestReceived half of every event (metadata policy logs
+        # both stages) plus the noisiest security-irrelevant resources. Finer
+        # trimming belongs in the apiserver audit policy (workstream B).
+        audit_filter:
+          type: filter
+          inputs: ["audit_parse"]
+          condition: |
+            stage = to_string(.stage) ?? ""
+            res = to_string(.objectRef.resource) ?? ""
+            stage != "RequestReceived" && res != "events" && res != "leases"
       sinks:
         loki:
           type: loki
@@ -107,6 +141,28 @@ spec:
             node: '{{ "{{ node }}" }}'
             source: kubernetes
           out_of_order_action: accept
+        loki_audit:
+          type: loki
+          inputs: ["audit_filter"]
+          endpoint: http://loki-gateway.o11y.svc.cluster.local
+          buffer:
+            type: memory
+            max_events: 5000
+            when_full: drop_newest
+          request:
+            concurrency: 2
+            rate_limit_num: 10
+            rate_limit_duration_secs: 1
+            retry_max_duration_secs: 30
+          batch:
+            max_bytes: 524288
+            timeout_secs: 5
+          encoding:
+            codec: json
+          labels:
+            source: kube-audit
+            verb: '{{ "{{ verb }}" }}'
+          out_of_order_action: accept
         prom_exporter:
           type: prometheus_exporter
           inputs: ["internal_metrics"]
@@ -116,6 +172,9 @@ spec:
       allowPrivilegeEscalation: false
       readOnlyRootFilesystem: true
       capabilities:
+        # The audit log is 0600 owned by the apiserver uid; DAC_READ_SEARCH lets
+        # the root agent read it (drop-ALL otherwise strips root's read-bypass).
+        add: ["DAC_READ_SEARCH"]
         drop: ["ALL"]
 
     resources:
