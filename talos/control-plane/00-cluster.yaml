@@ -78,6 +78,15 @@ configuration:
         - group: coordination.k8s.io
           resources: ["leases"]
 
+    # Sensitive resources: metadata ONLY, but ALWAYS audited. Ordered before
+    # the broad system-user / system:nodes drops below (first-match-wins) so a
+    # kubelet or controller reading Secrets/ConfigMaps still leaves a trail.
+    # Never elevate these to Request/RequestResponse (would log secret bodies).
+    - level: Metadata
+      resources:
+        - group: ""
+          resources: ["secrets", "configmaps", "serviceaccounts/token"]
+
     # Control-plane components and kubelets polling their world view.
     - level: None
       users:
@@ -111,12 +120,6 @@ configuration:
         - /api*
         - /.well-known*
 
-    # --- Sensitive resources: metadata ONLY, never log request bodies ---
-    - level: Metadata
-      resources:
-        - group: ""
-          resources: ["secrets", "configmaps", "serviceaccounts/token"]
-
     # --- Auth / policy / network changes: capture the request body ---
     - level: Request
       verbs: ["create", "update", "patch", "delete", "deletecollection"]
@@ -133,7 +136,19 @@ configuration:
             - mutatingwebhookconfigurations
         - group: networking.k8s.io
           resources: ["networkpolicies"]
+        # Scoped to policy CRDs only; the rest of cilium.io (CiliumEndpoint,
+        # CiliumIdentity, CiliumNode, ...) is per-pod/per-IP churn we do not
+        # want to capture at Request.
         - group: cilium.io
+          resources:
+            - ciliumnetworkpolicies
+            - ciliumclusterwidenetworkpolicies
+        # Certificate issuance/approval — capture who approved what (the
+        # decision lives in the request body).
+        - group: certificates.k8s.io
+          resources:
+            - certificatesigningrequests
+            - certificatesigningrequests/approval
 
     # --- Everything else: metadata ---
     - level: Metadata
