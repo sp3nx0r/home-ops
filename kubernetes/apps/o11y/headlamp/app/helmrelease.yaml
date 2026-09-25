@@ -25,7 +25,7 @@ spec:
           name: headlamp-oidc
           hasScopes: true
       extraArgs:
-        - -oidc-callback-url=https://headlamp.securimancy.com/oidc-callback
+        - -oidc-callback-url=https://headlamp.${SECRET_DOMAIN}/oidc-callback
     clusterRoleBinding:
       create: true
       clusterRoleName: view
@@ -38,7 +38,7 @@ spec:
         - name: envoy-internal
           namespace: network
       hostnames:
-        - "headlamp.securimancy.com"
+        - "headlamp.${SECRET_DOMAIN}"
     securityContext:
       runAsNonRoot: true
       runAsUser: 100
