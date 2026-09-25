@@ -81,33 +81,42 @@ spec:
               protocol: TCP
             - port: "10080"
               protocol: TCP
-    # LAN infra + gateway LB VIPs on 443: Unifi (.1), envoy-internal (.10),
-    # envoy-external (.20), TrueNAS (.40). These are outside the cluster CIDR so
-    # Cilium classifies them as world; scoped to 443 here.
+    # Homelab hostnames gatus probes by name: the static blog + TrueNAS checks
+    # and every sidecar-discovered HTTPRoute (all *.securimancy.com). Scoped via
+    # toFQDNs so egress is limited to the homelab domain rather than the whole
+    # internet. gatus resolves these via the node/UniFi resolver, landing on
+    # either the envoy LB VIPs or the public edge -- toFQDNs covers both.
+    - toFQDNs:
+        - matchPattern: "*.securimancy.com"
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+    # Raw-IP LAN targets with no DNS lookup: the Unifi gateway TCP check
+    # (192.168.5.1:443), plus the envoy LB VIPs (.10 internal / .20 external) as
+    # a fallback for route probes if the datapath classifies VIP egress by CIDR.
     - toCIDRSet:
         - cidr: 192.168.5.1/32
         - cidr: 192.168.5.10/32
         - cidr: 192.168.5.20/32
-        - cidr: 192.168.5.40/32
       toPorts:
         - ports:
             - port: "443"
               protocol: TCP
-    # External checks: the public blog (https), the connectivity checker's
-    # 1.1.1.1:53 dial, and ICMP echo to the public resolvers (1.1.1.1/8.8.8.8/
-    # 9.9.9.9). world:443/53 is inherent to monitoring arbitrary public targets.
-    - toEntities:
-        - world
+    # Connectivity checker dials 1.1.1.1:53
+    - toCIDRSet:
+        - cidr: 1.1.1.1/32
       toPorts:
         - ports:
-            - port: "443"
-              protocol: TCP
             - port: "53"
               protocol: TCP
             - port: "53"
               protocol: UDP
-    - toEntities:
-        - world
+    # ICMP echo connectivity checks to the public resolvers
+    - toCIDRSet:
+        - cidr: 1.1.1.1/32
+        - cidr: 8.8.8.8/32
+        - cidr: 9.9.9.9/32
       icmps:
         - fields:
             - type: 8
