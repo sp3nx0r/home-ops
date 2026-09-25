@@ -22,9 +22,6 @@ spec:
             env:
               QUI__HOST: 0.0.0.0
               QUI__PORT: &port 80
-              # Native OIDC (Pocket ID) — qui enforces auth itself, so hitting
-              # the ClusterIP directly cannot bypass SSO (finding #3). Built-in
-              # login is disabled so OIDC is the only auth path.
               QUI__OIDC_ENABLED: true
               QUI__OIDC_ISSUER: "https://id.${SECRET_DOMAIN}"
               QUI__OIDC_CLIENT_ID: "bacca251-5e41-430f-ae6a-c556df93abc9"
