@@ -109,3 +109,15 @@ apps-helm:
     if ! helmfile --file "{{ source_directory() }}/helmfile/apps.yaml" sync --hide-notes; then
         just log fatal "Failed to sync Helm releases"
     fi
+
+# Render the bootstrap charts against the values read from kubernetes/apps to
+# catch chart/values drift that dry runs miss. Pulls charts (needs network) but
+# is read-only — it never touches a cluster.
+[doc('Render the bootstrap helmfile charts to catch drift (needs network)')]
+[group('bootstrap')]
+test-helmfile:
+    just log info "Rendering apps helmfile" stage "{{ recipe_name() }}"
+    helmfile --file "{{ source_directory() }}/helmfile/apps.yaml" template --quiet > /dev/null
+    just log info "Rendering CRDs helmfile" stage "{{ recipe_name() }}"
+    helmfile --file "{{ source_directory() }}/helmfile/crds.yaml" template --quiet > /dev/null
+    just log info "Bootstrap charts rendered cleanly"
