@@ -14,9 +14,12 @@ spec:
       app.kubernetes.io/name: loki
       app.kubernetes.io/component: gateway
   ingress:
-    # Log push (Vector agent + vector-syslog, both carry name=vector) and
-    # Grafana datasource queries (server-side proxy) hit nginx :8080
+    # Log push (vector agent in kube-system + vector-syslog in o11y, both carry
+    # name=vector) and Grafana datasource queries (server-side proxy) hit nginx :8080
     - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            app.kubernetes.io/name: vector
         - matchLabels:
             io.kubernetes.pod.namespace: o11y
             app.kubernetes.io/name: vector

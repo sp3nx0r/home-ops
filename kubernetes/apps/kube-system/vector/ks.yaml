@@ -7,12 +7,13 @@ metadata:
 spec:
   dependsOn:
     - name: loki
+      namespace: o11y
   interval: 1h
-  path: ./kubernetes/apps/o11y/vector/app
+  path: ./kubernetes/apps/kube-system/vector/app
   prune: true
   sourceRef:
     kind: GitRepository
     name: flux-system
     namespace: flux-system
-  targetNamespace: o11y
+  targetNamespace: kube-system
   wait: false
