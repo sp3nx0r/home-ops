@@ -33,11 +33,16 @@ spec:
           gluetun:
             image:
               repository: ghcr.io/qdm12/gluetun
-              tag: v3.41.3
+              tag: v3.41.3@sha256:fa19cc76b2af13d57a8d3dc3066f2ada061b1c761b8aecf989b3877c0486e027
             lifecycle:
               postStart:
                 exec:
-                  command: ["/bin/sh", "-c", "(ip rule del table 51820; ip -6 rule del table 51820) || true"]
+                  command:
+                    [
+                      "/bin/sh",
+                      "-c",
+                      "(ip rule del table 51820; ip -6 rule del table 51820) || true",
+                    ]
             env:
               PUID: "0"
               PGID: "0"
@@ -61,7 +66,12 @@ spec:
                 custom: true
                 spec:
                   exec:
-                    command: ["/bin/sh", "-c", "test -s /tmp/gluetun/forwarded_port && wget -q -O /dev/null http://localhost:9999"]
+                    command:
+                      [
+                        "/bin/sh",
+                        "-c",
+                        "test -s /tmp/gluetun/forwarded_port && wget -q -O /dev/null http://localhost:9999",
+                      ]
                   periodSeconds: 10
                   failureThreshold: 30
               liveness:
@@ -69,7 +79,12 @@ spec:
                 custom: true
                 spec:
                   exec:
-                    command: ["/bin/sh", "-c", "test -s /tmp/gluetun/forwarded_port && wget -q -O /dev/null http://localhost:9999"]
+                    command:
+                      [
+                        "/bin/sh",
+                        "-c",
+                        "test -s /tmp/gluetun/forwarded_port && wget -q -O /dev/null http://localhost:9999",
+                      ]
                   periodSeconds: 30
                   failureThreshold: 3
             resources:
@@ -89,7 +104,7 @@ spec:
             dependsOn: gluetun
             image:
               repository: ghcr.io/home-operations/qbittorrent-libtorrentv1
-              tag: 5.2.3
+              tag: 5.2.3@sha256:8a15de24cabfca8041788773436cb176378ff7735e5cb0b2fd94984d4fac6968
             env:
               QBT_TORRENTING_PORT: &bittorrentPort 50414
               QBT_WEBUI_PORT: &port 80
@@ -138,7 +153,7 @@ spec:
               runAsGroup: 1000
               allowPrivilegeEscalation: false
               readOnlyRootFilesystem: true
-              capabilities: {drop: ["ALL"]}
+              capabilities: { drop: ["ALL"] }
     defaultPodOptions:
       terminationGracePeriodSeconds: 120
       securityContext:

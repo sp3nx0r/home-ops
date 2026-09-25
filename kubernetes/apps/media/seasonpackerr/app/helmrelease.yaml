@@ -16,7 +16,7 @@ spec:
           app:
             image:
               repository: ghcr.io/nuxencs/seasonpackarr
-              tag: v0.16.0
+              tag: v0.16.0@sha256:5e46ea5a098f2d116433d73b7bc7fe74a3a60f573678796f6726f3440b2068bc
             env:
               SEASONPACKARR__DISABLE_CONFIG_FILE: true
               SEASONPACKARR__HOST: 0.0.0.0
@@ -51,7 +51,7 @@ spec:
             securityContext:
               allowPrivilegeEscalation: false
               readOnlyRootFilesystem: true
-              capabilities: {drop: ["ALL"]}
+              capabilities: { drop: ["ALL"] }
     defaultPodOptions:
       securityContext:
         runAsNonRoot: true

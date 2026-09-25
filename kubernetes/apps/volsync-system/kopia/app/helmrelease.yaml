@@ -18,7 +18,7 @@ spec:
           init-repo:
             image:
               repository: ghcr.io/home-operations/kopia
-              tag: 0.23.1
+              tag: 0.23.1@sha256:27da0a33b44e1b902150a6c963514237217464bb13118a95bb056667be93cda5
             command: ["/bin/sh", "-c"]
             args:
               - |
@@ -35,12 +35,12 @@ spec:
             securityContext:
               allowPrivilegeEscalation: false
               readOnlyRootFilesystem: true
-              capabilities: {drop: ["ALL"]}
+              capabilities: { drop: ["ALL"] }
         containers:
           app:
             image:
               repository: ghcr.io/home-operations/kopia
-              tag: 0.23.1
+              tag: 0.23.1@sha256:27da0a33b44e1b902150a6c963514237217464bb13118a95bb056667be93cda5
             env:
               KOPIA_WEB_ENABLED: "true"
               KOPIA_WEB_PORT: &port 80
@@ -67,7 +67,7 @@ spec:
             securityContext:
               allowPrivilegeEscalation: false
               readOnlyRootFilesystem: true
-              capabilities: {drop: ["ALL"]}
+              capabilities: { drop: ["ALL"] }
             resources:
               requests:
                 cpu: 10m
