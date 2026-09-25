@@ -100,9 +100,9 @@ kubernetes/apps/<namespace>/<app-name>/
 - Three bare-metal control-plane nodes: `miirym`, `palarandusk`, `aurinax` (192.168.5.50-52)
 - Hyper-converged: all nodes run workloads (no dedicated workers)
 - VIP at `192.168.5.254` for the API server
-- Configured via **talhelper** — `talos/talconfig.yaml` is the source of truth
+- Configured via **topf** — `talos/topf.yaml` is the source of truth
 - Generated configs land in `talos/clusterconfig/`
-- Global patches in `talos/patches/global/`, controller patches in `talos/patches/controller/`
+- Machine patches live in `talos/all/` (all nodes) and `talos/control-plane/` (control-plane nodes); `.tpl` patches are Go-templated by topf
 - Secure Boot enabled, TPM-based disk encryption (LUKS2)
 - **Reboots: always `talosctl reboot --mode powercycle`.** The default kexec reboot hangs before `apid` on this hardware (node pingable but `talosctl`/kube-api refused).
 
