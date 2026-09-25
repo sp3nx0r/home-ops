@@ -2,10 +2,11 @@
 # yaml-language-server: $schema=https://json.schemastore.org/kustomization
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
+namespace: download
+
 components:
-  - ../../../../components/volsync
+  - ../../components/sops
+
 resources:
-  - ./helmrelease.yaml
-  - ./ocirepository.yaml
-  - ./pvc.yaml
-  - ./secret.sops.yaml
+  - ./namespace.yaml
+  - ./qbittorrent-gluetun/ks.yaml
