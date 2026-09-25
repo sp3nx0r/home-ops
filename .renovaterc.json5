@@ -1,41 +1,16 @@
 {
   $schema: "https://docs.renovatebot.com/renovate-schema.json",
-  extends: [
-    "config:recommended",
-    "docker:enableMajor",
-    "helpers:pinGitHubActionDigests",
-    ":automergeBranch",
-    ":dependencyDashboard",
-    ":disableRateLimiting",
-    ":semanticCommits",
-  ],
-  dependencyDashboard: true,
-  dependencyDashboardTitle: "Renovate Dashboard :robot:",
+  // Base config lives in the community-maintained shared preset. It provides the
+  // manager file patterns (flux/kubernetes/helmfile/kustomize/helm-values), the
+  // annotated + OCI custom managers, semantic-commit scoping, mise packageName
+  // normalization, registry aliases, and zer0ver handling. Only overrides the
+  // preset does NOT cover are kept below.
+  extends: ["github>home-operations/renovate-presets#8.1.0"],
   schedule: ["every weekend"],
-  ignorePaths: ["**/*.sops.*", "templates/**"],
+  ignorePaths: ["**/*.sops.*"],
   suppressNotifications: ["prEditedNotification", "prIgnoreNotification"],
-  flux: {
-    managerFilePatterns: ["/(^|/)kubernetes/.+\\.ya?ml(?:\\.j2)?$/"],
-  },
-  helmfile: {
-    managerFilePatterns: [
-      "/(^|/)helmfile\\.ya?ml(?:\\.gotmpl)?(?:\\.j2)?$/",
-      "/(^|/)helmfile\\.d/.+\\.ya?ml(?:\\.gotmpl)?(?:\\.j2)?$/",
-    ],
-  },
-  kubernetes: {
-    managerFilePatterns: ["/(^|/)kubernetes/.+\\.ya?ml(?:\\.j2)?$/"],
-  },
-  kustomize: {
-    managerFilePatterns: ["/^kustomization\\.ya?ml(?:\\.j2)?$/"],
-  },
   packageRules: [
-    {
-      description: "Override Helmfile Dependency Name",
-      matchDatasources: ["docker"],
-      matchManagers: ["helmfile"],
-      overrideDepName: "{{packageName}}",
-    },
+    // --- Grouping (not in the base preset) ---
     {
       description: "Flux Operator Group",
       groupName: "flux-operator",
@@ -47,7 +22,20 @@
       minimumGroupSize: 3,
     },
     {
-      description: "Auto-merge GitHub Actions",
+      // Group tool bumps and keep .mise/mise.lock fresh. We don't re-lock on
+      // pre-commit, so lockFileMaintenance catches drift for tools that aren't
+      // otherwise updated (version bumps re-lock in their own PRs).
+      description: "Mise Tools Group",
+      groupName: "mise tools",
+      matchManagers: ["mise"],
+      group: {
+        commitMessageTopic: "{{{groupName}}} group",
+      },
+      lockFileMaintenance: { enabled: true },
+    },
+    // --- Policy ---
+    {
+      description: "Auto-merge GitHub Actions (minor/patch/digest) after a soak",
       matchManagers: ["github-actions"],
       automerge: true,
       automergeType: "branch",
@@ -55,153 +43,15 @@
       minimumReleaseAge: "14 days",
       ignoreTests: true,
     },
-    {
-      matchUpdateTypes: ["major"],
-      semanticCommitType: "feat",
-      commitMessagePrefix: "{{semanticCommitType}}({{semanticCommitScope}})!:",
-      commitMessageExtra: "( {{currentVersion}} ➔ {{newVersion}} )",
-    },
-    {
-      matchUpdateTypes: ["minor"],
-      semanticCommitType: "feat",
-      commitMessageExtra: "( {{currentVersion}} ➔ {{newVersion}} )",
-    },
-    {
-      matchUpdateTypes: ["patch"],
-      semanticCommitType: "fix",
-      commitMessageExtra: "( {{currentVersion}} ➔ {{newVersion}} )",
-    },
-    {
-      matchUpdateTypes: ["digest"],
-      semanticCommitType: "chore",
-      commitMessageExtra: "( {{currentDigestShort}} ➔ {{newDigestShort}} )",
-    },
-    {
-      matchDatasources: ["docker"],
-      semanticCommitScope: "container",
-      commitMessageTopic: "image {{depName}}",
-    },
-    {
-      description: "Hold CoreDNS chart on 1.46.2 (CoreDNS 1.13.1) — coredns/coredns#8390 autopath/serve_stale regression",
-      matchDatasources: ["docker"],
-      matchPackageNames: ["ghcr.io/coredns/charts/coredns"],
-      enabled: false,
-    },
-    {
-      matchDatasources: ["helm"],
-      semanticCommitScope: "helm",
-      commitMessageTopic: "chart {{depName}}",
-    },
-    {
-      matchManagers: ["github-actions"],
-      semanticCommitType: "ci",
-      semanticCommitScope: "github-action",
-      commitMessageTopic: "action {{depName}}",
-    },
-    {
-      matchDatasources: ["github-releases"],
-      semanticCommitScope: "github-release",
-      commitMessageTopic: "release {{depName}}",
-    },
-    {
-      description: "Group all mise tool updates",
-      groupName: "mise tools",
-      matchManagers: ["mise"],
-      semanticCommitScope: "mise",
-      commitMessageTopic: "tool {{depName}}",
-      group: {
-        commitMessageTopic: "{{{groupName}}} group",
-      },
-      // Periodically refresh .mise/mise.lock (checksums/URLs across all
-      // platforms) via `mise lock --bump`, since we no longer re-lock on
-      // pre-commit. Version bumps already re-lock in their own PRs; this
-      // catches drift for tools that aren't otherwise updated.
-      lockFileMaintenance: { enabled: true },
-    },
-    {
-      matchUpdateTypes: ["major"],
-      labels: ["type/major"],
-    },
-    {
-      matchUpdateTypes: ["minor"],
-      labels: ["type/minor"],
-    },
-    {
-      matchUpdateTypes: ["patch"],
-      labels: ["type/patch"],
-    },
-    {
-      matchUpdateTypes: ["digest"],
-      labels: ["type/digest"],
-    },
-    {
-      matchDatasources: ["docker"],
-      addLabels: ["renovate/container"],
-    },
-    {
-      matchDatasources: ["helm"],
-      addLabels: ["renovate/helm"],
-    },
-    {
-      matchManagers: ["github-actions"],
-      addLabels: ["renovate/github-action"],
-    },
-    {
-      matchDatasources: ["github-releases"],
-      addLabels: ["renovate/github-release"],
-    },
-    {
-      matchDatasources: ["custom.talos-factory"],
-      addLabels: ["renovate/talos"],
-      semanticCommitScope: "container",
-      commitMessageTopic: "{{depName}}",
-    },
-  ],
-  customDatasources: {
-    "talos-factory": {
-      defaultRegistryUrlTemplate: "https://factory.talos.dev/versions",
-      format: "json",
-      transformTemplates: ['{"releases": [$.{"version": $}]}'],
-    },
-  },
-  customManagers: [
-    {
-      description: "Process annotated dependencies",
-      customType: "regex",
-      managerFilePatterns: [
-        "/(^|/).+\\.env(?:\\.j2)?$/",
-        "/(^|/).+\\.sh(?:\\.j2)?$/",
-        "/(^|/).+\\.ya?ml(?:\\.j2)?$/",
-      ],
-      matchStrings: [
-        // # renovate: datasource=github-releases depName=k3s-io/k3s
-        // k3s_release_version: &version v1.29.0+k3s1
-        // # renovate: datasource=helm depName=cilium repository=https://helm.cilium.io
-        // version: 1.15.1
-        // # renovate: datasource=docker depName=ghcr.io/siderolabs/kubelet
-        // KUBERNETES_VERSION=v1.31.1
-        "datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)( repository=(?<registryUrl>\\S+))?\\n.+(:\\s|=)(&\\S+\\s)?(?<currentValue>\\S+)",
-        // # renovate: datasource=docker depName=ghcr.io/prometheus-operator/prometheus-operator
-        // https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/v0.80.0/example/prometheus-operator-crd/monitoring.coreos.com_alertmanagerconfigs.yaml
-        "datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\n.+/(?<currentValue>(v|\\d)[^/]+)",
-      ],
-      datasourceTemplate: "{{#if datasource}}{{{datasource}}}{{else}}github-releases{{/if}}",
-    },
-    {
-      customType: "regex",
-      description: "Process OCI dependencies",
-      managerFilePatterns: ["/\\.yaml(?:\\.j2)?$/"],
-      matchStrings: ["oci://(?<depName>[^:]+):(?<currentValue>\\S+)"],
-      datasourceTemplate: "docker",
-    },
-    {
-      customType: "regex",
-      description: "Process Talos Factory installer images",
-      managerFilePatterns: ["/talos\\/.*\\.ya?ml(?:\\.j2)?$/"],
-      matchStrings: ["factory\\.talos\\.dev\\/[^/]+\\/[^:]+:(?<currentValue>v\\S+)"],
-      datasourceTemplate: "custom.talos-factory",
-      versioningTemplate: "semver",
-      depNameTemplate: "siderolabs/talos",
-    },
+    // --- Labels (the base preset adds none) ---
+    { matchUpdateTypes: ["major"], addLabels: ["type/major"] },
+    { matchUpdateTypes: ["minor"], addLabels: ["type/minor"] },
+    { matchUpdateTypes: ["patch"], addLabels: ["type/patch"] },
+    { matchUpdateTypes: ["digest"], addLabels: ["type/digest"] },
+    { matchDatasources: ["docker"], addLabels: ["renovate/container"] },
+    { matchDatasources: ["helm"], addLabels: ["renovate/helm"] },
+    { matchManagers: ["github-actions"], addLabels: ["renovate/github-action"] },
+    { matchDatasources: ["github-releases"], addLabels: ["renovate/github-release"] },
+    { matchPackageNames: ["siderolabs/talos"], addLabels: ["renovate/talos"] },
   ],
 }
