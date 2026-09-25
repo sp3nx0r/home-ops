@@ -12,7 +12,7 @@ spec:
   oidc:
     provider:
       issuer: "https://id.${SECRET_DOMAIN}"
-    clientID: "REPLACE_WITH_ALERTMANAGER_POCKET_ID_CLIENT_ID"
+    clientID: "abfd1846-d43c-4082-97a8-fb1f1af50485"
     clientSecret:
       name: alertmanager-oidc-secret
     redirectURL: "https://alertmanager.${SECRET_DOMAIN}/oauth2/callback"
