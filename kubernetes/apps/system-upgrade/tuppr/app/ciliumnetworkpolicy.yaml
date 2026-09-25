@@ -20,9 +20,13 @@ spec:
         - ports:
             - port: "8081"
               protocol: TCP
-    # kube-apiserver -> validating admission webhook
+    # kube-apiserver -> validating admission webhook. The apiserver is
+    # host-networked on the control-plane nodes, so it presents as host
+    # (same node) or remote-node (cross node), not the kube-apiserver identity.
     - fromEntities:
         - kube-apiserver
+        - host
+        - remote-node
       toPorts:
         - ports:
             - port: "9443"
