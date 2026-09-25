@@ -40,6 +40,104 @@ extraArgs:
   # https://kubernetes.io/docs/tasks/extend-kubernetes/configure-aggregation-layer/
   enable-aggregator-routing: "true"
 ---
+# Trimmed kube-apiserver audit policy. Talos's default is a single
+# `level: Metadata` catch-all (audits ~everything -> high volume). Events are
+# written to /var/log/audit/kube/*.log and shipped to Loki by Vector
+# (o11y/vector, source=kube-audit). Rules are first-match-wins: drop the
+# highest-churn noise, keep request bodies off Secrets, elevate auth/policy
+# writes to capture what changed.
+apiVersion: v1alpha1
+kind: KubeAuditPolicyConfig
+configuration:
+  apiVersion: audit.k8s.io/v1
+  kind: Policy
+  # RequestReceived duplicates every event; never emit it (Vector also filters
+  # it, but dropping at the source halves what we write to disk).
+  omitStages:
+    - RequestReceived
+  rules:
+    # --- Drop high-volume, low-signal noise (level: None) ---
+
+    # Authn/authz probes fired on ~every request (tokenreviews from
+    # system:nodes dominated the observed stream).
+    - level: None
+      resources:
+        - group: authentication.k8s.io
+          resources: ["tokenreviews"]
+        - group: authorization.k8s.io
+          resources:
+            - subjectaccessreviews
+            - selfsubjectaccessreviews
+            - selfsubjectrulesreviews
+            - localsubjectaccessreviews
+
+    # Leader-election lease heartbeat churn.
+    - level: None
+      verbs: ["get", "watch", "update", "patch"]
+      resources:
+        - group: coordination.k8s.io
+          resources: ["leases"]
+
+    # Control-plane components and kubelets polling their world view.
+    - level: None
+      users:
+        - system:kube-scheduler
+        - system:kube-controller-manager
+        - system:apiserver
+      verbs: ["get", "list", "watch"]
+    - level: None
+      userGroups: ["system:nodes"]
+      verbs: ["get", "list", "watch"]
+
+    # Endpoint / endpointslice / event read+churn.
+    - level: None
+      verbs: ["get", "list", "watch"]
+      resources:
+        - group: ""
+          resources: ["endpoints", "events"]
+        - group: discovery.k8s.io
+          resources: ["endpointslices"]
+
+    # Health / discovery / metrics endpoints.
+    - level: None
+      nonResourceURLs:
+        - /healthz*
+        - /livez*
+        - /readyz*
+        - /version
+        - /metrics
+        - /openapi*
+        - /apis*
+        - /api*
+        - /.well-known*
+
+    # --- Sensitive resources: metadata ONLY, never log request bodies ---
+    - level: Metadata
+      resources:
+        - group: ""
+          resources: ["secrets", "configmaps", "serviceaccounts/token"]
+
+    # --- Auth / policy / network changes: capture the request body ---
+    - level: Request
+      verbs: ["create", "update", "patch", "delete", "deletecollection"]
+      resources:
+        - group: rbac.authorization.k8s.io
+          resources:
+            - roles
+            - rolebindings
+            - clusterroles
+            - clusterrolebindings
+        - group: admissionregistration.k8s.io
+          resources:
+            - validatingwebhookconfigurations
+            - mutatingwebhookconfigurations
+        - group: networking.k8s.io
+          resources: ["networkpolicies"]
+        - group: cilium.io
+
+    # --- Everything else: metadata ---
+    - level: Metadata
+---
 apiVersion: v1alpha1
 kind: KubeControllerManagerConfig
 extraArgs:
