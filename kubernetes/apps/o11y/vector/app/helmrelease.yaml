@@ -79,7 +79,7 @@ spec:
               }
             }
             if exists(.level) {
-              .level = downcase!(to_string!(.level))
+              .level = downcase(to_string!(.level))
             }
         kube_filter:
           type: filter
