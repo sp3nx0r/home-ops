@@ -1,0 +1,29 @@
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/gateway.envoyproxy.io/securitypolicy_v1alpha1.json
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: SecurityPolicy
+metadata:
+  name: thanos-oidc
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: thanos-query
+  oidc:
+    provider:
+      issuer: "https://id.${SECRET_DOMAIN}"
+    clientID: "e973c38b-b054-4ef1-b7ab-d0d78adaaa90"
+    clientSecret:
+      name: thanos-oidc-secret
+    redirectURL: "https://thanos.${SECRET_DOMAIN}/oauth2/callback"
+    logoutPath: "/logout"
+    cookieDomain: "${SECRET_DOMAIN}"
+    cookieNames:
+      idToken: thanos-id-token
+      accessToken: thanos-access-token
+    forwardAccessToken: true
+    scopes:
+      - openid
+      - profile
+      - email
+      - groups

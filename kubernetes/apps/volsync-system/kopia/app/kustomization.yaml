@@ -6,4 +6,6 @@ resources:
   - ./helmrelease.yaml
   - ./kopiamaintenance.yaml
   - ./ocirepository.yaml
+  - ./oidc-secret.sops.yaml
   - ./secret.sops.yaml
+  - ./securitypolicy.yaml

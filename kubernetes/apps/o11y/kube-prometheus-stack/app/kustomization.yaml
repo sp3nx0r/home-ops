@@ -5,6 +5,10 @@ kind: Kustomization
 resources:
   - ./helmrelease.yaml
   - ./ocirepository.yaml
+  - ./oidc-secret-alertmanager.sops.yaml
+  - ./oidc-secret-prometheus.sops.yaml
   - ./prometheusrule.yaml
   - ./secret.sops.yaml
   - ./secret.yaml
+  - ./securitypolicy-alertmanager.yaml
+  - ./securitypolicy-prometheus.yaml
