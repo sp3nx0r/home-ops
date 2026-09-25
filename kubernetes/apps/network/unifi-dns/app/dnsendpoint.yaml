@@ -5,29 +5,29 @@ metadata:
   name: unifi-static-records
 spec:
   endpoints:
-    - dnsName: cluster.securimancy.com
+    - dnsName: cluster.${SECRET_DOMAIN}
       recordType: A
       targets:
         - 192.168.5.50
         - 192.168.5.51
         - 192.168.5.52
-    - dnsName: nas.securimancy.com
+    - dnsName: nas.${SECRET_DOMAIN}
       recordType: A
       targets:
         - 192.168.5.40
-    - dnsName: syslog.securimancy.com
+    - dnsName: syslog.${SECRET_DOMAIN}
       recordType: A
       targets:
         - 192.168.5.24
-    - dnsName: minecraft.securimancy.com
+    - dnsName: minecraft.${SECRET_DOMAIN}
       recordType: A
       targets:
         - 192.168.5.25
-    - dnsName: tor-relay.securimancy.com
+    - dnsName: tor-relay.${SECRET_DOMAIN}
       recordType: A
       targets:
         - 192.168.5.22
-    - dnsName: kromgo.securimancy.com
+    - dnsName: kromgo.${SECRET_DOMAIN}
       recordType: CNAME
       targets:
-        - external.securimancy.com
+        - external.${SECRET_DOMAIN}

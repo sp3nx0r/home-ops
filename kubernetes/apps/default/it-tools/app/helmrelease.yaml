@@ -58,7 +58,7 @@ spec:
     route:
       app:
         hostnames:
-          - "tools.securimancy.com"
+          - "tools.${SECRET_DOMAIN}"
         parentRefs:
           - name: envoy-internal
             namespace: network

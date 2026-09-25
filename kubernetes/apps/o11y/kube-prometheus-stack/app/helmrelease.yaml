@@ -14,7 +14,7 @@ spec:
 
     alertmanager:
       alertmanagerSpec:
-        externalUrl: https://alertmanager.securimancy.com
+        externalUrl: https://alertmanager.${SECRET_DOMAIN}
       route:
         main:
           enabled: true
@@ -22,7 +22,7 @@ spec:
             gatus.home-operations.com/endpoint: |
               name: alertmanager
           hostnames:
-            - alertmanager.securimancy.com
+            - alertmanager.${SECRET_DOMAIN}
           parentRefs:
             - name: envoy-internal
               namespace: network
@@ -133,12 +133,12 @@ spec:
             gatus.home-operations.com/endpoint: |
               name: prometheus
           hostnames:
-            - prometheus.securimancy.com
+            - prometheus.${SECRET_DOMAIN}
           parentRefs:
             - name: envoy-internal
               namespace: network
       prometheusSpec:
-        externalUrl: https://prometheus.securimancy.com
+        externalUrl: https://prometheus.${SECRET_DOMAIN}
         replicaExternalLabelName: __replica__
         externalLabels:
           cluster: securimancy
