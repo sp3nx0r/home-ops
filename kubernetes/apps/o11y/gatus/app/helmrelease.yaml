@@ -59,11 +59,19 @@ spec:
             securityContext:
               allowPrivilegeEscalation: false
               readOnlyRootFilesystem: true
-              capabilities: {drop: ["ALL"]}
+              capabilities: { drop: ["ALL"] }
         serviceAccount:
           name: gatus
     defaultPodOptions:
       automountServiceAccountToken: true
+      # gatus probes external hostnames by FQDN; the cluster-default ndots:5
+      # appends the search domain (…svc.cluster.local) to short names first,
+      # which defeats the toFQDNs allow-list in ciliumnetworkpolicy.yaml. ndots:1
+      # makes the resolver query these names as-is so the FQDN policy matches.
+      dnsConfig:
+        options:
+          - name: ndots
+            value: "1"
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000

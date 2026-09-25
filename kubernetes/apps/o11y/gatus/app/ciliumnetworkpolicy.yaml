@@ -81,24 +81,32 @@ spec:
               protocol: TCP
             - port: "10080"
               protocol: TCP
-    # Homelab hostnames gatus probes by name: the static blog + TrueNAS checks
-    # and every sidecar-discovered HTTPRoute (all *.securimancy.com). Scoped via
-    # toFQDNs so egress is limited to the homelab domain rather than the whole
-    # internet. gatus resolves these via the node/UniFi resolver, landing on
-    # either the envoy LB VIPs or the public edge -- toFQDNs covers both.
+    # Homelab hostnames gatus probes by name: the static blog and every
+    # sidecar-discovered HTTPRoute (all *.securimancy.com). Scoped via toFQDNs so
+    # egress is limited to the homelab domain rather than the whole internet.
+    # gatus resolves these via the node/UniFi resolver, landing on either the
+    # envoy LB VIPs or the public edge -- toFQDNs covers both.
+    # NOTE: this requires the gatus pod to run with `ndots: 1` (see the
+    # HelmRelease dnsConfig). With the cluster default ndots:5 the resolver
+    # appends the search domain first (e.g. www.securimancy.com.o11y.svc.
+    # cluster.local), which this pattern would NOT match, so egress would be
+    # dropped for every by-name target.
     - toFQDNs:
         - matchPattern: "*.securimancy.com"
       toPorts:
         - ports:
             - port: "443"
               protocol: TCP
-    # Raw-IP LAN targets with no DNS lookup: the Unifi gateway TCP check
-    # (192.168.5.1:443), plus the envoy LB VIPs (.10 internal / .20 external) as
-    # a fallback for route probes if the datapath classifies VIP egress by CIDR.
+    # LAN targets reached by IP or by name that the toFQDNs rule can't cover on
+    # its own: the Unifi gateway TCP check (192.168.5.1:443, raw IP), TrueNAS
+    # (192.168.5.40, the nas.securimancy.com check), and the envoy LB VIPs
+    # (.10 internal / .20 external) as a fallback for route probes if the
+    # datapath classifies VIP egress by CIDR rather than by the FQDN identity.
     - toCIDRSet:
         - cidr: 192.168.5.1/32
         - cidr: 192.168.5.10/32
         - cidr: 192.168.5.20/32
+        - cidr: 192.168.5.40/32
       toPorts:
         - ports:
             - port: "443"
