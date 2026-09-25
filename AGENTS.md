@@ -2,6 +2,28 @@
 
 This is a GitOps mono-repo for a bare-metal Kubernetes homelab ("Securimancy Homelab").
 
+## Agent Development Workflow
+
+**MANDATORY: Every agent-led development effort MUST run in a dedicated git worktree — never work directly in the primary checkout at `/opt/home-ops`.** The owner works in the primary checkout, and agents editing it directly have repeatedly clobbered uncommitted changes and overwritten the active working directory. Isolating agent work in a separate worktree prevents this.
+
+- **Create a worktree before making any changes.** Use the `worktree` just module, which branches off the latest `origin/main` and places the worktree as a sibling of the primary checkout (`/opt/home-ops-<name>`):
+
+    ```sh
+    just worktree new <name> [type]   # type defaults to "feat"; branch is <type>/<name>
+    ```
+
+- **Do all edits, commits, and validation inside the worktree directory** (e.g. `/opt/home-ops-<name>`), not in `/opt/home-ops`.
+- **Commit early and often** within the worktree so work is never left only as uncommitted changes.
+- **When the effort is complete**, push the branch and open a PR from the worktree. After it merges, remove the worktree:
+
+    ```sh
+    just worktree remove <name>       # remove one worktree
+    just worktree list                # show all worktrees
+    just worktree nuke                # remove ALL non-primary worktrees (periodic cleanup)
+    ```
+
+- **Never `git checkout`/`git switch` branches inside the primary checkout to do agent work** — that is exactly what overwrites the owner's active working directory.
+
 ## Documentation
 
 The `docs/` directory contains architecture decisions, implementation plans, and operational runbooks authored by the repo owner. Always check `docs/` for prior context before proposing changes — a plan or runbook may already exist for what you're about to do.
