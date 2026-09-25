@@ -194,15 +194,11 @@ spec:
           limits:
             memory: 4Gi
 
-    prometheus-node-exporter:
-      fullnameOverride: node-exporter
-      securityContext:
-        runAsUser: 0
-        runAsGroup: 0
-        runAsNonRoot: false
-      extraArgs:
-        - --collector.filesystem.mount-points-exclude=^/(dev|proc|sys|run/containerd/.+|var/lib/docker/.+|var/lib/kubelet/pods/.+)($|/)
-        - --collector.filesystem.fs-types-exclude=^(autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|fusectl|hugetlbfs|iso9660|mqueue|nsfs|overlay|proc|procfs|pstore|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tracefs|erofs)$
+    # node-exporter runs as a standalone release in kube-system (it needs host
+    # namespaces/hostPath/hostPort, incompatible with PodSecurity baseline in
+    # o11y). See kubernetes/apps/kube-system/node-exporter.
+    nodeExporter:
+      enabled: false
 
     kube-state-metrics:
       fullnameOverride: kube-state-metrics
