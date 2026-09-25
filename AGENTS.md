@@ -21,7 +21,7 @@ kubernetes/           Flux GitOps manifests (the primary workload)
   flux/               Flux system bootstrap (cluster Kustomization)
 ansible/              Ansible playbooks and inventory (TrueNAS, infrastructure)
 talos/                Talos Linux node configs (topf)
-scripts/              Helper scripts (bootstrap, sops/trufflehog hooks)
+scripts/              Helper scripts (SOPS pre-commit hook)
 justfile              Task runner entrypoint; per-area recipes live in <area>/mod.just
 .github/workflows/    CI — flux-local validation, label sync
 docs/                 Plans, runbooks, and architecture docs
