@@ -37,12 +37,3 @@ spec:
       enabled: true
     podAnnotations:
       secret.reloader.stakater.com/reload: *secret
-    extraVolumes:
-      - name: host-ca-certs
-        hostPath:
-          path: /etc/ssl/certs
-          type: Directory
-    extraVolumeMounts:
-      - name: host-ca-certs
-        mountPath: /etc/ssl/certs
-        readOnly: true
