@@ -160,6 +160,7 @@ spec:
           encoding:
             codec: json
           labels:
+            service_name: kube-apiserver-audit
             source: kube-audit
             verb: '{{ "{{ verb }}" }}'
           out_of_order_action: accept
