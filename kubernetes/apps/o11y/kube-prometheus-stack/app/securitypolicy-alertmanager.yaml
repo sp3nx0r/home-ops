@@ -1,0 +1,29 @@
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/gateway.envoyproxy.io/securitypolicy_v1alpha1.json
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: SecurityPolicy
+metadata:
+  name: alertmanager-oidc
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: kube-prometheus-stack-alertmanager
+  oidc:
+    provider:
+      issuer: "https://id.${SECRET_DOMAIN}"
+    clientID: "REPLACE_WITH_ALERTMANAGER_POCKET_ID_CLIENT_ID"
+    clientSecret:
+      name: alertmanager-oidc-secret
+    redirectURL: "https://alertmanager.${SECRET_DOMAIN}/oauth2/callback"
+    logoutPath: "/logout"
+    cookieDomain: "${SECRET_DOMAIN}"
+    cookieNames:
+      idToken: alertmanager-id-token
+      accessToken: alertmanager-access-token
+    forwardAccessToken: true
+    scopes:
+      - openid
+      - profile
+      - email
+      - groups
