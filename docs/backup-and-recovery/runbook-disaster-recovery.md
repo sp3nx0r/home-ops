@@ -107,10 +107,14 @@ ssh nas 'sudo chown -R 1000:1000 /mnt/tank/homelab/kopia'
 ### Phase 4: Rebuild Kubernetes cluster
 
 ```bash
-# Bootstrap Talos nodes
+# Bootstrap Talos nodes (applies machine config, bootstraps etcd, writes kubeconfig)
 just bootstrap talos
 
-# Flux will reconcile from git and redeploy all apps
+# Seed the minimal runtime and Flux (Cilium, CoreDNS, Spegel, cert-manager,
+# flux-operator, flux-instance) via helmfile, then hand off to Flux
+just bootstrap apps
+
+# Flux reconciles from git and redeploys all apps
 # Volsync ReplicationDestinations will restore iSCSI PVC data from the Kopia repo
 ```
 
