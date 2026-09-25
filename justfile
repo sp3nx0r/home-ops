@@ -21,6 +21,9 @@ mod talos 'talos'
 [group('volsync')]
 mod volsync 'volsync'
 
+[group('worktree')]
+mod worktree 'worktree.just'
+
 # Structured logger used by other recipes (requires gum).
 [private]
 log lvl msg *args:
