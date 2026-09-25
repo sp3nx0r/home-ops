@@ -35,6 +35,15 @@
     },
     // --- Policy ---
     {
+      // Keep container image tags pinned to a sha256 digest (finding #7). Once a
+      // tag carries a digest, Renovate refreshes the digest on tag bumps and via
+      // dedicated digest-update PRs. Scoped to the docker datasource so chart
+      // (helm/OCIRepository) refs are unaffected.
+      description: "Pin container image digests",
+      matchDatasources: ["docker"],
+      pinDigests: true,
+    },
+    {
       description: "Auto-merge GitHub Actions (minor/patch/digest) after a soak",
       matchManagers: ["github-actions"],
       automerge: true,

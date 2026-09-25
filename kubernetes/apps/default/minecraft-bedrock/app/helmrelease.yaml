@@ -16,7 +16,7 @@ spec:
           app:
             image:
               repository: itzg/minecraft-bedrock-server
-              tag: 2026.9.0
+              tag: 2026.9.0@sha256:10cb4e735211356544980313773a6723d14747e675d8e23d2c25df1d69505743
             env:
               TZ: America/Chicago
               UID: "1000"
@@ -78,7 +78,7 @@ spec:
             securityContext:
               allowPrivilegeEscalation: false
               readOnlyRootFilesystem: true
-              capabilities: {drop: ["ALL"]}
+              capabilities: { drop: ["ALL"] }
             resources:
               requests:
                 cpu: 200m

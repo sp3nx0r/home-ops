@@ -18,7 +18,7 @@ spec:
           app:
             image:
               repository: docker.io/searxng/searxng
-              tag: 2026.4.24-a7ac696b4
+              tag: 2026.4.24-a7ac696b4@sha256:c9100c29c14a77d5289263a671580226c3b8a396a1a0130d2f500f57076a0119
             env:
               SEARXNG_BASE_URL: "https://search.securimancy.com"
               SEARXNG_URL: "https://search.securimancy.com"
@@ -44,7 +44,7 @@ spec:
             securityContext:
               allowPrivilegeEscalation: false
               readOnlyRootFilesystem: true
-              capabilities: {drop: ["ALL"]}
+              capabilities: { drop: ["ALL"] }
             resources:
               requests:
                 cpu: 10m
