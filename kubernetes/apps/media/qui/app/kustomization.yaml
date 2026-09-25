@@ -10,4 +10,3 @@ resources:
   - ./pvc.yaml
   - ./secret.sops.yaml
   - ./oidc-secret.sops.yaml
-  - ./securitypolicy.yaml
