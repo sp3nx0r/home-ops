@@ -12,7 +12,7 @@ spec:
   oidc:
     provider:
       issuer: "https://id.${SECRET_DOMAIN}"
-    clientID: "REPLACE_WITH_KOPIA_POCKET_ID_CLIENT_ID"
+    clientID: "715bd640-6ee2-4f17-ab4c-b612ad67c70b"
     clientSecret:
       name: kopia-oidc-secret
     redirectURL: "https://kopia.${SECRET_DOMAIN}/oauth2/callback"
