@@ -46,7 +46,7 @@ spec:
           - name: envoy-internal
             namespace: network
         hostnames:
-          - thanos.securimancy.com
+          - "thanos.${SECRET_DOMAIN}"
       serviceMonitor:
         enabled: true
       resources:

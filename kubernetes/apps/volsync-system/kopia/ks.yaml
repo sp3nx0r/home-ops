@@ -9,6 +9,10 @@ spec:
     - name: volsync
   interval: 1h
   path: ./kubernetes/apps/volsync-system/kopia/app
+  postBuild:
+    substituteFrom:
+      - name: cluster-secrets
+        kind: Secret
   prune: true
   sourceRef:
     kind: GitRepository

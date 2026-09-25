@@ -11,6 +11,10 @@ spec:
       namespace: storage
   interval: 1h
   path: ./kubernetes/apps/o11y/thanos/app
+  postBuild:
+    substituteFrom:
+      - name: cluster-secrets
+        kind: Secret
   prune: true
   sourceRef:
     kind: GitRepository

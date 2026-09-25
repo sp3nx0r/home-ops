@@ -89,7 +89,7 @@ spec:
     route:
       app:
         hostnames:
-          - "kopia.securimancy.com"
+          - "kopia.${SECRET_DOMAIN}"
         parentRefs:
           - name: envoy-internal
             namespace: network
