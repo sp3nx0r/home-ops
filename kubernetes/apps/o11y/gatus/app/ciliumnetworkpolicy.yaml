@@ -1,0 +1,114 @@
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/cilium.io/ciliumnetworkpolicy_v2.json
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: gatus
+spec:
+  # Internet-exposed edge: the public status page. Selecting it makes it
+  # default-deny. Egress is intentionally the broadest of the edge apps because
+  # gatus probes everything: a gatus-sidecar auto-discovers HTTPRoutes (watching
+  # the kube-apiserver) and probes them via the gateway VIPs, plus static
+  # connectivity/infra/external checks in its config.
+  #
+  # NOTE: gatus has no ${SECRET_DOMAIN} substitution (its config uses runtime
+  # ${GATUS_*} tokens), so literal IPs/entities are used here by design.
+  endpointSelector:
+    matchLabels:
+      io.kubernetes.pod.namespace: o11y
+      app.kubernetes.io/name: gatus
+  ingress:
+    # Public traffic proxied from the external gateway :80
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: network
+            gateway.envoyproxy.io/owning-gateway-name: envoy-external
+      toPorts:
+        - ports:
+            - port: "80"
+              protocol: TCP
+    # Prometheus scrape :80
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: o11y
+            app.kubernetes.io/name: prometheus
+      toPorts:
+        - ports:
+            - port: "80"
+              protocol: TCP
+    # kubelet /health probe :80
+    - fromEntities:
+        - host
+      toPorts:
+        - ports:
+            - port: "80"
+              protocol: TCP
+  egress:
+    # DNS resolution (L7 so lookups are visible to Cilium's DNS proxy)
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    # gatus-sidecar watches Gateways/HTTPRoutes to auto-generate endpoints
+    - toEntities:
+        - kube-apiserver
+      toPorts:
+        - ports:
+            - port: "6443"
+              protocol: TCP
+    # Auto-generated route probes traverse the gateway HTTPS/HTTP listeners.
+    # Kept alongside the VIP CIDR rule below pending live verification of whether
+    # LB-VIP egress classifies as the backend endpoint or as world (see PR notes).
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: network
+            gateway.envoyproxy.io/owning-gateway-name: envoy-internal
+        - matchLabels:
+            io.kubernetes.pod.namespace: network
+            gateway.envoyproxy.io/owning-gateway-name: envoy-external
+      toPorts:
+        - ports:
+            - port: "10443"
+              protocol: TCP
+            - port: "10080"
+              protocol: TCP
+    # LAN infra + gateway LB VIPs on 443: Unifi (.1), envoy-internal (.10),
+    # envoy-external (.20), TrueNAS (.40). These are outside the cluster CIDR so
+    # Cilium classifies them as world; scoped to 443 here.
+    - toCIDRSet:
+        - cidr: 192.168.5.1/32
+        - cidr: 192.168.5.10/32
+        - cidr: 192.168.5.20/32
+        - cidr: 192.168.5.40/32
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+    # External checks: the public blog (https), the connectivity checker's
+    # 1.1.1.1:53 dial, and ICMP echo to the public resolvers (1.1.1.1/8.8.8.8/
+    # 9.9.9.9). world:443/53 is inherent to monitoring arbitrary public targets.
+    - toEntities:
+        - world
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+            - port: "53"
+              protocol: TCP
+            - port: "53"
+              protocol: UDP
+    - toEntities:
+        - world
+      icmps:
+        - fields:
+            - type: 8
+              family: IPv4

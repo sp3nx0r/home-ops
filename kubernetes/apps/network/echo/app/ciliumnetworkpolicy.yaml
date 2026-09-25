@@ -1,0 +1,56 @@
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/cilium.io/ciliumnetworkpolicy_v2.json
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: echo
+spec:
+  # Internet-exposed edge: a stateless HTTP echo server reached publicly via the
+  # external gateway. Selecting it makes it default-deny; it serves and scrapes
+  # on :80 and makes no outbound calls (egress limited to DNS).
+  endpointSelector:
+    matchLabels:
+      io.kubernetes.pod.namespace: network
+      app.kubernetes.io/name: echo
+  ingress:
+    # Public traffic proxied from the external gateway :80
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: network
+            gateway.envoyproxy.io/owning-gateway-name: envoy-external
+      toPorts:
+        - ports:
+            - port: "80"
+              protocol: TCP
+    # Prometheus scrape of the echo metrics endpoint :80 (/metrics)
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: o11y
+            app.kubernetes.io/name: prometheus
+      toPorts:
+        - ports:
+            - port: "80"
+              protocol: TCP
+    # kubelet /healthz probe :80
+    - fromEntities:
+        - host
+      toPorts:
+        - ports:
+            - port: "80"
+              protocol: TCP
+  egress:
+    # DNS resolution (L7). Echo makes no other outbound connections, so egress is
+    # otherwise fully denied.
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"

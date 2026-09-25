@@ -1,0 +1,65 @@
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/cilium.io/ciliumnetworkpolicy_v2.json
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: cloudflare-tunnel
+spec:
+  # Internet-exposed edge: cloudflared terminates the Cloudflare tunnel and
+  # forwards to the external gateway. Selecting it makes it default-deny both
+  # directions; the tunnel egress to Cloudflare's edge is the only "world" path.
+  endpointSelector:
+    matchLabels:
+      io.kubernetes.pod.namespace: network
+      app.kubernetes.io/name: cloudflare-tunnel
+  ingress:
+    # Prometheus scrape of tunnel metrics :8080 (also the /ready probe port)
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: o11y
+            app.kubernetes.io/name: prometheus
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+    # kubelet /ready probe :8080
+    - fromEntities:
+        - host
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+  egress:
+    # DNS resolution (L7 so lookups are visible to Cilium's DNS proxy)
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    # Origin: cloudflared proxies inbound tunnel requests to the external gateway
+    # (config service https://envoy-external.network.svc:443 -> Envoy :10443)
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: network
+            gateway.envoyproxy.io/owning-gateway-name: envoy-external
+      toPorts:
+        - ports:
+            - port: "10443"
+              protocol: TCP
+    # Cloudflare edge (http2 transport => TCP 443 to global anycast endpoints and
+    # the tunnel API). Cloudflare's edge is a large, dynamic anycast range, so
+    # this is necessarily a world:443 allow rather than a fixed CIDR/FQDN set.
+    - toEntities:
+        - world
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP

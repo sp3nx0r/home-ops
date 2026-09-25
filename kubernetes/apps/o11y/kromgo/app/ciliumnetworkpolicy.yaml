@@ -1,0 +1,66 @@
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/cilium.io/ciliumnetworkpolicy_v2.json
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: kromgo
+spec:
+  # Internet-exposed edge: renders Prometheus queries as badges, reached publicly
+  # via the external gateway. Selecting it makes it default-deny; it serves the
+  # badge API on :8080, metrics on :8081, and only queries Prometheus.
+  endpointSelector:
+    matchLabels:
+      io.kubernetes.pod.namespace: o11y
+      app.kubernetes.io/name: kromgo
+  ingress:
+    # Public badge requests proxied from the external gateway -> kromgo http :8080
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: network
+            gateway.envoyproxy.io/owning-gateway-name: envoy-external
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+    # Prometheus scrape of the kromgo metrics port :8081
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: o11y
+            app.kubernetes.io/name: prometheus
+      toPorts:
+        - ports:
+            - port: "8081"
+              protocol: TCP
+    # kubelet probes (http :8080 + metrics :8081)
+    - fromEntities:
+        - host
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+            - port: "8081"
+              protocol: TCP
+  egress:
+    # DNS resolution (L7 so lookups are visible to Cilium's DNS proxy)
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    # Prometheus query API (config: prometheus-operated.o11y.svc:9090)
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: o11y
+            app.kubernetes.io/name: prometheus
+      toPorts:
+        - ports:
+            - port: "9090"
+              protocol: TCP
