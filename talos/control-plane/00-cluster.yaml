@@ -1,7 +1,9 @@
 machine:
   features:
     # Control-plane only: lets the system-upgrade-controller (Tuppr) reach the
-    # Talos API with os:admin for node upgrades.
+    # Talos API with os:admin for node upgrades. Any pod in the system-upgrade
+    # namespace inherits this node-root access, so the namespace is default-denied
+    # by a CiliumNetworkPolicy (tuppr/app/ciliumnetworkpolicy.yaml).
     kubernetesTalosAPIAccess:
       enabled: true
       allowedRoles:
