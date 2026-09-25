@@ -1,0 +1,123 @@
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/cilium.io/ciliumnetworkpolicy_v2.json
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: gatus
+spec:
+  # Internet-exposed edge: the public status page. Selecting it makes it
+  # default-deny. Egress is intentionally the broadest of the edge apps because
+  # gatus probes everything: a gatus-sidecar auto-discovers HTTPRoutes (watching
+  # the kube-apiserver) and probes them via the gateway VIPs, plus static
+  # connectivity/infra/external checks in its config.
+  #
+  # NOTE: gatus has no ${SECRET_DOMAIN} substitution (its config uses runtime
+  # ${GATUS_*} tokens), so literal IPs/entities are used here by design.
+  endpointSelector:
+    matchLabels:
+      io.kubernetes.pod.namespace: o11y
+      app.kubernetes.io/name: gatus
+  ingress:
+    # Public traffic proxied from the external gateway :80
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: network
+            gateway.envoyproxy.io/owning-gateway-name: envoy-external
+      toPorts:
+        - ports:
+            - port: "80"
+              protocol: TCP
+    # Prometheus scrape :80
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: o11y
+            app.kubernetes.io/name: prometheus
+      toPorts:
+        - ports:
+            - port: "80"
+              protocol: TCP
+    # kubelet /health probe :80
+    - fromEntities:
+        - host
+      toPorts:
+        - ports:
+            - port: "80"
+              protocol: TCP
+  egress:
+    # DNS resolution (L7 so lookups are visible to Cilium's DNS proxy)
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    # gatus-sidecar watches Gateways/HTTPRoutes to auto-generate endpoints
+    - toEntities:
+        - kube-apiserver
+      toPorts:
+        - ports:
+            - port: "6443"
+              protocol: TCP
+    # Auto-generated route probes traverse the gateway HTTPS/HTTP listeners.
+    # Kept alongside the VIP CIDR rule below pending live verification of whether
+    # LB-VIP egress classifies as the backend endpoint or as world (see PR notes).
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: network
+            gateway.envoyproxy.io/owning-gateway-name: envoy-internal
+        - matchLabels:
+            io.kubernetes.pod.namespace: network
+            gateway.envoyproxy.io/owning-gateway-name: envoy-external
+      toPorts:
+        - ports:
+            - port: "10443"
+              protocol: TCP
+            - port: "10080"
+              protocol: TCP
+    # Homelab hostnames gatus probes by name: the static blog + TrueNAS checks
+    # and every sidecar-discovered HTTPRoute (all *.securimancy.com). Scoped via
+    # toFQDNs so egress is limited to the homelab domain rather than the whole
+    # internet. gatus resolves these via the node/UniFi resolver, landing on
+    # either the envoy LB VIPs or the public edge -- toFQDNs covers both.
+    - toFQDNs:
+        - matchPattern: "*.securimancy.com"
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+    # Raw-IP LAN targets with no DNS lookup: the Unifi gateway TCP check
+    # (192.168.5.1:443), plus the envoy LB VIPs (.10 internal / .20 external) as
+    # a fallback for route probes if the datapath classifies VIP egress by CIDR.
+    - toCIDRSet:
+        - cidr: 192.168.5.1/32
+        - cidr: 192.168.5.10/32
+        - cidr: 192.168.5.20/32
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+    # Connectivity checker dials 1.1.1.1:53
+    - toCIDRSet:
+        - cidr: 1.1.1.1/32
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: TCP
+            - port: "53"
+              protocol: UDP
+    # ICMP echo connectivity checks to the public resolvers
+    - toCIDRSet:
+        - cidr: 1.1.1.1/32
+        - cidr: 8.8.8.8/32
+        - cidr: 9.9.9.9/32
+      icmps:
+        - fields:
+            - type: 8
+              family: IPv4
