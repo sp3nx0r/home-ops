@@ -21,7 +21,7 @@ spec:
               tag: v1.30.0@sha256:1172ca40283330445d61189263a65a31ba703770a230b9e2a913f6e57bc2dd23
             env:
               QUI__AUTH_DISABLED: true
-              QUI__AUTH_DISABLED_ALLOWED_CIDRS: 0.0.0.0/0
+              QUI__AUTH_DISABLED_ALLOWED_CIDRS: 10.42.0.0/16
               QUI__I_ACKNOWLEDGE_THIS_IS_A_BAD_IDEA: true
               QUI__HOST: 0.0.0.0
               QUI__PORT: &port 80
