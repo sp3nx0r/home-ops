@@ -43,12 +43,6 @@
       minimumReleaseAge: "14 days",
       ignoreTests: true,
     },
-    {
-      description: "Hold CoreDNS chart on 1.46.2 (CoreDNS 1.13.1) — coredns/coredns#8390 autopath/serve_stale regression",
-      matchDatasources: ["docker"],
-      matchPackageNames: ["ghcr.io/coredns/charts/coredns"],
-      enabled: false,
-    },
     // --- Labels (the base preset adds none) ---
     { matchUpdateTypes: ["major"], addLabels: ["type/major"] },
     { matchUpdateTypes: ["minor"], addLabels: ["type/minor"] },
