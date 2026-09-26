@@ -53,22 +53,27 @@ spec:
               - webhook_url: ${DISCORD_WEBHOOK_URL}
                 send_resolved: true
                 title: >-
-                  {{ if eq .Status "firing" }}🔥{{ else }}✅{{ end }} [{{ .Status | toUpper }}{{ if eq .Status "firing" }}:{{ .Alerts.Firing | len }}{{ end }}] {{ .CommonLabels.alertname }}
-                message: >-
-                  {{- range .Alerts }}
-
-                  {{ if eq .Labels.severity "critical" }}🚨{{ else if eq .Labels.severity "warning" }}⚠️{{ else }}ℹ️{{ end }} **{{ .Labels.alertname }}** {{ if .Labels.severity }}(`{{ .Labels.severity }}`){{ end }}
-
-                  {{ if .Annotations.summary }}> {{ .Annotations.summary }}{{ end }}
-
-                  {{ if .Annotations.description }}> {{ .Annotations.description }}{{ end }}
-
-                  {{ if .Labels.namespace }}**Namespace:** `{{ .Labels.namespace }}`{{ end }}{{ if .Labels.pod }} | **Pod:** `{{ .Labels.pod }}`{{ end }}{{ if .Labels.job }} | **Job:** `{{ .Labels.job }}`{{ end }}
-
-                  {{ if .Labels.node }}**Node:** `{{ .Labels.node }}`{{ end }}{{ if .Labels.service }} | **Service:** `{{ .Labels.service }}`{{ end }}
-
-                  **Since:** {{ .StartsAt.Format "Jan 02 15:04 MST" }}{{ if .Annotations.runbook_url }} | **Runbook:** [link]({{ .Annotations.runbook_url }}){{ end }}
-
+                  {{ if eq .Status "firing" }}🔥 [FIRING:{{ .Alerts.Firing | len }}]{{ else }}✅ [RESOLVED]{{ end }} {{ .CommonLabels.alertname }}{{ if .CommonLabels.severity }} · {{ .CommonLabels.severity }}{{ end }}
+                # Split firing vs resolved so a grouped notification (e.g. all
+                # GatusEndpointDown alerts share one group) never shows recovered
+                # endpoints as if still alerting. Per-alert status + identifier
+                # (name -> pod -> node -> instance -> alertname).
+                message: |-
+                  {{- if .Alerts.Firing -}}
+                  **🔥 Firing ({{ .Alerts.Firing | len }})**
+                  {{ range .Alerts.Firing }}
+                  {{ if eq .Labels.severity "critical" }}🚨{{ else if eq .Labels.severity "warning" }}⚠️{{ else }}ℹ️{{ end }} **{{ if .Labels.name }}{{ .Labels.name }}{{ else if .Labels.pod }}{{ .Labels.pod }}{{ else if .Labels.node }}{{ .Labels.node }}{{ else if .Labels.instance }}{{ .Labels.instance }}{{ else }}{{ .Labels.alertname }}{{ end }}**{{ if .Labels.group }} — `{{ .Labels.group }}`{{ else if .Labels.namespace }} — `{{ .Labels.namespace }}`{{ end }}
+                  {{ if .Annotations.summary }}> {{ .Annotations.summary }}
+                  {{ end }}Since {{ .StartsAt.Format "Jan 02 15:04 MST" }}{{ if .Annotations.runbook_url }} · [runbook]({{ .Annotations.runbook_url }}){{ end }}
+                  {{ end }}
+                  {{- end }}
+                  {{- if and .Alerts.Firing .Alerts.Resolved }}
+                  {{ end -}}
+                  {{- if .Alerts.Resolved -}}
+                  **✅ Resolved ({{ .Alerts.Resolved | len }})**
+                  {{ range .Alerts.Resolved }}
+                  ✅ **{{ if .Labels.name }}{{ .Labels.name }}{{ else if .Labels.pod }}{{ .Labels.pod }}{{ else if .Labels.node }}{{ .Labels.node }}{{ else if .Labels.instance }}{{ .Labels.instance }}{{ else }}{{ .Labels.alertname }}{{ end }}**{{ if .Labels.group }} — `{{ .Labels.group }}`{{ else if .Labels.namespace }} — `{{ .Labels.namespace }}`{{ end }} · recovered {{ .EndsAt.Format "Jan 02 15:04 MST" }}
+                  {{ end }}
                   {{- end }}
           # Uncomment with kube-agent deployment:
           # - name: kube-agent
