@@ -4,8 +4,8 @@ Enable Cilium Hubble (observability layer) and the Hubble UI so network flows,
 service maps, and policy verdicts are visible through a web UI, and Hubble
 metrics/dashboards land in the existing Prometheus + Grafana stack.
 
-> **Status:** Proposed (PR `feat/cilium-hubble-ui`). One blocking manual step
-> before reconcile — see [Prerequisites](#prerequisites-manual-before-merge).
+> **Status:** Proposed (PR `feat/cilium-hubble-ui`). Pocket ID client is
+> registered and wired in — no blocking manual steps remain.
 
 ## Why
 
@@ -56,23 +56,18 @@ Because it's an `envoy-internal` route, UniFi private DNS syncs
 `hubble.${SECRET_DOMAIN}` automatically — no manual `unifi-dns` DNSEndpoint
 needed (that's only required for `envoy-external` hosts).
 
-## Prerequisites (manual, before merge)
+## Pocket ID client
 
-The OIDC gate references a Pocket ID client that doesn't exist yet. Two
-placeholders must be replaced or the login will fail:
+A Pocket ID OIDC client is registered for Hubble UI and wired in:
 
-1. **Register a new OIDC client in Pocket ID** for Hubble UI:
-    - Callback URL: `https://hubble.${SECRET_DOMAIN}/oauth2/callback`
-    - Logout URL: `https://hubble.${SECRET_DOMAIN}/logout`
-2. Put the client's **ID** into `securitypolicy.yaml`
-   (`clientID: REPLACE_WITH_POCKET_ID_CLIENT_ID`).
-3. Put the client's **secret** into `oidc-secret.sops.yaml`
-   (currently `REPLACE_WITH_POCKET_ID_CLIENT_SECRET`) and re-encrypt:
-    ```sh
-    sops --encrypt --in-place kubernetes/apps/kube-system/cilium/app/oidc-secret.sops.yaml
-    ```
-4. (Optional) restrict access to a Pocket ID group via the `groups` claim if the
-   flat "any authenticated user" default is too broad.
+- `clientID` is set in `securitypolicy.yaml`.
+- The client secret is stored (SOPS-encrypted) in `oidc-secret.sops.yaml`.
+- Callback URL: `https://hubble.${SECRET_DOMAIN}/oauth2/callback`
+- Logout URL: `https://hubble.${SECRET_DOMAIN}/logout`
+
+Confirm the callback/logout URLs above are registered on the Pocket ID client.
+(Optional) restrict access to a Pocket ID group via the `groups` claim if the
+flat "any authenticated user" default is too broad.
 
 ## Validation after reconcile
 

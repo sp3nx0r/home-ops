@@ -12,8 +12,7 @@ spec:
   oidc:
     provider:
       issuer: "https://id.${SECRET_DOMAIN}"
-    # NOTE: register a new OIDC client in Pocket ID and replace this clientID.
-    clientID: "REPLACE_WITH_POCKET_ID_CLIENT_ID"
+    clientID: "671f28ec-1f54-4fde-ac58-765f9ebf2896"
     clientSecret:
       name: hubble-ui-oidc-secret
     redirectURL: "https://hubble.${SECRET_DOMAIN}/oauth2/callback"
