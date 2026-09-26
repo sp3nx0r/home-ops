@@ -4,8 +4,10 @@ Enable Cilium Hubble (observability layer) and the Hubble UI so network flows,
 service maps, and policy verdicts are visible through a web UI, and Hubble
 metrics/dashboards land in the existing Prometheus + Grafana stack.
 
-> **Status:** Proposed (PR `feat/cilium-hubble-ui`). Pocket ID client is
-> registered and wired in — no blocking manual steps remain.
+> **Status:** Deployed — [PR #503](https://github.com/sp3nx0r/home-ops/pull/503)
+> merged and reconciled (2026-09-26). `hubble-relay` and `hubble-ui` pods are
+> healthy; UI is live and OIDC-gated at `hubble.${SECRET_DOMAIN}`. Open
+> follow-ups tracked in [Follow-ups](#follow-ups).
 
 ## Why
 
@@ -102,6 +104,23 @@ Then browse `https://hubble.${SECRET_DOMAIN}` (Pocket ID login), or use the CLI:
 cilium hubble port-forward &
 hubble observe --verdict DROPPED  # useful while rolling out default-deny CNPs
 ```
+
+## Follow-ups
+
+Tracked work now that Hubble is live:
+
+- [ ] **Evaluate metric noise (~1 week in):** review Hubble flow-metric
+      cardinality/volume in Prometheus; trim the metric set if too chatty (first
+      candidates to drop: `httpV2`, `port-distribution`).
+- [ ] **Migrate mTLS to cert-manager:** move `hubble.tls.auto.method` from `helm`
+      to `certManager` with a dedicated internal CA `Issuer` (see
+      [TLS / future work](#tls--future-work)). `cronJob` is the fallback if cert
+      churn appears before this lands.
+- [ ] **Drive the default-deny CNP rollout (security plan #1):** use the Hubble
+      flow/policy-verdict view to validate per-namespace default-deny policies
+      before enforcing (the original motivation for enabling Hubble).
+- [ ] **(Optional) Restrict UI access to a Pocket ID group** via the `groups`
+      claim instead of any authenticated user.
 
 ## Rollback
 
