@@ -39,8 +39,26 @@ All changes are in `kubernetes/apps/kube-system/cilium/`.
   kube-prometheus-stack scrapes them. Relay also exposes a `serviceMonitor`.
 - **Grafana dashboard** shipped by the chart into the `Network` folder, matching
   the existing Cilium agent/operator dashboards.
-- **TLS**: left at the chart default (`hubble.tls.auto.method: helm`), which
-  auto-generates the agent↔relay mTLS certs. No cert-manager wiring needed.
+- **TLS**: agent↔relay mTLS is left **on**, at the chart default
+  (`hubble.tls.auto.method: helm`), which auto-generates the certs with no extra
+  dependencies. This only covers the in-cluster Hubble gRPC path; the
+  browser-facing TLS is terminated at Envoy Gateway with the existing wildcard
+  cert. See [TLS / future work](#tls--future-work) for the migration plan.
+
+### TLS / future work
+
+The `helm` cert method is a deliberate starting point, chosen for zero
+dependencies. Its main risk under GitOps is that certs are generated at Helm
+_template_ time and rely on a `lookup` to reuse existing secrets; a reconcile
+that can't look them up can regenerate the CA and cause a transient agent↔relay
+TLS mismatch until pods roll.
+
+- **Now:** stay on `helm`; watch for relay/agent TLS churn during the first week.
+- **Long-term (planned):** migrate to `hubble.tls.auto.method: certManager` so
+  Hubble certs are issued and rotated by the existing cert-manager. This needs a
+  dedicated internal CA / self-signed `Issuer` for Hubble (not the public ACME
+  issuer). `cronJob` is the low-effort fallback if churn shows up before the
+  cert-manager path is ready.
 
 ### Exposure / auth
 
