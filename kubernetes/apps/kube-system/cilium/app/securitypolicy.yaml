@@ -1,0 +1,29 @@
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/gateway.envoyproxy.io/securitypolicy_v1alpha1.json
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: SecurityPolicy
+metadata:
+  name: hubble-ui-oidc
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: hubble-ui
+  oidc:
+    provider:
+      issuer: "https://id.${SECRET_DOMAIN}"
+    clientID: "671f28ec-1f54-4fde-ac58-765f9ebf2896"
+    clientSecret:
+      name: hubble-ui-oidc-secret
+    redirectURL: "https://hubble.${SECRET_DOMAIN}/oauth2/callback"
+    logoutPath: "/logout"
+    cookieDomain: "${SECRET_DOMAIN}"
+    cookieNames:
+      idToken: hubble-ui-id-token
+      accessToken: hubble-ui-access-token
+    forwardAccessToken: true
+    scopes:
+      - openid
+      - profile
+      - email
+      - groups
