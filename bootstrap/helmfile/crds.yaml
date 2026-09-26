@@ -38,4 +38,4 @@ releases:
     namespace: o11y
     chart: oci://ghcr.io/prometheus-community/charts/prometheus-operator-crds
     # renovate: datasource=docker depName=ghcr.io/prometheus-community/charts/prometheus-operator-crds
-    version: 32.0.0
+    version: 32.0.1
