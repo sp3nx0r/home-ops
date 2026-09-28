@@ -1,0 +1,134 @@
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/cilium.io/ciliumnetworkpolicy_v2.json
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: envoy-gateway
+spec:
+  # Envoy Gateway control plane. Selecting it makes it default-deny. It serves
+  # xDS to the managed proxies (:18000 gRPC, :18002 wasm), an admission webhook
+  # to the apiserver (:9443), and watches/manages Gateway API resources.
+  endpointSelector:
+    matchLabels:
+      io.kubernetes.pod.namespace: network
+      app.kubernetes.io/name: gateway-helm
+      app.kubernetes.io/instance: envoy-gateway
+  ingress:
+    # xDS / wasm from the managed Envoy proxies
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: network
+            app.kubernetes.io/name: envoy
+            app.kubernetes.io/component: proxy
+      toPorts:
+        - ports:
+            - port: "18000"
+              protocol: TCP
+            - port: "18002"
+              protocol: TCP
+    # Admission webhook calls from the apiserver (host-networked control plane)
+    - fromEntities:
+        - kube-apiserver
+        - host
+        - remote-node
+      toPorts:
+        - ports:
+            - port: "9443"
+              protocol: TCP
+  egress:
+    # DNS resolution (L7 so lookups are visible to Cilium's DNS proxy)
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    # Watches + manages Gateway API resources and the proxy Deployments
+    - toEntities:
+        - kube-apiserver
+      toPorts:
+        - ports:
+            - port: "6443"
+              protocol: TCP
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/cilium.io/ciliumnetworkpolicy_v2.json
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: envoy-proxy
+spec:
+  # The Envoy data-plane proxies (envoy-internal 192.168.5.10 + envoy-external
+  # 192.168.5.20). This is the shared ingress front door for the whole cluster,
+  # so ingress spans world (public/LAN via the LBs), cluster (in-cluster clients
+  # like gatus/grafana/cloudflare-tunnel), and host/remote-node (LB is
+  # externalTrafficPolicy=Cluster, so source may be SNAT'd) on the HTTP :10080
+  # and HTTPS :10443 (TCP + UDP/HTTP3) listeners. Egress is intentionally broad
+  # (cluster + world): it proxies to backends in every namespace, to the
+  # external-backed proxy Services (e.g. 192.168.5.70), and to the Envoy Gateway
+  # xDS. Value here is default-deny posture + listener/port scoping, not
+  # destination restriction (mirrors the Prometheus scraper exception).
+  endpointSelector:
+    matchLabels:
+      io.kubernetes.pod.namespace: network
+      app.kubernetes.io/name: envoy
+      app.kubernetes.io/component: proxy
+  ingress:
+    # Data-plane listeners :10080 (HTTP) and :10443 (HTTPS TCP + HTTP/3 UDP)
+    - fromEntities:
+        - world
+        - cluster
+        - host
+        - remote-node
+      toPorts:
+        - ports:
+            - port: "10080"
+              protocol: TCP
+            - port: "10443"
+              protocol: TCP
+            - port: "10443"
+              protocol: UDP
+    # Prometheus scrape of the proxy metrics :19001 (PodMonitor envoy-proxy)
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: o11y
+            app.kubernetes.io/name: prometheus
+      toPorts:
+        - ports:
+            - port: "19001"
+              protocol: TCP
+    # kubelet /ready probe :19003
+    - fromEntities:
+        - host
+      toPorts:
+        - ports:
+            - port: "19003"
+              protocol: TCP
+  egress:
+    # DNS resolution (L7 so lookups are visible to Cilium's DNS proxy)
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    # Proxy to backends in every namespace + Envoy Gateway xDS (in-cluster)
+    - toEntities:
+        - cluster
+    # External-backed routes (e.g. the ollama/dnd/speaches proxy Services ->
+    # 192.168.5.70) and any external redirect targets
+    - toEntities:
+        - world
