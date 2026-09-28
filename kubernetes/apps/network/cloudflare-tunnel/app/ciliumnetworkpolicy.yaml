@@ -57,10 +57,18 @@ spec:
     # Cloudflare edge. The persistent tunnel connection uses port 7844 -- QUIC
     # (UDP) by default with an HTTP/2 (TCP) fallback -- and cloudflared also
     # reaches the tunnel/API endpoints over TCP 443. Cloudflare's edge is a
-    # large, dynamic anycast range, so this is necessarily a world allow rather
-    # than a fixed CIDR/FQDN set.
-    - toEntities:
-        - world
+    # large, dynamic anycast range on the public internet, so this is a broad
+    # CIDR allow -- but it never needs the LAN or in-cluster targets (the origin
+    # is reached via the envoy-external toEndpoints rule above), so exclude all
+    # private/non-routable ranges (RFC1918 + link-local + CGNAT).
+    - toCIDRSet:
+        - cidr: 0.0.0.0/0
+          except:
+            - 10.0.0.0/8
+            - 172.16.0.0/12
+            - 192.168.0.0/16
+            - 169.254.0.0/16
+            - 100.64.0.0/10
       toPorts:
         - ports:
             - port: "7844"

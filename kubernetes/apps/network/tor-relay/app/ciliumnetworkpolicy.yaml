@@ -26,8 +26,17 @@ spec:
             - port: "9035"
               protocol: TCP
   egress:
-    - toEntities:
-        - world
+    # Public Tor network only. A relay connects out to other relays on public
+    # IPs and has no reason to reach the LAN or in-cluster services, so exclude
+    # all private/non-routable ranges (RFC1918 + link-local + CGNAT).
+    - toCIDRSet:
+        - cidr: 0.0.0.0/0
+          except:
+            - 10.0.0.0/8
+            - 172.16.0.0/12
+            - 192.168.0.0/16
+            - 169.254.0.0/16
+            - 100.64.0.0/10
     - toEndpoints:
         - matchLabels:
             io.kubernetes.pod.namespace: kube-system
