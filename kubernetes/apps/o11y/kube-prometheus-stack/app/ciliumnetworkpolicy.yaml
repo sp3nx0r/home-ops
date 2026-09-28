@@ -92,6 +92,19 @@ spec:
     - toEntities:
         - host
         - remote-node
+    # Static external scrape targets on ms-s1 (node/nvidia/nginx/vector exporters)
+    - toCIDRSet:
+        - cidr: 192.168.5.70/32
+      toPorts:
+        - ports:
+            - port: "9100"
+              protocol: TCP
+            - port: "8000"
+              protocol: TCP
+            - port: "9113"
+              protocol: TCP
+            - port: "8201"
+              protocol: TCP
 ---
 # yaml-language-server: $schema=https://k8s-schemas.home-operations.com/cilium.io/ciliumnetworkpolicy_v2.json
 apiVersion: cilium.io/v2
@@ -109,7 +122,7 @@ spec:
       io.kubernetes.pod.namespace: o11y
       app.kubernetes.io/name: alertmanager
   ingress:
-    # Prometheus pushes alerts :9093
+    # Prometheus pushes alerts :9093 and scrapes the config-reloader :8080
     - fromEndpoints:
         - matchLabels:
             io.kubernetes.pod.namespace: o11y
@@ -117,6 +130,8 @@ spec:
       toPorts:
         - ports:
             - port: "9093"
+              protocol: TCP
+            - port: "8080"
               protocol: TCP
     # OIDC-gated web/API :9093 from the internal gateway + Grafana datasource
     - fromEndpoints:

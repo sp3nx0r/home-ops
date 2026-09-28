@@ -7,8 +7,8 @@ metadata:
 spec:
   # Custom/resource metrics API server (v1beta1.custom.metrics.k8s.io). Selecting
   # it makes it default-deny. Ingress: aggregation-layer calls from the apiserver
-  # (host-networked on control-plane) to :6443. Egress: DNS + querying Prometheus
-  # :9090.
+  # (host-networked on control-plane) to :6443. Egress: DNS, querying Prometheus
+  # :9090, and delegated authn/authz to the apiserver :6443.
   endpointSelector:
     matchLabels:
       io.kubernetes.pod.namespace: o11y
@@ -46,4 +46,12 @@ spec:
       toPorts:
         - ports:
             - port: "9090"
+              protocol: TCP
+    # Delegated authn/authz (TokenReview / SubjectAccessReview) for callers of the
+    # aggregated metrics API
+    - toEntities:
+        - kube-apiserver
+      toPorts:
+        - ports:
+            - port: "6443"
               protocol: TCP
