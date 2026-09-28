@@ -32,6 +32,31 @@ spec:
           hasScopes: true
       extraArgs:
         - -oidc-callback-url=https://headlamp.${SECRET_DOMAIN}/oidc-callback
+    # The Cilium plugin (giantswarm/headlamp-cilium) is not published to Artifact
+    # Hub, so it can't be installed via pluginsManager. Instead the plugin files
+    # ship in a container image (/plugins/headlamp-cilium) which this initContainer
+    # copies into the shared plugins-dir volume before the backend/sidecar start.
+    # No internet egress is needed (unlike the pluginsManager sidecar).
+    initContainers:
+      - name: cilium-plugin
+        image: gsoci.azurecr.io/giantswarm/headlamp-cilium:0.1.11@sha256:2474b8f5ae898bee0bb88418340c3dcce1e7723e140d65f1b3e8c2468d176d8e
+        command:
+          - /bin/sh
+          - -c
+          - |
+            mkdir -p /headlamp/plugins/headlamp-cilium
+            cp -r /plugins/headlamp-cilium/. /headlamp/plugins/headlamp-cilium/
+        volumeMounts:
+          - name: plugins-dir
+            mountPath: /headlamp/plugins
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 100
+          runAsGroup: 101
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop: ["ALL"]
     pluginsManager:
       enabled: true
       configContent: |
