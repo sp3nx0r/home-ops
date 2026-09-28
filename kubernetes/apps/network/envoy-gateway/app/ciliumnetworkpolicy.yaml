@@ -57,6 +57,19 @@ spec:
         - ports:
             - port: "6443"
               protocol: TCP
+    # SecurityPolicy OIDC discovery: the control plane fetches the provider's
+    # .well-known/openid-configuration at translation time. The provider is
+    # id.${SECRET_DOMAIN} (Pocket ID), which resolves to the envoy-internal VIP
+    # and is LB-translated to the envoy-internal backend on :10443. Without this
+    # every OIDC-gated route falls back to a 500 direct response.
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: network
+            gateway.envoyproxy.io/owning-gateway-name: envoy-internal
+      toPorts:
+        - ports:
+            - port: "10443"
+              protocol: TCP
 ---
 # yaml-language-server: $schema=https://k8s-schemas.home-operations.com/cilium.io/ciliumnetworkpolicy_v2.json
 apiVersion: cilium.io/v2
