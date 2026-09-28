@@ -42,15 +42,21 @@ applying remote bandwidth caps and forcing transcodes even for LAN playback.
 Two settings fix this:
 
 1. **LAN Networks** (`LanNetworksBandwidth`) — tells Plex which subnets to treat
-   as local regardless of its own NIC. This is a server preference stored on the
-   config PVC (Settings → Network → "LAN Networks"), **not** GitOps-managed —
-   same category as `customConnections` / `allowedNetworks`. Current value:
+   as local regardless of its own NIC. GitOps-managed via the image's generic
+   preference injector (`home-operations/plex` entrypoint applies any
+   `PLEX_PREFERENCE_<N>="Key=Value"` env var to `Preferences.xml` on every start,
+   so it survives a config PVC rebuild) — `helmrelease.yaml`:
 
-    ```
-    LanNetworksBandwidth="192.168.0.0/24,192.168.1.0/24,192.168.5.0/24"
+    ```yaml
+    PLEX_PREFERENCE_1: "LanNetworksBandwidth=192.168.0.0/24,192.168.1.0/24,192.168.5.0/24"
     ```
 
-    Set live (no restart) via the Plex API:
+    > Do **not** add the pod CIDR (`10.42.0.0/16`) here — remote clients arriving
+    > via the Cloudflare tunnel → `envoy-external` also originate from that CIDR,
+    > so whitelisting it would mark genuine remote streams as local.
+
+    To set it live without a restart (e.g. before the next reconcile), PUT it via
+    the Plex API:
 
     ```sh
     TOKEN=$(kubectl exec -n media deploy/plex -c app -- \
@@ -60,9 +66,8 @@ Two settings fix this:
     curl -s -X PUT "http://192.168.5.21:32400/:/prefs?LanNetworksBandwidth=192.168.0.0%2F24%2C192.168.1.0%2F24%2C192.168.5.0%2F24&X-Plex-Token=${TOKEN}"
     ```
 
-    > Do **not** add the pod CIDR (`10.42.0.0/16`) here — remote clients arriving
-    > via the Cloudflare tunnel → `envoy-external` also originate from that CIDR,
-    > so whitelisting it would mark genuine remote streams as local.
+    Note: because `PLEX_PREFERENCE_*` re-applies on every start, any later change
+    made in the Plex UI is reverted to the env value on the next restart.
 
 2. **`externalTrafficPolicy: Local`** — `kubernetes/apps/media/plex/app/helmrelease.yaml`
    (GitOps). The `plex` LoadBalancer otherwise SNATs clients to a node IP; `Local`
