@@ -165,3 +165,28 @@ spec:
               retention or raise storageSpec + retentionSize in the kube-prometheus-stack HelmRelease.
           labels:
             severity: warning
+    - name: scrape-target-coverage.rules
+      rules:
+        # Catches the "silent" monitoring failure where a PodMonitor/ServiceMonitor
+        # exists (so Prometheus builds a scrape pool for it) but relabeling keeps
+        # zero targets -- e.g. a container port-name mismatch (Kubernetes truncates
+        # port names to 15 chars, which broke vector-syslog) or a selector that
+        # matches no pods/endpoints. These pools never trigger TargetDown -- there
+        # is no target to be "down" -- so the metrics just silently disappear.
+        - alert: PrometheusScrapePoolEmpty
+          expr: prometheus_target_scrape_pool_targets == 0
+          for: 30m
+          annotations:
+            summary: >-
+              Prometheus scrape pool {{ $labels.scrape_job }} has no targets
+            description: >-
+              The scrape pool {{ $labels.scrape_job }} has had 0 active targets for
+              30 minutes. A PodMonitor/ServiceMonitor exists but selects no endpoints
+              -- commonly a container port-name mismatch (port names are truncated to
+              15 characters) or a stale selector -- so its metrics are silently
+              missing and TargetDown will never fire. Compare the monitor's
+              port/selector against the pod's declared ports (kubectl get
+              podmonitor,servicemonitor -A; kubectl get pod <pod> -o
+              jsonpath='{.spec.containers[*].ports}').
+          labels:
+            severity: warning
