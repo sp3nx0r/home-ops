@@ -73,3 +73,11 @@ spec:
         - ports:
             - port: "3901"
               protocol: TCP
+    # Kubernetes API -- [kubernetes_discovery] publishes node metadata for peer
+    # discovery (namespace: storage, service_name: garage)
+    - toEntities:
+        - kube-apiserver
+      toPorts:
+        - ports:
+            - port: "6443"
+              protocol: TCP
