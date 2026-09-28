@@ -60,7 +60,7 @@ spec:
                 memory: 256Mi
             securityContext:
               allowPrivilegeEscalation: false
-              readOnlyRootFilesystem: false
+              readOnlyRootFilesystem: true
               capabilities: { drop: ["ALL"] }
     defaultPodOptions:
       securityContext:
@@ -102,3 +102,9 @@ spec:
         existingClaim: pocket-id
         globalMounts:
           - path: /app/data
+      # Writable scratch for transient temp files (e.g. S3 upload buffering),
+      # required now that the root filesystem is read-only.
+      tmp:
+        type: emptyDir
+        globalMounts:
+          - path: /tmp
