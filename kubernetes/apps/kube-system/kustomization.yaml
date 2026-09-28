@@ -16,6 +16,7 @@ resources:
   - ./democratic-csi/ks.yaml
   - ./descheduler/ks.yaml
   - ./metrics-server/ks.yaml
+  - ./network-policies/ks.yaml
   - ./node-exporter/ks.yaml
   - ./reloader/ks.yaml
   - ./snapshot-controller/ks.yaml
