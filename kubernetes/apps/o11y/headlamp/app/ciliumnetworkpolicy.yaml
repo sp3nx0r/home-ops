@@ -61,3 +61,11 @@ spec:
         - ports:
             - port: "10443"
               protocol: TCP
+    # pluginsManager sidecar: fetch @headlamp-k8s/pluginctl from the npm registry
+    # and download plugins from Artifact Hub / GitHub over HTTPS (world:443).
+    - toEntities:
+        - world
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP

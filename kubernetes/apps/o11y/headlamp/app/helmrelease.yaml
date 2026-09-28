@@ -28,7 +28,7 @@ spec:
         - -oidc-callback-url=https://headlamp.${SECRET_DOMAIN}/oidc-callback
     pluginsManager:
       enabled: true
-      configContext: |
+      configContent: |
         plugins:
           - name: cert-manager
             source: https://artifacthub.io/packages/headlamp/headlamp-plugins/headlamp_cert-manager
