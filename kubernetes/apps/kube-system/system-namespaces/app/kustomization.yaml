@@ -1,0 +1,8 @@
+---
+# yaml-language-server: $schema=https://json.schemastore.org/kustomization
+# NOTE: intentionally no `namespace:` field - these are cluster-scoped Namespace
+# objects and a namespace transformer would rename them (kustomize behavior).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ./namespaces.yaml
