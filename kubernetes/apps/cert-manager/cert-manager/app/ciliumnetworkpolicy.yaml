@@ -76,14 +76,23 @@ kind: CiliumNetworkPolicy
 metadata:
   name: cert-manager-cainjector
 spec:
-  # cainjector injects CA bundles into webhooks/APIServices/CRDs. It only talks
-  # to the API server; nothing connects to it, so ingress is denied entirely.
+  # cainjector injects CA bundles into webhooks/APIServices/CRDs. It talks to
+  # the API server and exposes metrics on :9402, which Prometheus scrapes.
   endpointSelector:
     matchLabels:
       io.kubernetes.pod.namespace: cert-manager
       app.kubernetes.io/name: cainjector
       app.kubernetes.io/component: cainjector
-  ingress: []
+  ingress:
+    # Prometheus scrapes cainjector metrics :9402
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: o11y
+            app.kubernetes.io/name: prometheus
+      toPorts:
+        - ports:
+            - port: "9402"
+              protocol: TCP
   egress:
     # DNS resolution (L7 so lookups are visible to Cilium's DNS proxy)
     - toEndpoints:

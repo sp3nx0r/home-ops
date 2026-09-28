@@ -15,8 +15,10 @@ spec:
       io.kubernetes.pod.namespace: storage
       app.kubernetes.io/name: garage
   ingress:
-    # S3 API :3900 from the in-cluster clients: loki + thanos (o11y) and
-    # pocket-id (security)
+    # S3 API :3900 from the in-cluster clients: loki + thanos (o11y),
+    # pocket-id (security), and prometheus (o11y) -- the thanos sidecar runs
+    # inside the prometheus pod, so its block uploads carry the prometheus
+    # identity rather than thanos.
     - fromEndpoints:
         - matchLabels:
             io.kubernetes.pod.namespace: o11y
@@ -24,6 +26,9 @@ spec:
         - matchLabels:
             io.kubernetes.pod.namespace: o11y
             app.kubernetes.io/name: thanos
+        - matchLabels:
+            io.kubernetes.pod.namespace: o11y
+            app.kubernetes.io/name: prometheus
         - matchLabels:
             io.kubernetes.pod.namespace: security
             app.kubernetes.io/name: pocket-id

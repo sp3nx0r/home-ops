@@ -52,6 +52,14 @@ spec:
         values:
           - kube-system
   ingress:
-    # kubelet httpGet/tcpSocket probes originate from the local node
+    # Cluster infrastructure, all trusted node/control-plane identities:
+    #   - host: kubelet httpGet/tcpSocket probes from the local node.
+    #   - remote-node / kube-apiserver: cross-node kubelet + cilium-health
+    #     checks (on this hyper-converged cluster every node hosts the API
+    #     server, so peer nodes present as kube-apiserver).
+    #   - health: the reserved cilium-health endpoints probe each other.
     - fromEntities:
         - host
+        - remote-node
+        - kube-apiserver
+        - health
