@@ -5,11 +5,11 @@ kind: CiliumNetworkPolicy
 metadata:
   name: sillytavern
 spec:
-  # LLM frontend. Selecting it makes it default-deny. It calls whatever LLM
-  # backend the user configures at runtime -- typically cloud APIs (OpenAI,
-  # Anthropic, OpenRouter, ...) over world:443, and optionally the local ollama
-  # via ollama.${SECRET_DOMAIN} (envoy-internal VIP -> :10443). Liveness uses an
-  # exec probe, so no host ingress is required.
+  # LLM frontend. Selecting it makes it default-deny. It only calls back to the
+  # local ollama models on ms-s1 (192.168.5.70) via ollama.${SECRET_DOMAIN},
+  # which resolves to the envoy-internal VIP and is LB-translated to the envoy
+  # backend (:10443) -- so no world egress is required. Liveness uses an exec
+  # probe, so no host ingress is required either.
   endpointSelector:
     matchLabels:
       io.kubernetes.pod.namespace: default
@@ -47,11 +47,4 @@ spec:
       toPorts:
         - ports:
             - port: "10443"
-              protocol: TCP
-    # Cloud LLM API providers over HTTPS
-    - toEntities:
-        - world
-      toPorts:
-        - ports:
-            - port: "443"
               protocol: TCP
