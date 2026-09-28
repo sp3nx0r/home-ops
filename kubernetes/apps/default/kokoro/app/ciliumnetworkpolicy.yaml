@@ -1,0 +1,46 @@
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/cilium.io/ciliumnetworkpolicy_v2.json
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: kokoro
+spec:
+  # Internal-only TTS backend consumed by openwebui. Selecting it makes it
+  # default-deny; voices are baked into the image so egress is DNS-only.
+  # NOTE: if kokoro ever pulls models at runtime, widen egress to world:443.
+  endpointSelector:
+    matchLabels:
+      io.kubernetes.pod.namespace: default
+      app.kubernetes.io/name: kokoro
+  ingress:
+    # In-cluster consumer: openwebui's TTS calls to :8880
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: default
+            app.kubernetes.io/name: openwebui
+      toPorts:
+        - ports:
+            - port: "8880"
+              protocol: TCP
+    # kubelet httpGet liveness/readiness probe :8880
+    - fromEntities:
+        - host
+      toPorts:
+        - ports:
+            - port: "8880"
+              protocol: TCP
+  egress:
+    # DNS resolution (L7 so lookups are visible to Cilium's DNS proxy)
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"

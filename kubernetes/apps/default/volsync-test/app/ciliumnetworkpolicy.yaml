@@ -1,0 +1,30 @@
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/cilium.io/ciliumnetworkpolicy_v2.json
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: volsync-test
+spec:
+  # Volsync backup smoke-test workload: a busybox heartbeat writing to a PVC. It
+  # makes no network connections of its own, so egress is DNS-only and ingress
+  # is fully denied. The Volsync mover pods that actually back it up carry
+  # different labels and are intentionally not selected here.
+  endpointSelector:
+    matchLabels:
+      io.kubernetes.pod.namespace: default
+      app: volsync-test
+  egress:
+    # DNS resolution (L7 so lookups are visible to Cilium's DNS proxy)
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"

@@ -1,0 +1,66 @@
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/cilium.io/ciliumnetworkpolicy_v2.json
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: searxng
+spec:
+  # Metasearch aggregator. Selecting it makes it default-deny. It genuinely
+  # needs broad outbound reach because it scrapes ~20 upstream engines (brave,
+  # duckduckgo, startpage, wikipedia, github, youtube, reddit, pubmed, ...), so
+  # egress is world:443/:80 rather than an unmaintainable FQDN allowlist. The
+  # hardening value here is tight ingress + egress-port restriction.
+  endpointSelector:
+    matchLabels:
+      io.kubernetes.pod.namespace: default
+      app.kubernetes.io/name: searxng
+  ingress:
+    # Proxied user traffic from the internal gateway :8080
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: network
+            gateway.envoyproxy.io/owning-gateway-name: envoy-internal
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+    # In-cluster consumer: openwebui web-search queries
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: default
+            app.kubernetes.io/name: openwebui
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+    # kubelet httpGet /healthz probe :8080
+    - fromEntities:
+        - host
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+  egress:
+    # DNS resolution (L7 so lookups are visible to Cilium's DNS proxy)
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    # Scraping upstream search engines over HTTPS/HTTP
+    - toEntities:
+        - world
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+            - port: "80"
+              protocol: TCP

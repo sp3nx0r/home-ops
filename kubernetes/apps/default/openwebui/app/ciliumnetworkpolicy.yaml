@@ -1,0 +1,83 @@
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/cilium.io/ciliumnetworkpolicy_v2.json
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: openwebui
+spec:
+  # Internal LLM chat UI. Selecting it makes it default-deny. It talks to:
+  #   - searxng (:8080) and kokoro (:8880) in-cluster for web search + TTS
+  #   - ollama.${SECRET_DOMAIN} and id.${SECRET_DOMAIN} (PocketID OIDC) which
+  #     resolve to the envoy-internal VIP; Cilium LB-translates that to the
+  #     envoy endpoint, so it is authorized via toEndpoints (not world).
+  #   - world:443 for HuggingFace embedding-model downloads (RAG) + updates.
+  endpointSelector:
+    matchLabels:
+      io.kubernetes.pod.namespace: default
+      app.kubernetes.io/name: openwebui
+  ingress:
+    # Proxied user traffic from the internal gateway :8080
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: network
+            gateway.envoyproxy.io/owning-gateway-name: envoy-internal
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+    # kubelet httpGet /health probe :8080
+    - fromEntities:
+        - host
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+  egress:
+    # DNS resolution (L7 so lookups are visible to Cilium's DNS proxy)
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    # In-cluster backends: searxng web search + kokoro TTS
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: default
+            app.kubernetes.io/name: searxng
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: default
+            app.kubernetes.io/name: kokoro
+      toPorts:
+        - ports:
+            - port: "8880"
+              protocol: TCP
+    # ollama.${SECRET_DOMAIN} + id.${SECRET_DOMAIN} via the internal gateway VIP
+    # (LB-translated to the envoy-internal backend on :10443)
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: network
+            gateway.envoyproxy.io/owning-gateway-name: envoy-internal
+      toPorts:
+        - ports:
+            - port: "10443"
+              protocol: TCP
+    # HuggingFace embedding-model downloads (RAG) and update checks
+    - toEntities:
+        - world
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
