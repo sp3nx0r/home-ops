@@ -17,9 +17,13 @@ spec:
       app.kubernetes.io/name: vector
       app.kubernetes.io/instance: vector-syslog
   ingress:
-    # Syslog ingest UDP :5140 from LAN senders via the LoadBalancer
-    - fromEntities:
-        - world
+    # Syslog ingest UDP :5140 from LAN senders via the LoadBalancer. Scoped to
+    # the LAN /24 rather than world -- syslog sources are on-prem devices
+    # (TrueNAS, UniFi). host/remote-node cover sources SNAT'd to a node under
+    # externalTrafficPolicy=Cluster.
+    - fromCIDR:
+        - 192.168.5.0/24
+      fromEntities:
         - host
         - remote-node
       toPorts:

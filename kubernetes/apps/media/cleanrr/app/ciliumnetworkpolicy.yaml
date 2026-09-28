@@ -45,14 +45,8 @@ spec:
           rules:
             dns:
               - matchPattern: "*"
-    # Intra-media trust zone (*arr APIs)
+    # Intra-media trust zone (*arr APIs). cleanrr only talks to radarr/sonarr
+    # in-cluster (CLEANRR_SERVERS__*__URL), so no external egress is needed.
     - toEndpoints:
         - matchLabels:
             io.kubernetes.pod.namespace: media
-    # External services over HTTPS
-    - toEntities:
-        - world
-      toPorts:
-        - ports:
-            - port: "443"
-              protocol: TCP

@@ -59,10 +59,3 @@ spec:
         - ports:
             - port: "80"
               protocol: TCP
-    # External services over HTTPS
-    - toEntities:
-        - world
-      toPorts:
-        - ports:
-            - port: "443"
-              protocol: TCP

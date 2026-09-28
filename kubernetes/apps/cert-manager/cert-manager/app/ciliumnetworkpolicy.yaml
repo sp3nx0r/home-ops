@@ -53,21 +53,15 @@ spec:
         - ports:
             - port: "6443"
               protocol: TCP
-    # ACME directory (Let's Encrypt) + Cloudflare DNS-01 API
+    # ACME directory (Let's Encrypt) + Cloudflare DNS-01 API. DNS-01 propagation
+    # self-checks also run over this rule: dns01RecursiveNameserversOnly=true
+    # with DoH resolvers (https://1.1.1.1:443/dns-query), so no plaintext :53
+    # egress to public nameservers is needed.
     - toEntities:
         - world
       toPorts:
         - ports:
             - port: "443"
-              protocol: TCP
-    # DNS-01 propagation self-check against public authoritative nameservers
-    - toEntities:
-        - world
-      toPorts:
-        - ports:
-            - port: "53"
-              protocol: UDP
-            - port: "53"
               protocol: TCP
 ---
 # yaml-language-server: $schema=https://k8s-schemas.home-operations.com/cilium.io/ciliumnetworkpolicy_v2.json
