@@ -1,0 +1,53 @@
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/cilium.io/ciliumnetworkpolicy_v2.json
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: plex
+spec:
+  # Media server. Selecting it makes it default-deny. Reached directly on the
+  # LoadBalancer :32400 (etp=Local, so client source IPs are preserved and
+  # present as world), via both gateways, and by tautulli (in-cluster). Talks to
+  # plex.tv over HTTPS for auth/metadata.
+  endpointSelector:
+    matchLabels:
+      io.kubernetes.pod.namespace: media
+      app.kubernetes.io/name: plex
+  ingress:
+    # Direct LAN clients (world, IP preserved by etp=Local), the internal/
+    # external gateways and other in-cluster clients (cluster), and kubelet
+    # probes (host) -- all on :32400
+    - fromEntities:
+        - world
+        - cluster
+        - host
+      toPorts:
+        - ports:
+            - port: "32400"
+              protocol: TCP
+  egress:
+    # DNS resolution (L7 so lookups are visible to Cilium's DNS proxy)
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    # Intra-media trust zone
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: media
+    # plex.tv account/metadata over HTTPS
+    - toEntities:
+        - world
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
