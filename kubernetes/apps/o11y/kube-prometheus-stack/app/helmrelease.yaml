@@ -56,24 +56,26 @@ spec:
                   {{ if eq .Status "firing" }}🔥 [FIRING:{{ .Alerts.Firing | len }}]{{ else }}✅ [RESOLVED]{{ end }} {{ .CommonLabels.alertname }}{{ if .CommonLabels.severity }} · {{ .CommonLabels.severity }}{{ end }}
                 # Split firing vs resolved so a grouped notification (e.g. all
                 # GatusEndpointDown alerts share one group) never shows recovered
-                # endpoints as if still alerting. Per-alert status + identifier
-                # (name -> pod -> node -> instance -> alertname).
+                # endpoints as if still alerting. Each alert renders as a Discord
+                # bullet with a nested "-#" subtext line (summary + timing);
+                # identifier falls back name -> pod -> node -> instance -> alertname.
                 message: |-
                   {{- if .Alerts.Firing -}}
                   **🔥 Firing ({{ .Alerts.Firing | len }})**
-                  {{ range .Alerts.Firing }}
-                  {{ if eq .Labels.severity "critical" }}🚨{{ else if eq .Labels.severity "warning" }}⚠️{{ else }}ℹ️{{ end }} **{{ if .Labels.name }}{{ .Labels.name }}{{ else if .Labels.pod }}{{ .Labels.pod }}{{ else if .Labels.node }}{{ .Labels.node }}{{ else if .Labels.instance }}{{ .Labels.instance }}{{ else }}{{ .Labels.alertname }}{{ end }}**{{ if .Labels.group }} — `{{ .Labels.group }}`{{ else if .Labels.namespace }} — `{{ .Labels.namespace }}`{{ end }}
-                  {{ if .Annotations.summary }}> {{ .Annotations.summary }}
-                  {{ end }}Since {{ .StartsAt.Format "Jan 02 15:04 MST" }}{{ if .Annotations.runbook_url }} · [runbook]({{ .Annotations.runbook_url }}){{ end }}
-                  {{ end }}
+                  {{- range .Alerts.Firing }}
+                  - {{ if eq .Labels.severity "critical" }}🚨{{ else if eq .Labels.severity "warning" }}⚠️{{ else }}ℹ️{{ end }} **{{ if .Labels.name }}{{ .Labels.name }}{{ else if .Labels.pod }}{{ .Labels.pod }}{{ else if .Labels.node }}{{ .Labels.node }}{{ else if .Labels.instance }}{{ .Labels.instance }}{{ else }}{{ .Labels.alertname }}{{ end }}**{{ if .Labels.group }} — `{{ .Labels.group }}`{{ else if .Labels.namespace }} — `{{ .Labels.namespace }}`{{ end }}
+                    -# {{ if .Annotations.summary }}{{ .Annotations.summary }} · {{ end }}since {{ .StartsAt.Format "Jan 02 15:04 MST" }}{{ if .Annotations.runbook_url }} · [runbook]({{ .Annotations.runbook_url }}){{ end }}
+                  {{- end }}
                   {{- end }}
                   {{- if and .Alerts.Firing .Alerts.Resolved }}
+
                   {{ end -}}
                   {{- if .Alerts.Resolved -}}
                   **✅ Resolved ({{ .Alerts.Resolved | len }})**
-                  {{ range .Alerts.Resolved }}
-                  ✅ **{{ if .Labels.name }}{{ .Labels.name }}{{ else if .Labels.pod }}{{ .Labels.pod }}{{ else if .Labels.node }}{{ .Labels.node }}{{ else if .Labels.instance }}{{ .Labels.instance }}{{ else }}{{ .Labels.alertname }}{{ end }}**{{ if .Labels.group }} — `{{ .Labels.group }}`{{ else if .Labels.namespace }} — `{{ .Labels.namespace }}`{{ end }} · recovered {{ .EndsAt.Format "Jan 02 15:04 MST" }}
-                  {{ end }}
+                  {{- range .Alerts.Resolved }}
+                  - **{{ if .Labels.name }}{{ .Labels.name }}{{ else if .Labels.pod }}{{ .Labels.pod }}{{ else if .Labels.node }}{{ .Labels.node }}{{ else if .Labels.instance }}{{ .Labels.instance }}{{ else }}{{ .Labels.alertname }}{{ end }}**{{ if .Labels.group }} — `{{ .Labels.group }}`{{ else if .Labels.namespace }} — `{{ .Labels.namespace }}`{{ end }}
+                    -# recovered {{ .EndsAt.Format "Jan 02 15:04 MST" }}
+                  {{- end }}
                   {{- end }}
           # Uncomment with kube-agent deployment:
           # - name: kube-agent
