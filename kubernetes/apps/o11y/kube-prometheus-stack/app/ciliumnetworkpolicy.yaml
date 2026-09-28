@@ -37,6 +37,15 @@ spec:
         - ports:
             - port: "9090"
               protocol: TCP
+    # kromgo renders badges by querying the HTTP API :9090
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: o11y
+            app.kubernetes.io/name: kromgo
+      toPorts:
+        - ports:
+            - port: "9090"
+              protocol: TCP
     # thanos-query fans out to the thanos-sidecar gRPC :10901
     - fromEndpoints:
         - matchLabels:
