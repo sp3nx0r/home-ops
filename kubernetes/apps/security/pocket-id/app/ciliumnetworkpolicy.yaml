@@ -1,0 +1,67 @@
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/cilium.io/ciliumnetworkpolicy_v2.json
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: pocket-id
+spec:
+  # OIDC identity provider (id.${SECRET_DOMAIN}), reached only via the internal
+  # gateway. Selecting it makes it default-deny. It serves on :1411, exposes
+  # OTEL Prometheus metrics on :9464, stores its DB in a local SQLite file (no DB
+  # egress), and uses Garage S3 (storage/garage :3900) as its file backend. No
+  # SMTP is configured and version/analytics checks are disabled, so it needs no
+  # world egress.
+  endpointSelector:
+    matchLabels:
+      io.kubernetes.pod.namespace: security
+      app.kubernetes.io/name: pocket-id
+  ingress:
+    # User-facing OIDC/login traffic proxied from the internal gateway :1411
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: network
+            gateway.envoyproxy.io/owning-gateway-name: envoy-internal
+      toPorts:
+        - ports:
+            - port: "1411"
+              protocol: TCP
+    # Prometheus scrape of the OTEL metrics endpoint :9464
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: o11y
+            app.kubernetes.io/name: prometheus
+      toPorts:
+        - ports:
+            - port: "9464"
+              protocol: TCP
+    # kubelet httpGet /healthz probe :1411
+    - fromEntities:
+        - host
+      toPorts:
+        - ports:
+            - port: "1411"
+              protocol: TCP
+  egress:
+    # DNS resolution (L7 so lookups are visible to Cilium's DNS proxy)
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    # File backend: Garage S3 API in the storage namespace :3900
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: storage
+            app.kubernetes.io/name: garage
+      toPorts:
+        - ports:
+            - port: "3900"
+              protocol: TCP

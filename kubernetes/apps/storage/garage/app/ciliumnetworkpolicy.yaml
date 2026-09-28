@@ -1,0 +1,75 @@
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/cilium.io/ciliumnetworkpolicy_v2.json
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: garage
+spec:
+  # Self-hosted S3 (Garage), storage backend for loki (chunks/ruler), thanos,
+  # and pocket-id. Selecting it makes it default-deny. Ports: S3 API :3900,
+  # RPC :3901, S3 web :3902, admin/metrics :3903. Single replica (no S3 web
+  # route and no kubelet probes on this chart), so ingress is limited to the
+  # in-cluster S3 clients, the Prometheus metrics scrape, and intra-cluster RPC.
+  endpointSelector:
+    matchLabels:
+      io.kubernetes.pod.namespace: storage
+      app.kubernetes.io/name: garage
+  ingress:
+    # S3 API :3900 from the in-cluster clients: loki + thanos (o11y) and
+    # pocket-id (security)
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: o11y
+            app.kubernetes.io/name: loki
+        - matchLabels:
+            io.kubernetes.pod.namespace: o11y
+            app.kubernetes.io/name: thanos
+        - matchLabels:
+            io.kubernetes.pod.namespace: security
+            app.kubernetes.io/name: pocket-id
+      toPorts:
+        - ports:
+            - port: "3900"
+              protocol: TCP
+    # Prometheus scrape of the admin/metrics endpoint :3903
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: o11y
+            app.kubernetes.io/name: prometheus
+      toPorts:
+        - ports:
+            - port: "3903"
+              protocol: TCP
+    # Intra-cluster RPC :3901 between Garage nodes (self today; future replicas)
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: storage
+            app.kubernetes.io/name: garage
+      toPorts:
+        - ports:
+            - port: "3901"
+              protocol: TCP
+  egress:
+    # DNS resolution (L7 so lookups are visible to Cilium's DNS proxy)
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    # Intra-cluster RPC :3901 to Garage peers (self today; future replicas)
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: storage
+            app.kubernetes.io/name: garage
+      toPorts:
+        - ports:
+            - port: "3901"
+              protocol: TCP
