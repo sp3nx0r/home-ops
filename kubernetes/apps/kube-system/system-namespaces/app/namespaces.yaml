@@ -1,0 +1,34 @@
+---
+# PodSecurity labels for namespaces created outside of Flux (by the apiserver
+# or Cilium). Adopted here (prune disabled, labels merged via server-side apply)
+# so every namespace has an explicit PSA level. None run workloads, so
+# restricted is safe and tightest.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kube-public
+  annotations:
+    kustomize.toolkit.fluxcd.io/prune: disabled
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kube-node-lease
+  annotations:
+    kustomize.toolkit.fluxcd.io/prune: disabled
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cilium-secrets
+  annotations:
+    kustomize.toolkit.fluxcd.io/prune: disabled
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest

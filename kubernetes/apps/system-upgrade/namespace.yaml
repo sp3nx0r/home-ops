@@ -6,9 +6,5 @@ metadata:
   annotations:
     kustomize.toolkit.fluxcd.io/prune: disabled
   labels:
-    # Non-enforcing: upgrade hooks may need privileges. Promote to enforce after
-    # a clean upgrade run.
-    pod-security.kubernetes.io/warn: baseline
-    pod-security.kubernetes.io/warn-version: latest
-    pod-security.kubernetes.io/audit: baseline
-    pod-security.kubernetes.io/audit-version: latest
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/enforce-version: latest
