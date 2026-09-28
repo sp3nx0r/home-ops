@@ -98,9 +98,13 @@ spec:
         - ports:
             - port: "6443"
               protocol: TCP
-    # Dashboard JSON downloads from grafana.com + raw.githubusercontent.com
-    - toEntities:
-        - world
+    # Dashboard JSON downloads from grafana.com + raw.githubusercontent.com.
+    # Block the LAN (192.168.0.0/16) -- these are public and all datasources,
+    # OIDC, and the apiserver watch are separate toEndpoints/entity rules.
+    - toCIDRSet:
+        - cidr: 0.0.0.0/0
+          except:
+            - 192.168.0.0/16
       toPorts:
         - ports:
             - port: "443"

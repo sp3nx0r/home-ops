@@ -55,9 +55,13 @@ spec:
           rules:
             dns:
               - matchPattern: "*"
-    # Scraping upstream search engines over HTTPS/HTTP
-    - toEntities:
-        - world
+    # Scraping upstream search engines over HTTPS/HTTP. Block the LAN
+    # (192.168.0.0/16) -- upstream engines are all public and in-cluster access
+    # is via separate toEndpoints rules.
+    - toCIDRSet:
+        - cidr: 0.0.0.0/0
+          except:
+            - 192.168.0.0/16
       toPorts:
         - ports:
             - port: "443"
