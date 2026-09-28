@@ -42,10 +42,18 @@ spec:
                   failureThreshold: 30
                   periodSeconds: 10
             securityContext:
-              allowPrivilegeEscalation: true
+              # No privilege escalation: the process runs entirely as uid 1000
+              # with zero effective capabilities (verified via /proc CapEff).
+              # The previous SETUID/SETGID/CHOWN/DAC_OVERRIDE/FOWNER caps +
+              # allowPrivilegeEscalation existed only to let a sudo-escalated
+              # root process (NOPASSWD ALL in the image) install per-project
+              # tools — an in-container root escape hatch we don't want for an
+              # app that runs pipeline code downloaded from ArchiveTeam HQ.
+              # Rootfs stays writable: warrior git-clones project code and writes
+              # downloads into /home/warrior at runtime.
+              allowPrivilegeEscalation: false
               readOnlyRootFilesystem: false
               capabilities:
-                add: ["SETUID", "SETGID", "CHOWN", "DAC_OVERRIDE", "FOWNER"]
                 drop: ["ALL"]
             resources:
               requests:
