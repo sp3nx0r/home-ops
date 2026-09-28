@@ -1,0 +1,162 @@
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/cilium.io/ciliumnetworkpolicy_v2.json
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: cert-manager
+spec:
+  # cert-manager controller. Selecting it makes it default-deny. It reaches the
+  # ACME directory + Cloudflare DNS-01 API over world:443, performs DNS-01
+  # propagation self-checks against authoritative nameservers (world:53), and
+  # watches/updates resources via the API server.
+  endpointSelector:
+    matchLabels:
+      io.kubernetes.pod.namespace: cert-manager
+      app.kubernetes.io/name: cert-manager
+      app.kubernetes.io/component: controller
+  ingress:
+    # Prometheus scrapes controller metrics :9402
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: o11y
+            app.kubernetes.io/name: prometheus
+      toPorts:
+        - ports:
+            - port: "9402"
+              protocol: TCP
+    # kubelet httpGet liveness probe :9403
+    - fromEntities:
+        - host
+      toPorts:
+        - ports:
+            - port: "9403"
+              protocol: TCP
+  egress:
+    # DNS resolution (L7 so lookups are visible to Cilium's DNS proxy)
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    # Kubernetes API -- watch Certificates/Orders/Challenges, update Secrets
+    - toEntities:
+        - kube-apiserver
+      toPorts:
+        - ports:
+            - port: "6443"
+              protocol: TCP
+    # ACME directory (Let's Encrypt) + Cloudflare DNS-01 API
+    - toEntities:
+        - world
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+    # DNS-01 propagation self-check against public authoritative nameservers
+    - toEntities:
+        - world
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/cilium.io/ciliumnetworkpolicy_v2.json
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: cert-manager-cainjector
+spec:
+  # cainjector injects CA bundles into webhooks/APIServices/CRDs. It only talks
+  # to the API server; nothing connects to it, so ingress is denied entirely.
+  endpointSelector:
+    matchLabels:
+      io.kubernetes.pod.namespace: cert-manager
+      app.kubernetes.io/name: cainjector
+      app.kubernetes.io/component: cainjector
+  ingress: []
+  egress:
+    # DNS resolution (L7 so lookups are visible to Cilium's DNS proxy)
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    # Kubernetes API -- watch and inject CA bundles
+    - toEntities:
+        - kube-apiserver
+      toPorts:
+        - ports:
+            - port: "6443"
+              protocol: TCP
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/cilium.io/ciliumnetworkpolicy_v2.json
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: cert-manager-webhook
+spec:
+  # Validating/mutating webhook. The API server (host-networked on the control
+  # plane, so it presents as host/remote-node as well as the kube-apiserver
+  # entity) calls it on :10250; it authenticates callers via the API server.
+  endpointSelector:
+    matchLabels:
+      io.kubernetes.pod.namespace: cert-manager
+      app.kubernetes.io/name: webhook
+      app.kubernetes.io/component: webhook
+  ingress:
+    # Admission webhook calls from the API server :10250
+    - fromEntities:
+        - kube-apiserver
+        - host
+        - remote-node
+      toPorts:
+        - ports:
+            - port: "10250"
+              protocol: TCP
+    # kubelet httpGet healthcheck probe :6080
+    - fromEntities:
+        - host
+      toPorts:
+        - ports:
+            - port: "6080"
+              protocol: TCP
+  egress:
+    # DNS resolution (L7 so lookups are visible to Cilium's DNS proxy)
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    # Kubernetes API -- TokenReview/SubjectAccessReview for incoming requests
+    - toEntities:
+        - kube-apiserver
+      toPorts:
+        - ports:
+            - port: "6443"
+              protocol: TCP

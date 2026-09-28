@@ -1,0 +1,272 @@
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/cilium.io/ciliumnetworkpolicy_v2.json
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: source-controller
+spec:
+  # Fetches Git repos, OCI artifacts, and Helm charts from the internet
+  # (world:443) and serves the resulting artifacts on :9090 to the kustomize
+  # and helm controllers.
+  endpointSelector:
+    matchLabels:
+      io.kubernetes.pod.namespace: flux-system
+      app: source-controller
+  ingress:
+    # Other Flux controllers fetch artifacts on :9090
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: flux-system
+            app.kubernetes.io/part-of: flux
+      toPorts:
+        - ports:
+            - port: "9090"
+              protocol: TCP
+    # Prometheus scrapes metrics :8080
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: o11y
+            app.kubernetes.io/name: prometheus
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+    # kubelet httpGet probes -- readiness :9090, liveness healthz :9440
+    - fromEntities:
+        - host
+      toPorts:
+        - ports:
+            - port: "9090"
+              protocol: TCP
+            - port: "9440"
+              protocol: TCP
+  egress:
+    # DNS resolution (L7 so lookups are visible to Cilium's DNS proxy)
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    # Kubernetes API -- reconcile source objects
+    - toEntities:
+        - kube-apiserver
+      toPorts:
+        - ports:
+            - port: "6443"
+              protocol: TCP
+    # Git/OCI/Helm sources on the internet (github.com, ghcr.io, registries)
+    - toEntities:
+        - world
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/cilium.io/ciliumnetworkpolicy_v2.json
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: kustomize-controller
+spec:
+  # Applies Kustomizations. Fetches artifacts from source-controller :9090 and
+  # applies rendered manifests via the API server. SOPS decryption uses a local
+  # age key (no network).
+  endpointSelector:
+    matchLabels:
+      io.kubernetes.pod.namespace: flux-system
+      app: kustomize-controller
+  ingress:
+    # Prometheus scrapes metrics :8080
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: o11y
+            app.kubernetes.io/name: prometheus
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+    # kubelet httpGet healthz probe :9440
+    - fromEntities:
+        - host
+      toPorts:
+        - ports:
+            - port: "9440"
+              protocol: TCP
+  egress:
+    # DNS resolution (L7 so lookups are visible to Cilium's DNS proxy)
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    # Fetch build artifacts from source-controller :9090
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: flux-system
+            app: source-controller
+      toPorts:
+        - ports:
+            - port: "9090"
+              protocol: TCP
+    # Kubernetes API -- apply/prune managed resources
+    - toEntities:
+        - kube-apiserver
+      toPorts:
+        - ports:
+            - port: "6443"
+              protocol: TCP
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/cilium.io/ciliumnetworkpolicy_v2.json
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: helm-controller
+spec:
+  # Renders and applies HelmReleases. Fetches chart artifacts from
+  # source-controller :9090 and applies via the API server.
+  endpointSelector:
+    matchLabels:
+      io.kubernetes.pod.namespace: flux-system
+      app: helm-controller
+  ingress:
+    # Prometheus scrapes metrics :8080
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: o11y
+            app.kubernetes.io/name: prometheus
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+    # kubelet httpGet healthz probe :9440
+    - fromEntities:
+        - host
+      toPorts:
+        - ports:
+            - port: "9440"
+              protocol: TCP
+  egress:
+    # DNS resolution (L7 so lookups are visible to Cilium's DNS proxy)
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    # Fetch chart artifacts from source-controller :9090
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: flux-system
+            app: source-controller
+      toPorts:
+        - ports:
+            - port: "9090"
+              protocol: TCP
+    # Kubernetes API -- apply Helm-managed resources
+    - toEntities:
+        - kube-apiserver
+      toPorts:
+        - ports:
+            - port: "6443"
+              protocol: TCP
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/cilium.io/ciliumnetworkpolicy_v2.json
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: notification-controller
+spec:
+  # Receives inbound webhooks (github via envoy-external :9292) and events from
+  # the other Flux controllers (:9090), and dispatches alerts to external
+  # providers such as Discord (world:443).
+  endpointSelector:
+    matchLabels:
+      io.kubernetes.pod.namespace: flux-system
+      app: notification-controller
+  ingress:
+    # Inbound webhooks proxied from the external gateway :9292
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: network
+            gateway.envoyproxy.io/owning-gateway-name: envoy-external
+      toPorts:
+        - ports:
+            - port: "9292"
+              protocol: TCP
+    # Events posted by the other Flux controllers :9090
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: flux-system
+            app.kubernetes.io/part-of: flux
+      toPorts:
+        - ports:
+            - port: "9090"
+              protocol: TCP
+    # Prometheus scrapes metrics :8080
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: o11y
+            app.kubernetes.io/name: prometheus
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+    # kubelet httpGet healthz probe :9440
+    - fromEntities:
+        - host
+      toPorts:
+        - ports:
+            - port: "9440"
+              protocol: TCP
+  egress:
+    # DNS resolution (L7 so lookups are visible to Cilium's DNS proxy)
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    # Kubernetes API -- watch Alerts/Providers/Receivers
+    - toEntities:
+        - kube-apiserver
+      toPorts:
+        - ports:
+            - port: "6443"
+              protocol: TCP
+    # Outbound alerts to external providers (Discord, etc.)
+    - toEntities:
+        - world
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP

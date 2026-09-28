@@ -1,0 +1,54 @@
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/cilium.io/ciliumnetworkpolicy_v2.json
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: volsync
+spec:
+  # Volsync controller. Selecting it makes it default-deny. It reconciles
+  # ReplicationSource/Destination and spawns mover Jobs entirely through the
+  # Kubernetes API; the mover pods run in the source app namespaces and carry
+  # their own labels, so they are not selected here.
+  endpointSelector:
+    matchLabels:
+      io.kubernetes.pod.namespace: volsync-system
+      app.kubernetes.io/name: volsync-perfectra1n
+  ingress:
+    # Prometheus scrapes the controller metrics :8443
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: o11y
+            app.kubernetes.io/name: prometheus
+      toPorts:
+        - ports:
+            - port: "8443"
+              protocol: TCP
+    # kubelet httpGet health probe :8081
+    - fromEntities:
+        - host
+      toPorts:
+        - ports:
+            - port: "8081"
+              protocol: TCP
+  egress:
+    # DNS resolution (L7 so lookups are visible to Cilium's DNS proxy)
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    # Kubernetes API -- watch CRs, manage mover Jobs/Secrets/PVCs
+    - toEntities:
+        - kube-apiserver
+      toPorts:
+        - ports:
+            - port: "6443"
+              protocol: TCP
