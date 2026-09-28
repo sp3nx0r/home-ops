@@ -80,17 +80,31 @@ carve-outs (DNS, apiserver, CSI, spegel), not part of this floor.
    pods (`download` closed by #531).
 2. **Materialize + wire** the manifests under
    `kubernetes/apps/kube-system/network-policies/` (this PR).
-3. **Reconcile and watch with Hubble.** Hubble is now enabled — observe drops
-   from inside a Cilium agent against the relay:
+3. **Reconcile and watch with Hubble.** With the `hubble` CLI installed (via
+   mise), watch policy drops **across the whole cluster** by pointing it at the
+   relay — `cilium hubble port-forward` handles the connection:
+
     ```sh
-    CIL=$(kubectl -n kube-system get pod -l k8s-app=cilium -o name | head -1 | cut -d/ -f2)
-    RELAY=$(kubectl -n kube-system get svc hubble-relay -o jsonpath='{.spec.clusterIP}')
-    kubectl -n kube-system exec "$CIL" -c cilium-agent -- \
-      hubble observe --server "$RELAY":80 --verdict DROPPED --follow
+    cilium hubble port-forward &                    # relay -> localhost:4245
+    hubble observe --verdict DROPPED --follow        # all namespaces, all nodes
+    # scope while investigating: --namespace <ns> / --to-label / --port <n>
     ```
+
+    (Fallback without the CLI: `kubectl -n kube-system exec <cilium-pod> -c
+ cilium-agent -- hubble observe --server <hubble-relay-clusterIP>:80
+ --verdict DROPPED --follow`.)
+
+    **Ignore the benign qbittorrent ICMP.** The only expected residual drops are
+    `<world> -> media/qbittorrent ... ICMPv4 DestinationUnreachable` (and the
+    occasional `TTLExceeded`): unsolicited ICMP error replies from external
+    BitTorrent peers, which the ingress floor is _supposed_ to drop. Actual
+    BitTorrent on `:50413` is unaffected. Filter them out with
+    `hubble observe --verdict DROPPED --follow | grep -v ICMP`.
+
     Optionally bisect: apply `default-deny-ingress` first, soak, then
     `default-deny-egress`. Either CCNP can be removed independently to restore
     that direction instantly.
+
 4. **Soak + close out.** Once clean, move this runbook to `docs/completed/` and
    mark finding #1 Resolved.
 
