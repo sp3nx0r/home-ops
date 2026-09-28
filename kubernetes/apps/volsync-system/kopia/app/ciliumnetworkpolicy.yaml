@@ -1,0 +1,48 @@
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/cilium.io/ciliumnetworkpolicy_v2.json
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: kopia
+spec:
+  # Kopia repository browser/maintenance UI. Selecting it makes it default-deny.
+  # The Kopia repo lives on an NFS volume (192.168.5.40) mounted by the kubelet,
+  # so the pod itself makes no NFS connections -- egress is DNS only. The daily
+  # maintenance CronJob pods carry different labels and are intentionally not
+  # selected, so they stay unaffected.
+  endpointSelector:
+    matchLabels:
+      io.kubernetes.pod.namespace: volsync-system
+      app.kubernetes.io/name: kopia
+  ingress:
+    # Proxied UI traffic from the internal gateway :80
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: network
+            gateway.envoyproxy.io/owning-gateway-name: envoy-internal
+      toPorts:
+        - ports:
+            - port: "80"
+              protocol: TCP
+    # kubelet httpGet probe :80
+    - fromEntities:
+        - host
+      toPorts:
+        - ports:
+            - port: "80"
+              protocol: TCP
+  egress:
+    # DNS resolution (L7 so lookups are visible to Cilium's DNS proxy)
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
