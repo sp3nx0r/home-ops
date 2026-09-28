@@ -225,10 +225,15 @@ spec:
           datasource:
             - name: DS_PROMETHEUS
               value: Prometheus
-        envoy-proxy:
-          # renovate: depName="Envoy Proxy"
-          gnetId: 11022
-          revision: 1
+        envoy-proxy-global:
+          # Modern Envoy Gateway data-plane dashboard (Prometheus-native),
+          # replaces the stale statsd-era gnetId 11022 "Envoy Proxy" dashboard.
+          url: https://raw.githubusercontent.com/envoyproxy/gateway/main/charts/gateway-addons-helm/dashboards/envoy-proxy-global.json
+          datasource:
+            - name: DS_PROMETHEUS
+              value: Prometheus
+        envoy-clusters:
+          url: https://raw.githubusercontent.com/envoyproxy/gateway/main/charts/gateway-addons-helm/dashboards/envoy-clusters.json
           datasource:
             - name: DS_PROMETHEUS
               value: Prometheus
