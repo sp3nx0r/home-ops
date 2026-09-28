@@ -69,6 +69,15 @@ spec:
         - ports:
             - port: "443"
               protocol: TCP
+    # Post reconcile events to notification-controller (Svc :80 -> pod :9090)
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: flux-system
+            app: notification-controller
+      toPorts:
+        - ports:
+            - port: "9090"
+              protocol: TCP
 ---
 # yaml-language-server: $schema=https://k8s-schemas.home-operations.com/cilium.io/ciliumnetworkpolicy_v2.json
 apiVersion: cilium.io/v2
@@ -131,6 +140,15 @@ spec:
         - ports:
             - port: "6443"
               protocol: TCP
+    # Post reconcile events to notification-controller (Svc :80 -> pod :9090)
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: flux-system
+            app: notification-controller
+      toPorts:
+        - ports:
+            - port: "9090"
+              protocol: TCP
 ---
 # yaml-language-server: $schema=https://k8s-schemas.home-operations.com/cilium.io/ciliumnetworkpolicy_v2.json
 apiVersion: cilium.io/v2
@@ -191,6 +209,15 @@ spec:
       toPorts:
         - ports:
             - port: "6443"
+              protocol: TCP
+    # Post reconcile events to notification-controller (Svc :80 -> pod :9090)
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: flux-system
+            app: notification-controller
+      toPorts:
+        - ports:
+            - port: "9090"
               protocol: TCP
 ---
 # yaml-language-server: $schema=https://k8s-schemas.home-operations.com/cilium.io/ciliumnetworkpolicy_v2.json

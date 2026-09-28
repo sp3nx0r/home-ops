@@ -131,6 +131,15 @@ spec:
         - ports:
             - port: "10250"
               protocol: TCP
+    # Prometheus scrapes webhook metrics :9402
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: o11y
+            app.kubernetes.io/name: prometheus
+      toPorts:
+        - ports:
+            - port: "9402"
+              protocol: TCP
     # kubelet httpGet healthcheck probe :6080
     - fromEntities:
         - host
