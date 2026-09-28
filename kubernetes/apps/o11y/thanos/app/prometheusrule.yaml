@@ -1,0 +1,102 @@
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/monitoring.coreos.com/prometheusrule_v1.json
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: thanos
+spec:
+  groups:
+    - name: thanos-availability.rules
+      rules:
+        # Thanos backs long-term metric storage (query fan-out, object-store
+        # blocks, downsampling). None of it was alerted before. A component down
+        # for 5m means queries lose historical data or uploads stall.
+        - alert: ThanosComponentDown
+          expr: up{job=~"thanos-.*"} == 0
+          for: 5m
+          annotations:
+            summary: >-
+              Thanos component {{ $labels.job }} is down
+            description: >-
+              {{ $labels.job }} ({{ $labels.instance }}) has been unreachable for
+              5 minutes. Historical queries, object-store block sync, or
+              compaction may be degraded depending on the component.
+          labels:
+            severity: critical
+    - name: thanos-compact.rules
+      rules:
+        - alert: ThanosCompactHalted
+          expr: thanos_compact_halted{job="thanos-compactor"} == 1
+          for: 5m
+          annotations:
+            summary: >-
+              Thanos compactor has halted
+            description: >-
+              The Thanos compactor has halted (thanos_compact_halted=1). Compaction
+              and downsampling are stopped, so object-store size will grow and query
+              performance over long ranges will degrade. Check the compactor logs
+              for overlapping blocks or corruption:
+              `kubectl -n o11y logs deploy/thanos-compactor`.
+          labels:
+            severity: critical
+        - alert: ThanosCompactMultipleRunning
+          expr: sum(up{job="thanos-compactor"}) > 1
+          for: 5m
+          annotations:
+            summary: >-
+              Multiple Thanos compactors are running
+            description: >-
+              More than one thanos-compactor instance is up. Compaction must be a
+              singleton -- concurrent compactors can corrupt object-store blocks.
+          labels:
+            severity: warning
+    - name: thanos-objstore.rules
+      rules:
+        # thanos_objstore_bucket_operation_failures_total is cumulative; alert on
+        # a *sustained* new failure rate so old, already-recovered errors don't fire.
+        - alert: ThanosObjstoreBucketOperationFailures
+          expr: |-
+            sum by (job) (rate(thanos_objstore_bucket_operation_failures_total{job=~"thanos-.*"}[5m])) > 0
+          for: 15m
+          annotations:
+            summary: >-
+              Thanos {{ $labels.job }} is failing object-store operations
+            description: >-
+              {{ $labels.job }} has had a non-zero rate of object-store (Garage S3)
+              operation failures for 15 minutes. Block upload/download or compaction
+              is impaired -- check Garage health and the thanos-objstore secret.
+          labels:
+            severity: warning
+    - name: thanos-sidecar.rules
+      rules:
+        - alert: ThanosSidecarPrometheusDown
+          expr: thanos_sidecar_prometheus_up == 0
+          for: 5m
+          annotations:
+            summary: >-
+              Thanos sidecar cannot reach its Prometheus
+            description: >-
+              The Thanos sidecar reports its Prometheus is unreachable
+              (thanos_sidecar_prometheus_up=0) for 5m. Fresh blocks will not be
+              shipped to object storage and the sidecar store API will not serve
+              recent data.
+          labels:
+            severity: critical
+    - name: thanos-query.rules
+      rules:
+        - alert: ThanosGrpcServerErrorRateHigh
+          expr: |-
+            (
+              sum by (job) (rate(grpc_server_handled_total{job=~"thanos-.*", grpc_code=~"Unknown|ResourceExhausted|Internal|Unavailable|DataLoss"}[5m]))
+                /
+              sum by (job) (rate(grpc_server_handled_total{job=~"thanos-.*"}[5m]))
+            ) * 100 > 5
+          for: 5m
+          annotations:
+            summary: >-
+              Thanos {{ $labels.job }} gRPC server error rate is high
+            description: >-
+              {{ $labels.job }} is returning gRPC errors on more than 5% of requests
+              over the last 5 minutes, indicating query fan-out or store-API problems.
+          labels:
+            severity: warning

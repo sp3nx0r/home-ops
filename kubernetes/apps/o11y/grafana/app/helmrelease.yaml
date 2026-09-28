@@ -259,6 +259,36 @@ spec:
           datasource:
             - name: DS_PROMETHEUS
               value: Prometheus
+        thanos-overview:
+          url: https://raw.githubusercontent.com/thanos-io/thanos/main/examples/dashboards/overview.json
+          datasource:
+            - name: DS_PROMETHEUS
+              value: Prometheus
+        thanos-query:
+          url: https://raw.githubusercontent.com/thanos-io/thanos/main/examples/dashboards/query.json
+          datasource:
+            - name: DS_PROMETHEUS
+              value: Prometheus
+        thanos-query-frontend:
+          url: https://raw.githubusercontent.com/thanos-io/thanos/main/examples/dashboards/query-frontend.json
+          datasource:
+            - name: DS_PROMETHEUS
+              value: Prometheus
+        thanos-store:
+          url: https://raw.githubusercontent.com/thanos-io/thanos/main/examples/dashboards/store.json
+          datasource:
+            - name: DS_PROMETHEUS
+              value: Prometheus
+        thanos-compact:
+          url: https://raw.githubusercontent.com/thanos-io/thanos/main/examples/dashboards/compact.json
+          datasource:
+            - name: DS_PROMETHEUS
+              value: Prometheus
+        thanos-sidecar:
+          url: https://raw.githubusercontent.com/thanos-io/thanos/main/examples/dashboards/sidecar.json
+          datasource:
+            - name: DS_PROMETHEUS
+              value: Prometheus
       system:
         node-exporter-full:
           # renovate: depName="Node Exporter Full"
