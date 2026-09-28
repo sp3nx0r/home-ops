@@ -17,6 +17,12 @@ spec:
     config:
       inCluster: true
       inClusterContextName: homelab
+      # The pluginsManager sidecar is a regular container (not an initContainer)
+      # that downloads plugins from the internet at pod start. Without this the
+      # backend scans the plugin dir once at boot -- before the sidecar finishes
+      # -- and never re-scans, so freshly installed plugins never appear until a
+      # manual restart. Watching the dir picks them up as they land.
+      watchPlugins: true
       oidc:
         secret:
           create: false
