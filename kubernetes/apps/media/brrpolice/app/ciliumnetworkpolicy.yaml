@@ -49,6 +49,16 @@ spec:
     - toEndpoints:
         - matchLabels:
             io.kubernetes.pod.namespace: media
+    # qbittorrent-gluetun moved to the download namespace; brrpolice polls its
+    # web API directly (qbittorrent-gluetun.download.svc:80).
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: download
+            app.kubernetes.io/name: qbittorrent-gluetun
+      toPorts:
+        - ports:
+            - port: "80"
+              protocol: TCP
     # External services over HTTPS
     - toEntities:
         - world
