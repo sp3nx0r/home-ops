@@ -1,0 +1,52 @@
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/cilium.io/ciliumnetworkpolicy_v2.json
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: truenas-exporter
+spec:
+  # TrueNAS SCALE metrics exporter. Selecting it makes it default-deny. Ingress:
+  # Prometheus scrape + kubelet probe on :9108. Egress: DNS + the TrueNAS API
+  # websocket (wss://192.168.5.40/api/current -> 192.168.5.40:443).
+  endpointSelector:
+    matchLabels:
+      io.kubernetes.pod.namespace: o11y
+      app.kubernetes.io/name: truenas-exporter
+  ingress:
+    # Prometheus scrape :9108 + kubelet httpGet /healthz probe :9108
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: o11y
+            app.kubernetes.io/name: prometheus
+      toPorts:
+        - ports:
+            - port: "9108"
+              protocol: TCP
+    - fromEntities:
+        - host
+      toPorts:
+        - ports:
+            - port: "9108"
+              protocol: TCP
+  egress:
+    # DNS resolution (L7 so lookups are visible to Cilium's DNS proxy)
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    # TrueNAS API websocket over HTTPS
+    - toCIDRSet:
+        - cidr: 192.168.5.40/32
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP

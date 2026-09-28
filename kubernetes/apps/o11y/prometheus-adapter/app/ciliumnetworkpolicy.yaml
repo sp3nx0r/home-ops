@@ -1,0 +1,49 @@
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/cilium.io/ciliumnetworkpolicy_v2.json
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: prometheus-adapter
+spec:
+  # Custom/resource metrics API server (v1beta1.custom.metrics.k8s.io). Selecting
+  # it makes it default-deny. Ingress: aggregation-layer calls from the apiserver
+  # (host-networked on control-plane) to :6443. Egress: DNS + querying Prometheus
+  # :9090.
+  endpointSelector:
+    matchLabels:
+      io.kubernetes.pod.namespace: o11y
+      app.kubernetes.io/name: prometheus-adapter
+  ingress:
+    # Aggregated API calls from the apiserver :6443 (Service :443 -> :6443)
+    - fromEntities:
+        - kube-apiserver
+        - host
+        - remote-node
+      toPorts:
+        - ports:
+            - port: "6443"
+              protocol: TCP
+  egress:
+    # DNS resolution (L7 so lookups are visible to Cilium's DNS proxy)
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    # Queries Prometheus :9090
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: o11y
+            app.kubernetes.io/name: prometheus
+      toPorts:
+        - ports:
+            - port: "9090"
+              protocol: TCP

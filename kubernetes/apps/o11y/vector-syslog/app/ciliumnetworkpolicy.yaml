@@ -1,0 +1,62 @@
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/cilium.io/ciliumnetworkpolicy_v2.json
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: vector-syslog
+spec:
+  # Syslog aggregator (Cilium L2 LoadBalancer 192.168.5.24, UDP 514 -> pod 5140).
+  # Selecting it makes it default-deny. LAN devices (TrueNAS, UniFi) ship syslog
+  # to the LB; because the service is externalTrafficPolicy=Cluster the source
+  # may be SNAT'd to a node, so ingress is allowed from world + host +
+  # remote-node on UDP 5140. Prometheus scrapes the exporter on :9090. Egress:
+  # DNS + shipping parsed logs to loki-gateway.
+  endpointSelector:
+    matchLabels:
+      io.kubernetes.pod.namespace: o11y
+      app.kubernetes.io/name: vector
+      app.kubernetes.io/instance: vector-syslog
+  ingress:
+    # Syslog ingest UDP :5140 from LAN senders via the LoadBalancer
+    - fromEntities:
+        - world
+        - host
+        - remote-node
+      toPorts:
+        - ports:
+            - port: "5140"
+              protocol: UDP
+    # Prometheus scrape of the internal-metrics exporter :9090
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: o11y
+            app.kubernetes.io/name: prometheus
+      toPorts:
+        - ports:
+            - port: "9090"
+              protocol: TCP
+  egress:
+    # DNS resolution (L7 so lookups are visible to Cilium's DNS proxy)
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    # Ship parsed logs to loki-gateway (nginx) :8080
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: o11y
+            app.kubernetes.io/name: loki
+            app.kubernetes.io/component: gateway
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP

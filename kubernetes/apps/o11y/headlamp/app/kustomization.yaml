@@ -5,6 +5,7 @@ kind: Kustomization
 components:
   - ../../../../components/sops
 resources:
+  - ./ciliumnetworkpolicy.yaml
   - ./helmrelease.yaml
   - ./helmrepository.yaml
   - ./secret.sops.yaml

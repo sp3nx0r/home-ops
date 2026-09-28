@@ -1,0 +1,106 @@
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/cilium.io/ciliumnetworkpolicy_v2.json
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: thanos
+spec:
+  # Thanos query/store/compact mesh (all components share name=thanos). Selecting
+  # them makes them default-deny. Ports: query/query-frontend HTTP :9090, gRPC
+  # :10901; storegateway/compactor HTTP metrics :10902, storegateway gRPC :10901.
+  # A single policy covers the union of the components' flows.
+  endpointSelector:
+    matchLabels:
+      io.kubernetes.pod.namespace: o11y
+      app.kubernetes.io/name: thanos
+  ingress:
+    # OIDC-gated Thanos Query UI :9090 from the internal gateway + Grafana
+    # datasource (query-frontend)
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: network
+            gateway.envoyproxy.io/owning-gateway-name: envoy-internal
+        - matchLabels:
+            io.kubernetes.pod.namespace: o11y
+            app.kubernetes.io/name: grafana
+      toPorts:
+        - ports:
+            - port: "9090"
+              protocol: TCP
+    # Intra-mesh: query-frontend -> query (:9090 HTTP), query -> storegateway
+    # (:10901 gRPC)
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: o11y
+            app.kubernetes.io/name: thanos
+      toPorts:
+        - ports:
+            - port: "9090"
+              protocol: TCP
+            - port: "10901"
+              protocol: TCP
+    # Prometheus scrape of the component HTTP endpoints (:9090 query/frontend,
+    # :10902 store/compact) + kubelet httpGet probes on the same ports
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: o11y
+            app.kubernetes.io/name: prometheus
+      toPorts:
+        - ports:
+            - port: "9090"
+              protocol: TCP
+            - port: "10902"
+              protocol: TCP
+    - fromEntities:
+        - host
+      toPorts:
+        - ports:
+            - port: "9090"
+              protocol: TCP
+            - port: "10902"
+              protocol: TCP
+  egress:
+    # DNS resolution (L7 so lookups are visible to Cilium's DNS proxy). Also used
+    # for the query dnssrv+ endpoint discovery.
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    # Object storage: Garage S3 API (storegateway reads, compactor read/write)
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: storage
+            app.kubernetes.io/name: garage
+      toPorts:
+        - ports:
+            - port: "3900"
+              protocol: TCP
+    # Intra-mesh: frontend -> query (:9090), query -> storegateway (:10901)
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: o11y
+            app.kubernetes.io/name: thanos
+      toPorts:
+        - ports:
+            - port: "9090"
+              protocol: TCP
+            - port: "10901"
+              protocol: TCP
+    # query -> the Prometheus thanos-sidecar gRPC :10901
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: o11y
+            app.kubernetes.io/name: prometheus
+      toPorts:
+        - ports:
+            - port: "10901"
+              protocol: TCP
