@@ -58,3 +58,12 @@ spec:
         - ports:
             - port: "443"
               protocol: TCP
+    # Emit reconcile events to notification-controller (Svc :80 -> pod :9090)
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: flux-system
+            app: notification-controller
+      toPorts:
+        - ports:
+            - port: "9090"
+              protocol: TCP
