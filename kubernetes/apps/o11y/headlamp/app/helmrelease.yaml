@@ -32,11 +32,16 @@ spec:
           hasScopes: true
       extraArgs:
         - -oidc-callback-url=https://headlamp.${SECRET_DOMAIN}/oidc-callback
+        # Load init-copied plugins from a second dir the pluginsManager sidecar
+        # does not manage. The sidecar prunes -plugins-dir (/headlamp/plugins) to
+        # only its configured Artifact Hub plugins, so the Cilium plugin must live
+        # elsewhere or it gets deleted on every sidecar sync.
+        - -user-plugins-dir=/headlamp/user-plugins
     # The Cilium plugin (giantswarm/headlamp-cilium) is not published to Artifact
     # Hub, so it can't be installed via pluginsManager. Instead the plugin files
     # ship in a container image (/plugins/headlamp-cilium) which this initContainer
-    # copies into the shared plugins-dir volume before the backend/sidecar start.
-    # No internet egress is needed (unlike the pluginsManager sidecar).
+    # copies into the user-plugins volume before the backend starts. No internet
+    # egress is needed (the bundle is baked into the image).
     initContainers:
       - name: cilium-plugin
         image: gsoci.azurecr.io/giantswarm/headlamp-cilium:0.1.11@sha256:2474b8f5ae898bee0bb88418340c3dcce1e7723e140d65f1b3e8c2468d176d8e
@@ -44,11 +49,11 @@ spec:
           - /bin/sh
           - -c
           - |
-            mkdir -p /headlamp/plugins/headlamp-cilium
-            cp -r /plugins/headlamp-cilium/. /headlamp/plugins/headlamp-cilium/
+            mkdir -p /headlamp/user-plugins/headlamp-cilium
+            cp -r /plugins/headlamp-cilium/. /headlamp/user-plugins/headlamp-cilium/
         volumeMounts:
-          - name: plugins-dir
-            mountPath: /headlamp/plugins
+          - name: user-plugins
+            mountPath: /headlamp/user-plugins
         securityContext:
           runAsNonRoot: true
           runAsUser: 100
@@ -96,10 +101,16 @@ spec:
         mountPath: /tmp
       - name: config
         mountPath: /home/headlamp/.config
+      # Cilium plugin, populated by the cilium-plugin initContainer and served
+      # via -user-plugins-dir.
+      - name: user-plugins
+        mountPath: /headlamp/user-plugins
     volumes:
       - name: tmp
         emptyDir: {}
       - name: config
+        emptyDir: {}
+      - name: user-plugins
         emptyDir: {}
     resources:
       requests:
