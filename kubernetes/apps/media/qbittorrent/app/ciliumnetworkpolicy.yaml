@@ -32,7 +32,8 @@ spec:
             - port: "80"
               protocol: TCP
     # Inbound BitTorrent peers via the LoadBalancer :50413 (etp=Cluster, so the
-    # source may be SNAT'd to a node -> allow host/remote-node as well as world)
+    # source may be SNAT'd to a node -> allow host/remote-node as well as world).
+    # Both TCP and UDP: the torrent port carries TCP peers plus uTP/DHT over UDP.
     - fromEntities:
         - world
         - host
@@ -41,6 +42,8 @@ spec:
         - ports:
             - port: "50413"
               protocol: TCP
+            - port: "50413"
+              protocol: UDP
   egress:
     # DNS resolution (L7 so lookups are visible to Cilium's DNS proxy)
     - toEndpoints:
