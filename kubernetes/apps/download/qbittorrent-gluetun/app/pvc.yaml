@@ -1,0 +1,15 @@
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: qbittorrent-gluetun
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: iscsi
+  # Statically bound to the PV migrated from the media namespace (reclaimPolicy
+  # flipped to Retain, claimRef cleared) to preserve qBittorrent config/state.
+  volumeName: pvc-d869c044-720b-4951-9900-4b51fbbe3d3a
+  resources:
+    requests:
+      storage: 5Gi
