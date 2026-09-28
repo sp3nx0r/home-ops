@@ -44,10 +44,8 @@ spec:
     - toEndpoints:
         - matchLabels:
             io.kubernetes.pod.namespace: media
-    # plex.tv account/metadata over HTTPS
+    # plex.tv account/metadata, remote-access relay, and direct connections to
+    # remote clients/servers on arbitrary ports (e.g. :32400). Plex is an
+    # internet-facing media server, so allow unrestricted egress to world.
     - toEntities:
         - world
-      toPorts:
-        - ports:
-            - port: "443"
-              protocol: TCP

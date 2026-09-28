@@ -50,7 +50,10 @@ spec:
     - toEndpoints:
         - matchLabels:
             io.kubernetes.pod.namespace: media
-    # Pocket ID OIDC via the internal gateway VIP (:10443)
+    # Internal gateway: Pocket ID OIDC token exchange (:10443) and reaching the
+    # managed qbittorrent web UIs via their internal ingress hostnames, which
+    # hit the HTTP listener (:10080) before redirecting to HTTPS. The gateway
+    # terminates both, so the backend namespace is irrelevant.
     - toEndpoints:
         - matchLabels:
             io.kubernetes.pod.namespace: network
@@ -58,6 +61,8 @@ spec:
       toPorts:
         - ports:
             - port: "10443"
+              protocol: TCP
+            - port: "10080"
               protocol: TCP
     # Update checks over HTTPS
     - toEntities:
