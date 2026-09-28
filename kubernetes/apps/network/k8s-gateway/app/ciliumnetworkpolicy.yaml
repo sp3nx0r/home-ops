@@ -1,0 +1,57 @@
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/cilium.io/ciliumnetworkpolicy_v2.json
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: k8s-gateway
+spec:
+  # Split-horizon DNS server for ${SECRET_DOMAIN} (Cilium L2 LoadBalancer
+  # 192.168.5.2, UDP 53 -> pod :1053). Selecting it makes it default-deny.
+  # Because the LB is externalTrafficPolicy=Cluster, LAN resolver queries may be
+  # SNAT'd to a node, so ingress is allowed from world + host + remote-node on
+  # UDP 1053. It watches the apiserver (HTTPRoute/Service) to answer records.
+  endpointSelector:
+    matchLabels:
+      io.kubernetes.pod.namespace: network
+      app.kubernetes.io/name: k8s-gateway
+  ingress:
+    # DNS queries UDP :1053 from LAN resolvers via the LoadBalancer
+    - fromEntities:
+        - world
+        - host
+        - remote-node
+      toPorts:
+        - ports:
+            - port: "1053"
+              protocol: UDP
+    # kubelet httpGet health :8080 and ready :8181 probes
+    - fromEntities:
+        - host
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+            - port: "8181"
+              protocol: TCP
+  egress:
+    # DNS resolution (L7 so lookups are visible to Cilium's DNS proxy)
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    # Watches HTTPRoutes/Services to build DNS answers
+    - toEntities:
+        - kube-apiserver
+      toPorts:
+        - ports:
+            - port: "6443"
+              protocol: TCP

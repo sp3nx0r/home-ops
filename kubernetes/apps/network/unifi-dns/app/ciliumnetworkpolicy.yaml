@@ -1,0 +1,65 @@
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/cilium.io/ciliumnetworkpolicy_v2.json
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: unifi-dns
+spec:
+  # external-dns (UniFi webhook provider). Two containers: external-dns (:7979)
+  # and the UniFi webhook sidecar (:8080); they talk over loopback. Selecting the
+  # pod makes it default-deny. external-dns watches the apiserver; the webhook
+  # pushes records to the UniFi controller (192.168.5.1:443).
+  endpointSelector:
+    matchLabels:
+      io.kubernetes.pod.namespace: network
+      app.kubernetes.io/name: external-dns
+      app.kubernetes.io/instance: unifi-dns
+  ingress:
+    # Prometheus scrape + kubelet probes: external-dns :7979, webhook :8080
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: o11y
+            app.kubernetes.io/name: prometheus
+      toPorts:
+        - ports:
+            - port: "7979"
+              protocol: TCP
+            - port: "8080"
+              protocol: TCP
+    - fromEntities:
+        - host
+      toPorts:
+        - ports:
+            - port: "7979"
+              protocol: TCP
+            - port: "8080"
+              protocol: TCP
+  egress:
+    # DNS resolution (L7 so lookups are visible to Cilium's DNS proxy)
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    # Watches Gateways/HTTPRoutes/DNSEndpoints/Services
+    - toEntities:
+        - kube-apiserver
+      toPorts:
+        - ports:
+            - port: "6443"
+              protocol: TCP
+    # UniFi controller API over HTTPS (webhook provider)
+    - toCIDRSet:
+        - cidr: 192.168.5.1/32
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
