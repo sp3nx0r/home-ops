@@ -1,0 +1,56 @@
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/cilium.io/ciliumnetworkpolicy_v2.json
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: qbittorrent-gluetun
+spec:
+  # VPN-routed BitTorrent client. The gluetun sidecar and the qbittorrent app
+  # share one network namespace, so this single endpoint covers both. Selecting
+  # it makes the pod default-deny. gluetun owns egress: all peer/tracker traffic
+  # is encapsulated in the WireGuard tunnel to the VPN provider (world), and
+  # inbound BitTorrent arrives through the tunnel's forwarded port -- there is
+  # no LoadBalancer to policy here (unlike the non-VPN media/qbittorrent).
+  endpointSelector:
+    matchLabels:
+      io.kubernetes.pod.namespace: download
+      app.kubernetes.io/name: qbittorrent-gluetun
+  ingress:
+    # Web UI :80 -- proxied from the internal gateway (qbittorrent-vpn route),
+    # reached directly by media clients (brrpolice, *arr), and probed by kubelet.
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: network
+            gateway.envoyproxy.io/owning-gateway-name: envoy-internal
+        - matchLabels:
+            io.kubernetes.pod.namespace: media
+      toPorts:
+        - ports:
+            - port: "80"
+              protocol: TCP
+    - fromEntities:
+        - host
+      toPorts:
+        - ports:
+            - port: "80"
+              protocol: TCP
+  egress:
+    # DNS resolution (L7 so lookups are visible to Cilium's DNS proxy). gluetun
+    # resolves the VPN endpoint via cluster DNS before the tunnel comes up.
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    # WireGuard tunnel to the VPN provider plus everything tunneled through it
+    # (peers/trackers on arbitrary ports, NAT-PMP port forwarding).
+    - toEntities:
+        - world
