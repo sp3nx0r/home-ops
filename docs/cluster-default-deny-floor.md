@@ -4,11 +4,10 @@ Runbook for the last step of the default-deny network baseline: two
 `CiliumClusterwideNetworkPolicy` (CCNP) resources that flip the cluster from
 "per-app opt-in isolation" to "default-deny everywhere, allow-list up."
 
-> **Status: READY — pending the `download` namespace.** The floor makes every
-> selected pod default-deny; any pod without a per-app allow-list is cut off.
-> `download/qbittorrent-gluetun` has no per-app policy yet, so `download` is
-> **temporarily excluded** from the selector. Remove that exclusion once the
-> download namespace ships its own CNPs. See [Prerequisites](#prerequisites).
+> **Status: READY.** The floor makes every selected pod default-deny; any pod
+> without a per-app allow-list is cut off. A live coverage sweep confirms every
+> running non-`kube-system` pod is policy-enforced (`download/qbittorrent-gluetun`
+> was the last gap, closed by #531). See [Prerequisites](#prerequisites).
 
 ## Goal
 
@@ -28,10 +27,6 @@ only the universal baseline; everything else must come from a per-app policy.
 Why exclude `kube-system`: it holds cluster DNS, the CNI, CSI, and other infra
 whose exceptions belong in a purpose-built policy, not a blanket floor. It is
 handled in [kube-system](#kube-system-deferred) as a separate follow-up.
-
-Why exclude `download`: `qbittorrent-gluetun` migrated there and has no per-app
-CNP yet. Excluding it keeps the floor from severing the VPN tunnel / BitTorrent
-traffic. This is an interim carve-out — drop it once the download CNPs land.
 
 There are **no host-networked pods outside `kube-system`** today, so nothing
 else escapes the selector via host identity.
@@ -62,7 +57,7 @@ allow-listed. Live coverage check (via per-endpoint Cilium policy enforcement):
 
 | Namespace / app                                                                    | State                       | Notes                                                                 |
 | ---------------------------------------------------------------------------------- | --------------------------- | --------------------------------------------------------------------- |
-| `download/qbittorrent-gluetun`                                                     | ❌ no policy                | **Excluded from the floor** until its CNPs land (other workstream).   |
+| `download/qbittorrent-gluetun`                                                     | ✅ covered (#531)           | Per-app CNP added; egress scoped to public space (RFC 1918 excepted). |
 | `cert-manager/cainjector`, `media/recyclarr`                                       | egress-only (`ingress: []`) | Nothing connects to them; floor ingress-deny is correct.              |
 | `default/volsync-test`                                                             | egress-only                 | Leftover test pod; nothing connects to it. Candidate for cleanup.     |
 | everything else with running pods                                                  | ✅ covered                  | Selected by a per-app CNP (both directions).                          |
@@ -82,7 +77,7 @@ carve-outs (DNS, apiserver, CSI, spegel), not part of this floor.
 ## Rollout
 
 1. **Land all per-app coverage first.** Done for every namespace with running
-   pods except `download` (excluded above).
+   pods (`download` closed by #531).
 2. **Materialize + wire** the manifests under
    `kubernetes/apps/kube-system/network-policies/` (this PR).
 3. **Reconcile and watch with Hubble.** Hubble is now enabled — observe drops
@@ -96,9 +91,8 @@ carve-outs (DNS, apiserver, CSI, spegel), not part of this floor.
     Optionally bisect: apply `default-deny-ingress` first, soak, then
     `default-deny-egress`. Either CCNP can be removed independently to restore
     that direction instantly.
-4. **Soak + close out.** Once clean, drop the `download` exclusion after its
-   CNPs land, move this runbook to `docs/completed/`, and mark finding #1
-   Resolved.
+4. **Soak + close out.** Once clean, move this runbook to `docs/completed/` and
+   mark finding #1 Resolved.
 
 ### Rollback
 

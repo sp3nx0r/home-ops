@@ -9,19 +9,14 @@ spec:
   # becomes egress default-deny; this policy grants only cluster DNS, so all
   # other egress must be allow-listed by a per-app CiliumNetworkPolicy.
   #
-  # Exclusions:
-  #   - kube-system: holds DNS, the CNI, CSI, and other infra whose exceptions
-  #     belong in a purpose-built policy, not a blanket floor.
-  #   - download: still uncovered (qbittorrent-gluetun has no per-app policy
-  #     yet). Remove once the download namespace ships its own CNPs, otherwise
-  #     the floor would sever the VPN tunnel and BitTorrent traffic.
+  # Excludes kube-system: it holds DNS, the CNI, CSI, and other infra whose
+  # exceptions belong in a purpose-built policy, not a blanket floor.
   endpointSelector:
     matchExpressions:
       - key: k8s:io.kubernetes.pod.namespace
         operator: NotIn
         values:
           - kube-system
-          - download
   egress:
     # Cluster DNS (L7 so lookups stay visible to Cilium's DNS proxy)
     - toEndpoints:
@@ -56,7 +51,6 @@ spec:
         operator: NotIn
         values:
           - kube-system
-          - download
   ingress:
     # kubelet httpGet/tcpSocket probes originate from the local node
     - fromEntities:
