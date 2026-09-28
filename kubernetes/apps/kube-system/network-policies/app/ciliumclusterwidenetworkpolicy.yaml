@@ -1,0 +1,63 @@
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/cilium.io/ciliumclusterwidenetworkpolicy_v2.json
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: default-deny-egress
+spec:
+  # Cluster-wide egress floor. Every pod outside the excluded namespaces
+  # becomes egress default-deny; this policy grants only cluster DNS, so all
+  # other egress must be allow-listed by a per-app CiliumNetworkPolicy.
+  #
+  # Exclusions:
+  #   - kube-system: holds DNS, the CNI, CSI, and other infra whose exceptions
+  #     belong in a purpose-built policy, not a blanket floor.
+  #   - download: still uncovered (qbittorrent-gluetun has no per-app policy
+  #     yet). Remove once the download namespace ships its own CNPs, otherwise
+  #     the floor would sever the VPN tunnel and BitTorrent traffic.
+  endpointSelector:
+    matchExpressions:
+      - key: k8s:io.kubernetes.pod.namespace
+        operator: NotIn
+        values:
+          - kube-system
+          - download
+  egress:
+    # Cluster DNS (L7 so lookups stay visible to Cilium's DNS proxy)
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/cilium.io/ciliumclusterwidenetworkpolicy_v2.json
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: default-deny-ingress
+spec:
+  # Cluster-wide ingress floor. Every pod outside the excluded namespaces
+  # becomes ingress default-deny; this policy grants only kubelet probes
+  # (which originate from the local node / host), so all other ingress must be
+  # allow-listed by a per-app CiliumNetworkPolicy.
+  #
+  # Exclusions mirror default-deny-egress (see that policy for rationale).
+  endpointSelector:
+    matchExpressions:
+      - key: k8s:io.kubernetes.pod.namespace
+        operator: NotIn
+        values:
+          - kube-system
+          - download
+  ingress:
+    # kubelet httpGet/tcpSocket probes originate from the local node
+    - fromEntities:
+        - host
