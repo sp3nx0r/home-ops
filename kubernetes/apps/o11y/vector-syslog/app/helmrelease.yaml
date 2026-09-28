@@ -97,7 +97,12 @@ spec:
             app: '{{ "{{ app }}" }}'
             source: syslog
           out_of_order_action: accept
-        prometheus_exporter:
+        # Sink name must map to the chart's PodMonitor port `prom-exporter`.
+        # Vector derives the container-port name from the sink key, and k8s
+        # truncates port names to 15 chars -- `prometheus_exporter` becomes
+        # `prometheus-expo`, which does NOT match the PodMonitor, so scrapes
+        # silently fail. `prom_exporter` -> `prom-exporter` (matches).
+        prom_exporter:
           type: prometheus_exporter
           inputs: ["internal_metrics"]
           address: 0.0.0.0:9090
