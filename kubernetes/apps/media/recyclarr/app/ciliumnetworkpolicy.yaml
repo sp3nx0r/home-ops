@@ -1,0 +1,41 @@
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/cilium.io/ciliumnetworkpolicy_v2.json
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: recyclarr
+spec:
+  # Syncs TRaSH-Guides config into sonarr/radarr. No service/route and nothing
+  # connects to it, so ingress is denied entirely. It pulls guides from GitHub
+  # (world:443) and pushes to the *arr APIs (intra-media).
+  endpointSelector:
+    matchLabels:
+      io.kubernetes.pod.namespace: media
+      app.kubernetes.io/name: recyclarr
+  ingress: []
+  egress:
+    # DNS resolution (L7 so lookups are visible to Cilium's DNS proxy)
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    # Intra-media trust zone (sonarr/radarr APIs)
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: media
+    # TRaSH-Guides on GitHub over HTTPS
+    - toEntities:
+        - world
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP

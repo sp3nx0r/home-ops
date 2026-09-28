@@ -1,0 +1,58 @@
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/cilium.io/ciliumnetworkpolicy_v2.json
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: seerr
+spec:
+  # Request manager (Overseerr/Jellyseerr). Selecting it makes it default-deny.
+  # media is one trust zone (drives sonarr/radarr/plex). Reaches TMDB + plex.tv
+  # OAuth over HTTPS.
+  endpointSelector:
+    matchLabels:
+      io.kubernetes.pod.namespace: media
+      app.kubernetes.io/name: seerr
+  ingress:
+    # Proxied UI from the internal gateway + intra-media API calls + kubelet probe
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: network
+            gateway.envoyproxy.io/owning-gateway-name: envoy-internal
+        - matchLabels:
+            io.kubernetes.pod.namespace: media
+      toPorts:
+        - ports:
+            - port: "80"
+              protocol: TCP
+    - fromEntities:
+        - host
+      toPorts:
+        - ports:
+            - port: "80"
+              protocol: TCP
+  egress:
+    # DNS resolution (L7 so lookups are visible to Cilium's DNS proxy)
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    # Intra-media trust zone
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: media
+    # TMDB + plex.tv OAuth + notifications over HTTPS
+    - toEntities:
+        - world
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP

@@ -1,0 +1,58 @@
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/cilium.io/ciliumnetworkpolicy_v2.json
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: tautulli
+spec:
+  # Plex stats/notifications. Selecting it makes it default-deny. Serves its UI
+  # on :8181, polls Plex (intra-media), and reaches notification/update/geoip
+  # services over HTTPS.
+  endpointSelector:
+    matchLabels:
+      io.kubernetes.pod.namespace: media
+      app.kubernetes.io/name: tautulli
+  ingress:
+    # Proxied UI from the internal gateway + intra-media + kubelet probe :8181
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: network
+            gateway.envoyproxy.io/owning-gateway-name: envoy-internal
+        - matchLabels:
+            io.kubernetes.pod.namespace: media
+      toPorts:
+        - ports:
+            - port: "8181"
+              protocol: TCP
+    - fromEntities:
+        - host
+      toPorts:
+        - ports:
+            - port: "8181"
+              protocol: TCP
+  egress:
+    # DNS resolution (L7 so lookups are visible to Cilium's DNS proxy)
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    # Intra-media trust zone (Plex API)
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: media
+    # Notifications/updates/geoip over HTTPS
+    - toEntities:
+        - world
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP

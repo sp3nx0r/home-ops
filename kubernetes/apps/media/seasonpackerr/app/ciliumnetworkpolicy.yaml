@@ -1,0 +1,54 @@
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/cilium.io/ciliumnetworkpolicy_v2.json
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: seasonpackerr
+spec:
+  # Season-pack automation triggered by sonarr webhooks. No gateway route --
+  # reachable intra-media only. Selecting it makes it default-deny.
+  endpointSelector:
+    matchLabels:
+      io.kubernetes.pod.namespace: media
+      app.kubernetes.io/name: seasonpackerr
+  ingress:
+    # Intra-media (sonarr webhook) + kubelet probe on :80
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: media
+      toPorts:
+        - ports:
+            - port: "80"
+              protocol: TCP
+    - fromEntities:
+        - host
+      toPorts:
+        - ports:
+            - port: "80"
+              protocol: TCP
+  egress:
+    # DNS resolution (L7 so lookups are visible to Cilium's DNS proxy)
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    # Intra-media trust zone (sonarr API)
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: media
+    # External services over HTTPS
+    - toEntities:
+        - world
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP

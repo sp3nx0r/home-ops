@@ -1,0 +1,65 @@
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/cilium.io/ciliumnetworkpolicy_v2.json
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: qbittorrent
+spec:
+  # Non-VPN BitTorrent client (accepted, Linux ISOs). Selecting it makes it
+  # default-deny. media is one trust zone. Peer/tracker traffic uses arbitrary
+  # ports, so external egress is intentionally broad; the value here is
+  # cross-namespace isolation + ingress scoping, not destination restriction.
+  endpointSelector:
+    matchLabels:
+      io.kubernetes.pod.namespace: media
+      app.kubernetes.io/name: qbittorrent
+  ingress:
+    # Proxied UI from the internal gateway + intra-media API calls + kubelet probe
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: network
+            gateway.envoyproxy.io/owning-gateway-name: envoy-internal
+        - matchLabels:
+            io.kubernetes.pod.namespace: media
+      toPorts:
+        - ports:
+            - port: "80"
+              protocol: TCP
+    - fromEntities:
+        - host
+      toPorts:
+        - ports:
+            - port: "80"
+              protocol: TCP
+    # Inbound BitTorrent peers via the LoadBalancer :50413 (etp=Cluster, so the
+    # source may be SNAT'd to a node -> allow host/remote-node as well as world)
+    - fromEntities:
+        - world
+        - host
+        - remote-node
+      toPorts:
+        - ports:
+            - port: "50413"
+              protocol: TCP
+  egress:
+    # DNS resolution (L7 so lookups are visible to Cilium's DNS proxy)
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    # Intra-media trust zone
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: media
+    # BitTorrent peers/trackers on arbitrary ports
+    - toEntities:
+        - world
