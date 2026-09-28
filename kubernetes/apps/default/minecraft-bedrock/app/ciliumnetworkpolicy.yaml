@@ -41,9 +41,16 @@ spec:
             dns:
               - matchPattern: "*"
     # Xbox Live / Minecraft services auth (ONLINE_MODE=true) + LATEST server
-    # binary download over HTTPS
-    - toEntities:
-        - world
+    # binary download over HTTPS. Public internet only -- no LAN/cluster need,
+    # so exclude all private/non-routable ranges (RFC1918 + link-local + CGNAT).
+    - toCIDRSet:
+        - cidr: 0.0.0.0/0
+          except:
+            - 10.0.0.0/8
+            - 172.16.0.0/12
+            - 192.168.0.0/16
+            - 169.254.0.0/16
+            - 100.64.0.0/10
       toPorts:
         - ports:
             - port: "443"

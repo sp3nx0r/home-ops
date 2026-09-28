@@ -167,9 +167,17 @@ spec:
           rules:
             dns:
               - matchPattern: "*"
-    # Discord webhook notifications (discord.com) over HTTPS
-    - toEntities:
-        - world
+    # Discord webhook notifications (discord.com) over HTTPS. Public internet
+    # only -- Alertmanager only reaches Discord, never the LAN or in-cluster
+    # services, so exclude all private/non-routable ranges.
+    - toCIDRSet:
+        - cidr: 0.0.0.0/0
+          except:
+            - 10.0.0.0/8
+            - 172.16.0.0/12
+            - 192.168.0.0/16
+            - 169.254.0.0/16
+            - 100.64.0.0/10
       toPorts:
         - ports:
             - port: "443"
