@@ -45,10 +45,14 @@ spec:
     - toEndpoints:
         - matchLabels:
             io.kubernetes.pod.namespace: media
-    # External services over HTTPS
-    - toEntities:
-        - world
+    # qbittorrent-gluetun lives in the download namespace; seasonpackerr drives
+    # its web API directly (SEASONPACKARR__CLIENTS_DEFAULT_HOST ->
+    # qbittorrent-gluetun.download.svc:80).
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: download
+            app.kubernetes.io/name: qbittorrent-gluetun
       toPorts:
         - ports:
-            - port: "443"
+            - port: "80"
               protocol: TCP
