@@ -1,0 +1,52 @@
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/cilium.io/ciliumnetworkpolicy_v2.json
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: unpoller
+spec:
+  # UniFi Poller (exposes UniFi controller metrics to Prometheus). Selecting it
+  # makes it default-deny. Ingress: Prometheus scrape + kubelet probe on :80.
+  # Egress: DNS + the UniFi controller (https://192.168.5.1 -> :443).
+  endpointSelector:
+    matchLabels:
+      io.kubernetes.pod.namespace: o11y
+      app.kubernetes.io/name: unpoller
+  ingress:
+    # Prometheus scrape :80 + kubelet httpGet /health probe :80
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: o11y
+            app.kubernetes.io/name: prometheus
+      toPorts:
+        - ports:
+            - port: "80"
+              protocol: TCP
+    - fromEntities:
+        - host
+      toPorts:
+        - ports:
+            - port: "80"
+              protocol: TCP
+  egress:
+    # DNS resolution (L7 so lookups are visible to Cilium's DNS proxy)
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    # UniFi controller API over HTTPS
+    - toCIDRSet:
+        - cidr: 192.168.5.1/32
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP

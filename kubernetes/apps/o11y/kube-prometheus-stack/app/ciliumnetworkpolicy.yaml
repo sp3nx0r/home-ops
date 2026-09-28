@@ -1,0 +1,263 @@
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/cilium.io/ciliumnetworkpolicy_v2.json
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: prometheus
+spec:
+  # Cluster-wide metrics scraper. Selecting it makes it default-deny for ingress
+  # while egress is intentionally broad: Prometheus scrapes ServiceMonitors /
+  # PodMonitors across every namespace plus the control-plane node metrics
+  # (kubelet, etcd, scheduler, controller-manager, cadvisor), so egress is
+  # allowed to `cluster` + `host`/`remote-node` + `kube-apiserver` rather than an
+  # unmaintainable per-target port list. Ingress is tightly restricted. In-pod
+  # sidecars (config-reloader :8080, thanos-sidecar :10902) are scraped over
+  # loopback and need no policy; only the thanos-sidecar gRPC :10901 is reached
+  # cross-pod (by thanos-query).
+  endpointSelector:
+    matchLabels:
+      io.kubernetes.pod.namespace: o11y
+      app.kubernetes.io/name: prometheus
+  ingress:
+    # OIDC-gated web/API :9090 proxied from the internal gateway
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: network
+            gateway.envoyproxy.io/owning-gateway-name: envoy-internal
+      toPorts:
+        - ports:
+            - port: "9090"
+              protocol: TCP
+    # prometheus-adapter queries the HTTP API :9090
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: o11y
+            app.kubernetes.io/name: prometheus-adapter
+      toPorts:
+        - ports:
+            - port: "9090"
+              protocol: TCP
+    # thanos-query fans out to the thanos-sidecar gRPC :10901
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: o11y
+            app.kubernetes.io/name: thanos
+      toPorts:
+        - ports:
+            - port: "10901"
+              protocol: TCP
+    # kubelet httpGet probe :9090
+    - fromEntities:
+        - host
+      toPorts:
+        - ports:
+            - port: "9090"
+              protocol: TCP
+  egress:
+    # DNS resolution (L7 so lookups are visible to Cilium's DNS proxy)
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    # Service discovery + apiserver metrics
+    - toEntities:
+        - kube-apiserver
+      toPorts:
+        - ports:
+            - port: "6443"
+              protocol: TCP
+    # Scrape every in-cluster ServiceMonitor/PodMonitor target (broad by design)
+    - toEntities:
+        - cluster
+    # Control-plane / node metrics: kubelet, etcd, scheduler, controller-manager,
+    # cadvisor -- all presented on node IPs (host / remote-node)
+    - toEntities:
+        - host
+        - remote-node
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/cilium.io/ciliumnetworkpolicy_v2.json
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: alertmanager
+spec:
+  # Alert router. Selecting it makes it default-deny. Ingress: alerts from
+  # Prometheus, the OIDC-gated gateway route, and the Grafana datasource, all on
+  # :9093. Egress: DNS + the Discord webhook (discord.com over world:443). The
+  # in-pod config-reloader is scraped over loopback; the :9094 gossip mesh is
+  # unused at a single replica.
+  endpointSelector:
+    matchLabels:
+      io.kubernetes.pod.namespace: o11y
+      app.kubernetes.io/name: alertmanager
+  ingress:
+    # Prometheus pushes alerts :9093
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: o11y
+            app.kubernetes.io/name: prometheus
+      toPorts:
+        - ports:
+            - port: "9093"
+              protocol: TCP
+    # OIDC-gated web/API :9093 from the internal gateway + Grafana datasource
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: network
+            gateway.envoyproxy.io/owning-gateway-name: envoy-internal
+        - matchLabels:
+            io.kubernetes.pod.namespace: o11y
+            app.kubernetes.io/name: grafana
+      toPorts:
+        - ports:
+            - port: "9093"
+              protocol: TCP
+    # kubelet httpGet probe :9093
+    - fromEntities:
+        - host
+      toPorts:
+        - ports:
+            - port: "9093"
+              protocol: TCP
+  egress:
+    # DNS resolution (L7 so lookups are visible to Cilium's DNS proxy)
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    # Discord webhook notifications (discord.com) over HTTPS
+    - toEntities:
+        - world
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/cilium.io/ciliumnetworkpolicy_v2.json
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: kube-state-metrics
+spec:
+  # Kubernetes object-state exporter. Selecting it makes it default-deny.
+  # Ingress: Prometheus scrape on :8080 (metrics) + :8081 (self telemetry).
+  # Egress: DNS + the kube-apiserver (watches all objects cluster-wide).
+  endpointSelector:
+    matchLabels:
+      io.kubernetes.pod.namespace: o11y
+      app.kubernetes.io/name: kube-state-metrics
+  ingress:
+    # Prometheus scrape :8080 (metrics) and :8081 (telemetry)
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: o11y
+            app.kubernetes.io/name: prometheus
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+            - port: "8081"
+              protocol: TCP
+    # kubelet httpGet probe :8080
+    - fromEntities:
+        - host
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+  egress:
+    # DNS resolution (L7 so lookups are visible to Cilium's DNS proxy)
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    # Watches all Kubernetes objects
+    - toEntities:
+        - kube-apiserver
+      toPorts:
+        - ports:
+            - port: "6443"
+              protocol: TCP
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/cilium.io/ciliumnetworkpolicy_v2.json
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: kube-prometheus-stack-operator
+spec:
+  # Prometheus Operator. Selecting it makes it default-deny. It serves its
+  # admission webhook + metrics on :10250 (Service :443 -> :10250). Ingress: the
+  # apiserver (host-networked on control-plane -> host/remote-node/kube-apiserver)
+  # for the webhook, and Prometheus for the metrics scrape. Egress: DNS + the
+  # kube-apiserver (manages Prometheus/Alertmanager CRs + statefulsets).
+  endpointSelector:
+    matchLabels:
+      io.kubernetes.pod.namespace: o11y
+      app.kubernetes.io/name: kube-prometheus-stack-prometheus-operator
+  ingress:
+    # Admission webhook calls from the apiserver + Prometheus metrics scrape :10250
+    - fromEntities:
+        - kube-apiserver
+        - host
+        - remote-node
+      toPorts:
+        - ports:
+            - port: "10250"
+              protocol: TCP
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: o11y
+            app.kubernetes.io/name: prometheus
+      toPorts:
+        - ports:
+            - port: "10250"
+              protocol: TCP
+  egress:
+    # DNS resolution (L7 so lookups are visible to Cilium's DNS proxy)
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    # Manages Prometheus/Alertmanager CRs and their statefulsets
+    - toEntities:
+        - kube-apiserver
+      toPorts:
+        - ports:
+            - port: "6443"
+              protocol: TCP
