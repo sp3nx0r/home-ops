@@ -5,6 +5,8 @@ metadata:
   name: flux-system
   annotations:
     kustomize.toolkit.fluxcd.io/prune: disabled
-  labels:
-    pod-security.kubernetes.io/enforce: restricted
-    pod-security.kubernetes.io/enforce-version: latest
+  # PSA labels are intentionally omitted here: flux-operator owns this
+  # namespace and stamps it with `kustomize.toolkit.fluxcd.io/ssa: Ignore`
+  # (create-but-never-update) plus `pod-security.kubernetes.io/warn: restricted`.
+  # Any enforce label committed here is a silent no-op, so flux-system is
+  # handled as a system-namespace exception in the PSA-required Kyverno policy.
