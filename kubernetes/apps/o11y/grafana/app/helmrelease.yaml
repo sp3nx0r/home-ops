@@ -246,6 +246,26 @@ spec:
           datasource:
             - name: DS_PROMETHEUS
               value: Prometheus
+        cilium-agent:
+          url: https://raw.githubusercontent.com/cilium/cilium/main/install/kubernetes/cilium/files/cilium-agent/dashboards/cilium-dashboard.json
+          datasource:
+            - name: DS_PROMETHEUS
+              value: Prometheus
+        cilium-operator:
+          url: https://raw.githubusercontent.com/cilium/cilium/main/install/kubernetes/cilium/files/cilium-operator/dashboards/cilium-operator-dashboard.json
+          datasource:
+            - name: DS_PROMETHEUS
+              value: Prometheus
+        hubble:
+          url: https://raw.githubusercontent.com/cilium/cilium/main/install/kubernetes/cilium/files/hubble/dashboards/hubble-dashboard.json
+          datasource:
+            - name: DS_PROMETHEUS
+              value: Prometheus
+        hubble-l7-http:
+          url: https://raw.githubusercontent.com/cilium/cilium/main/install/kubernetes/cilium/files/hubble/dashboards/hubble-l7-http-metrics-by-workload.json
+          datasource:
+            - name: DS_PROMETHEUS
+              value: Prometheus
       observability:
         alertmanager-overview:
           # renovate: depName="Alertmanager / Overview"

@@ -1,0 +1,76 @@
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/monitoring.coreos.com/prometheusrule_v1.json
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: cilium
+spec:
+  groups:
+    - name: cilium.rules
+      rules:
+        # Cilium (agent + operator + Hubble) is scraped and now dashboarded, but
+        # nothing alerted. Cilium is the CNI/kube-proxy replacement, so an agent
+        # down means broken networking on that node; operator problems break
+        # IPAM/LB-IPAM. Selectors and metrics verified against live Prometheus.
+        - alert: CiliumAgentDown
+          expr: up{job="cilium-agent"} == 0
+          for: 5m
+          annotations:
+            summary: >-
+              Cilium agent on {{ $labels.instance }} is down
+            description: >-
+              The Cilium agent on {{ $labels.instance }} has been unreachable for
+              5 minutes. Cilium is the CNI and kube-proxy replacement, so pod
+              networking, service load-balancing, and L2 announcements on this node
+              are degraded.
+          labels:
+            severity: critical
+        - alert: CiliumOperatorAbsent
+          expr: absent(up{job="cilium-operator"})
+          for: 10m
+          annotations:
+            summary: >-
+              Cilium operator has disappeared from Prometheus
+            description: >-
+              No cilium-operator metrics have been scraped for 10 minutes. IPAM,
+              LB-IPAM, and identity garbage collection depend on the operator.
+          labels:
+            severity: warning
+        - alert: CiliumUnreachableNodes
+          expr: cilium_unreachable_nodes > 0
+          for: 5m
+          annotations:
+            summary: >-
+              Cilium reports unreachable nodes from {{ $labels.instance }}
+            description: >-
+              The Cilium agent on {{ $labels.instance }} reports {{ $value }}
+              unreachable node(s) in the health-checking mesh, indicating a
+              node-to-node connectivity problem.
+          labels:
+            severity: warning
+        - alert: CiliumBPFMapPressureHigh
+          expr: cilium_bpf_map_pressure > 0.8
+          for: 10m
+          annotations:
+            summary: >-
+              Cilium BPF map {{ $labels.map_name }} is nearly full on {{ $labels.instance }}
+            description: >-
+              BPF map {{ $labels.map_name }} on {{ $labels.instance }} is at
+              {{ $value | humanizePercentage }} of capacity. Once a map fills,
+              Cilium can no longer track new endpoints/connections; raise the
+              corresponding map size limit.
+          labels:
+            severity: warning
+        - alert: CiliumUnmanagedPods
+          expr: cilium_operator_unmanaged_pods > 0
+          for: 15m
+          annotations:
+            summary: >-
+              Cilium reports unmanaged pods
+            description: >-
+              The Cilium operator reports {{ $value }} pod(s) without a Cilium
+              endpoint for 15 minutes. These pods have no network policy enforced
+              and may have broken connectivity; restart them so Cilium can manage
+              them.
+          labels:
+            severity: warning
