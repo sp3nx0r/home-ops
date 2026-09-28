@@ -1,0 +1,50 @@
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/cilium.io/ciliumnetworkpolicy_v2.json
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: minecraft-bedrock
+spec:
+  # Internet-exposed Bedrock game server (Cilium L2 LoadBalancer 192.168.5.25,
+  # UDP 19132). Selecting it makes it default-deny. Because the service is
+  # externalTrafficPolicy=Cluster, external player traffic may arrive with its
+  # source SNAT'd to a node, so ingress is allowed from world plus host and
+  # remote-node on the game port. Liveness uses an exec probe (mc-monitor to
+  # 127.0.0.1), so no additional host ingress is needed.
+  endpointSelector:
+    matchLabels:
+      io.kubernetes.pod.namespace: default
+      app.kubernetes.io/name: minecraft-bedrock
+  ingress:
+    # Players connecting to the Bedrock server over UDP :19132
+    - fromEntities:
+        - world
+        - host
+        - remote-node
+      toPorts:
+        - ports:
+            - port: "19132"
+              protocol: UDP
+  egress:
+    # DNS resolution (L7 so lookups are visible to Cilium's DNS proxy)
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    # Xbox Live / Minecraft services auth (ONLINE_MODE=true) + LATEST server
+    # binary download over HTTPS
+    - toEntities:
+        - world
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP

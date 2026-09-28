@@ -1,0 +1,57 @@
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/cilium.io/ciliumnetworkpolicy_v2.json
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: sillytavern
+spec:
+  # LLM frontend. Selecting it makes it default-deny. It calls whatever LLM
+  # backend the user configures at runtime -- typically cloud APIs (OpenAI,
+  # Anthropic, OpenRouter, ...) over world:443, and optionally the local ollama
+  # via ollama.${SECRET_DOMAIN} (envoy-internal VIP -> :10443). Liveness uses an
+  # exec probe, so no host ingress is required.
+  endpointSelector:
+    matchLabels:
+      io.kubernetes.pod.namespace: default
+      app.kubernetes.io/name: sillytavern
+  ingress:
+    # Proxied user traffic from the internal gateway :8000
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: network
+            gateway.envoyproxy.io/owning-gateway-name: envoy-internal
+      toPorts:
+        - ports:
+            - port: "8000"
+              protocol: TCP
+  egress:
+    # DNS resolution (L7 so lookups are visible to Cilium's DNS proxy)
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    # Local ollama via ollama.${SECRET_DOMAIN} (envoy-internal VIP -> :10443)
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: network
+            gateway.envoyproxy.io/owning-gateway-name: envoy-internal
+      toPorts:
+        - ports:
+            - port: "10443"
+              protocol: TCP
+    # Cloud LLM API providers over HTTPS
+    - toEntities:
+        - world
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
