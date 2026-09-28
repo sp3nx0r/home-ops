@@ -74,13 +74,18 @@ spec:
         - ports:
             - port: "10443"
               protocol: TCP
-    # HuggingFace embedding-model downloads (RAG) and update checks. Block the
-    # LAN (192.168.0.0/16) -- these are public and in-cluster backends + the
-    # envoy-internal VIP are reached via separate toEndpoints rules.
+    # HuggingFace embedding-model downloads (RAG) and update checks. Public
+    # internet only -- these are public and in-cluster backends + the
+    # envoy-internal VIP are reached via separate toEndpoints rules, so exclude
+    # all private/non-routable ranges.
     - toCIDRSet:
         - cidr: 0.0.0.0/0
           except:
+            - 10.0.0.0/8
+            - 172.16.0.0/12
             - 192.168.0.0/16
+            - 169.254.0.0/16
+            - 100.64.0.0/10
       toPorts:
         - ports:
             - port: "443"
