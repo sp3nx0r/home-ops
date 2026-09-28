@@ -9,6 +9,27 @@
   schedule: ["every weekend"],
   ignorePaths: ["**/*.sops.*"],
   suppressNotifications: ["prEditedNotification", "prIgnoreNotification"],
+  // customManagers is a mergeable array, so this is appended to (not a
+  // replacement of) the preset's annotated + OCI managers.
+  customManagers: [
+    {
+      // The Headlamp cert-manager/flux plugins are installed by pluginsManager
+      // from Artifact Hub (no Renovate datasource), but each is published as a
+      // GitHub release in headlamp-k8s/plugins with a per-plugin tag prefix
+      // (cert-manager-0.1.1, flux-0.7.0). Map each plugins[] entry to that repo
+      // and strip the "<name>-" prefix via extractVersion so these otherwise
+      // untracked versions get update PRs.
+      customType: "regex",
+      managerFilePatterns: ["/kubernetes/apps/o11y/headlamp/app/helmrelease\\.yaml$/"],
+      matchStrings: [
+        "- name: (?<depName>\\S+)\\n\\s+source: \\S+\\n\\s+version: (?<currentValue>\\S+)",
+      ],
+      datasourceTemplate: "github-releases",
+      packageNameTemplate: "headlamp-k8s/plugins",
+      extractVersionTemplate: "^{{{depName}}}-(?<version>.+)$",
+      versioningTemplate: "semver",
+    },
+  ],
   packageRules: [
     // --- Grouping (not in the base preset) ---
     {
