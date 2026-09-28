@@ -73,7 +73,9 @@ spec:
         type: LoadBalancer
         annotations:
           lbipam.cilium.io/ips: "192.168.5.21"
-        externalTrafficPolicy: Cluster
+        # Preserve client source IPs so Plex classifies LAN clients as local
+        # (see Settings > Network > LAN Networks / LanNetworksBandwidth).
+        externalTrafficPolicy: Local
         ports:
           http:
             port: *port

@@ -9,12 +9,12 @@ An LG OLED TV (`192.168.0.77`) on a separate VLAN was buffering heavily on Plex
 even with local-network playback expected. Investigation found four contributing
 factors; network issues were the primary bottleneck.
 
-| #   | Root cause                                                              | Fix                                                         | Status          |
-| --- | ----------------------------------------------------------------------- | ----------------------------------------------------------- | --------------- |
-| 1   | Plex did not treat `192.168.0.0/24` as a LAN network                    | Added VLAN to `PLEX_NO_AUTH_NETWORKS`                       | Fixed in GitOps |
-| 2   | LAN DNS for `plex.securimancy.com` hairpinned through Cloudflare tunnel | Added `envoy-internal` parentRef alongside `envoy-external` | Fixed in GitOps |
-| 3   | UniFi firewall blocked TV VLAN → homelab                                | Allow rules on UniFi                                        | Fixed manually  |
-| 4   | Some library content uses DTS/TrueHD, forcing Plex audio remux on LG    | Acquisition tuning + library remediation (see below)        | Ongoing         |
+| #   | Root cause                                                              | Fix                                                                            | Status            |
+| --- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------ | ----------------- |
+| 1   | Plex (in-pod) treated all physical-LAN clients as remote/WAN            | Set **LAN Networks** (`LanNetworksBandwidth`) + `externalTrafficPolicy: Local` | Fixed (see below) |
+| 2   | LAN DNS for `plex.securimancy.com` hairpinned through Cloudflare tunnel | Added `envoy-internal` parentRef alongside `envoy-external`                    | Fixed in GitOps   |
+| 3   | UniFi firewall blocked TV VLAN → homelab                                | Allow rules on UniFi                                                           | Fixed manually    |
+| 4   | Some library content uses DTS/TrueHD, forcing Plex audio remux on LG    | Acquisition tuning + library remediation (see below)                           | Ongoing           |
 
 After network fixes, playback is healthy. Remaining codec mismatches cause audio
 remux (CPU on Plex server), not WAN-style buffering.
@@ -32,9 +32,45 @@ Homelab 192.168.5.0/24
   └── 192.168.5.10:443    envoy-internal (hostname path via LAN DNS)
 ```
 
-### GitOps fixes applied
+### Local vs remote classification (root cause #1)
 
-**Plex LAN networks** — `kubernetes/apps/media/plex/app/helmrelease.yaml`:
+Plex runs as a pod, so its only NIC is on the **pod CIDR** (`10.42.0.0/16`).
+With the **LAN Networks** field empty, Plex auto-detected only that pod subnet as
+"local" and classified every physical-LAN client (`192.168.x`) as remote/WAN —
+applying remote bandwidth caps and forcing transcodes even for LAN playback.
+
+Two settings fix this:
+
+1. **LAN Networks** (`LanNetworksBandwidth`) — tells Plex which subnets to treat
+   as local regardless of its own NIC. This is a server preference stored on the
+   config PVC (Settings → Network → "LAN Networks"), **not** GitOps-managed —
+   same category as `customConnections` / `allowedNetworks`. Current value:
+
+    ```
+    LanNetworksBandwidth="192.168.0.0/24,192.168.1.0/24,192.168.5.0/24"
+    ```
+
+    Set live (no restart) via the Plex API:
+
+    ```sh
+    TOKEN=$(kubectl exec -n media deploy/plex -c app -- \
+      grep -o 'PlexOnlineToken="[^"]*"' \
+      "/config/Library/Application Support/Plex Media Server/Preferences.xml" \
+      | cut -d'"' -f2)
+    curl -s -X PUT "http://192.168.5.21:32400/:/prefs?LanNetworksBandwidth=192.168.0.0%2F24%2C192.168.1.0%2F24%2C192.168.5.0%2F24&X-Plex-Token=${TOKEN}"
+    ```
+
+    > Do **not** add the pod CIDR (`10.42.0.0/16`) here — remote clients arriving
+    > via the Cloudflare tunnel → `envoy-external` also originate from that CIDR,
+    > so whitelisting it would mark genuine remote streams as local.
+
+2. **`externalTrafficPolicy: Local`** — `kubernetes/apps/media/plex/app/helmrelease.yaml`
+   (GitOps). The `plex` LoadBalancer otherwise SNATs clients to a node IP; `Local`
+   preserves the real client source IP so it matches the LAN Networks list above
+   on direct `192.168.5.21:32400` connections. Cilium L2 announces the LB IP from
+   the node running the Plex pod (brief blip on pod reschedule — acceptable).
+
+**Direct connection URL** — same file, so LAN clients prefer the direct path:
 
 ```yaml
 PLEX_ADVERTISE_URL: http://192.168.5.21:32400,https://plex.${SECRET_DOMAIN}:443,...
@@ -80,9 +116,12 @@ The Plex app on webOS cannot easily pin a server IP. Two workable approaches:
 ### Option B — Hostname via LAN DNS
 
 1. Connect to `https://plex.securimancy.com` (resolves to `192.168.5.10` on LAN)
-2. Playback can work fine even if Plex labels the session `local=0` /
-   `location=wan` — this is a Plex detection quirk with reverse-proxy paths, not
-   proof of Cloudflare hairpin
+2. With **LAN Networks** configured (see root cause #1), sessions from LAN
+   subnets now report `local=1` (correct bandwidth/quality) even on this path.
+   The session may still show `location=wan` because that reflects the
+   connection URL category (hostname/reverse-proxy), not a Cloudflare hairpin —
+   `location=lan` only appears when the client uses the direct advertised URL
+   (`http://192.168.5.21:32400`), e.g. via GDM discovery
 
 ### LG Direct Play codec compatibility
 
