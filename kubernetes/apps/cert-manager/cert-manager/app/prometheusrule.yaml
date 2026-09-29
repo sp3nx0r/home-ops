@@ -37,17 +37,33 @@ spec:
               `kubectl describe certificate {{ $labels.name }} -n {{ $labels.exported_namespace }}`.
           labels:
             severity: critical
-        - alert: CertManagerCertExpirySoon
+        # Fire only when renewal is genuinely stuck, relative to cert-manager's
+        # own schedule -- NOT an absolute number of days. An absolute threshold is
+        # meaningless here because letsencrypt-production uses the `shortlived`
+        # profile (~7-day / 160h certs), which cert-manager renews ~2 days before
+        # expiry; any fixed day-count threshold would fire on every renewal cycle.
+        # This triggers once a cert is past its scheduled renewalTime and has burned
+        # more than half of its renewal->expiry buffer without a new cert being
+        # issued. It auto-scales to any duration: ~26h of lead for a 7-day cert,
+        # ~15d for a 90-day cert. A healthy renewal resets the ratio negative.
+        - alert: CertManagerCertRenewalStuck
           expr: |-
-            certmanager_certificate_expiration_timestamp_seconds - time() < (21 * 24 * 3600)
+            (
+              (time() - certmanager_certificate_renewal_timestamp_seconds)
+              /
+              (certmanager_certificate_expiration_timestamp_seconds - certmanager_certificate_renewal_timestamp_seconds)
+            ) > 0.5
+            and certmanager_certificate_renewal_timestamp_seconds > 0
           for: 1h
           annotations:
             summary: >-
-              Certificate {{ $labels.name }} expires in under 21 days
+              Certificate {{ $labels.name }} renewal is overdue
             description: >-
-              {{ $labels.name }} (namespace {{ $labels.exported_namespace }}) expires
-              in {{ $value | humanizeDuration }}. cert-manager normally renews well
-              before this, so a persistent warning means renewal is stuck.
+              {{ $labels.name }} (namespace {{ $labels.exported_namespace }}) is past
+              its scheduled renewal time and has used over half of its
+              renewal-to-expiry buffer without cert-manager issuing a replacement.
+              Renewal is stuck -- check the Certificate/Order/Challenge before it
+              expires: `kubectl describe certificate {{ $labels.name }} -n {{ $labels.exported_namespace }}`.
           labels:
             severity: warning
         - alert: CertManagerHittingRateLimits
