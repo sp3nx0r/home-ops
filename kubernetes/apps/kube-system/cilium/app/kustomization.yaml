@@ -7,5 +7,6 @@ resources:
   - ./ocirepository.yaml
   - ./networks.yaml
   - ./httproute.yaml
+  - ./prometheusrule.yaml
   - ./securitypolicy.yaml
   - ./oidc-secret.sops.yaml
