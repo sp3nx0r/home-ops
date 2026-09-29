@@ -1,0 +1,53 @@
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/monitoring.coreos.com/prometheusrule_v1.json
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: loki
+spec:
+  groups:
+    - name: loki.rules
+      rules:
+        # Loki is scraped and dashboarded but had no alerts. If it stops ingesting
+        # or serving, log-based debugging and any Loki-backed alerting goes dark
+        # silently.
+        - alert: LokiAbsent
+          expr: absent(up{job="o11y/loki"})
+          for: 10m
+          annotations:
+            summary: >-
+              Loki has disappeared from Prometheus
+            description: >-
+              No Loki metrics have been scraped for 10 minutes. Log ingestion and
+              queries are likely down cluster-wide.
+          labels:
+            severity: critical
+        - alert: LokiRequestErrors
+          expr: |-
+            100 * sum by (job, route) (
+              rate(loki_request_duration_seconds_count{job="o11y/loki", status_code=~"5.."}[5m])
+            )
+            /
+            sum by (job, route) (
+              rate(loki_request_duration_seconds_count{job="o11y/loki"}[5m])
+            ) > 10
+          for: 15m
+          annotations:
+            summary: >-
+              Loki route {{ $labels.route }} is returning 5xx errors
+            description: >-
+              {{ printf "%.2f" $value }}% of requests to {{ $labels.route }} have
+              failed with a 5xx for the last 15 minutes.
+          labels:
+            severity: warning
+        - alert: LokiRequestPanics
+          expr: |-
+            sum by (job) (increase(loki_panic_total{job="o11y/loki"}[10m])) > 0
+          for: 5m
+          annotations:
+            summary: >-
+              Loki is panicking
+            description: >-
+              Loki has recorded {{ $value }} panic(s) in the last 10 minutes.
+          labels:
+            severity: warning
