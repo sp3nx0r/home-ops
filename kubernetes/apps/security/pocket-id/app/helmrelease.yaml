@@ -63,6 +63,15 @@ spec:
               readOnlyRootFilesystem: true
               capabilities: { drop: ["ALL"] }
     defaultPodOptions:
+      # CoreDNS autopath answers the first search-domain query
+      # (download.maxmind.com.security.svc.cluster.local) with a CNAME, so under
+      # the default ndots:5 Cilium only ever sees that name and the toFQDNs
+      # matchName in ciliumnetworkpolicy.yaml never matches. ndots:1 queries
+      # dotted names as-is.
+      dnsConfig:
+        options:
+          - name: ndots
+            value: "1"
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
