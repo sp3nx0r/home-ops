@@ -16,6 +16,14 @@ configMapGenerator:
         grafana_dashboard: "1"
       annotations:
         grafana_folder: Backups
+  - name: grafana-dashboard-hubble-policy-drops
+    files:
+      - ./dashboards/hubble-policy-drops.json
+    options:
+      labels:
+        grafana_dashboard: "1"
+      annotations:
+        grafana_folder: Network
   - name: grafana-dashboard-ollama
     files:
       - ./dashboards/ollama.json

@@ -80,9 +80,28 @@ carve-outs (DNS, apiserver, CSI, spegel), not part of this floor.
    pods (`download` closed by #531).
 2. **Materialize + wire** the manifests under
    `kubernetes/apps/kube-system/network-policies/` (this PR).
-3. **Reconcile and watch with Hubble.** With the `hubble` CLI installed (via
-   mise), watch policy drops **across the whole cluster** by pointing it at the
-   relay — `cilium hubble port-forward` handles the connection:
+3. **Reconcile and watch with Hubble.** Policy drops are in the o11y stack:
+    - **Grafana → Network → "Hubble Policy Drops"**: drop rate and top
+      `source → destination` pairs (from `hubble_drop_total`, labelled with
+      `workload|reserved-identity` context), plus a Loki panel of the individual
+      flows.
+    - **Loki** (`{source="hubble"}`): every `POLICY_DENIED` flow, written by the
+      Cilium dynamic flowlog exporter to `/var/run/cilium/hubble/policy-drops.log`
+      on each node and shipped by Vector. Labels: `node`, `direction`,
+      `src_namespace`, `dst_namespace`; the line is
+      `src -> dst:port proto reason (direction)`. For example:
+
+        ```logql
+        {source="hubble", dst_namespace="media"} |= "UDP"
+        {source="hubble"} | json | dst_port="6443"
+        ```
+
+    - **Alert `HubblePolicyDenied`** fires when a non-ICMP pair keeps dropping
+      for 15 minutes (Plex's hourly NAT-PMP probe to the node is excluded).
+
+    For live tailing, the `hubble` CLI (installed via mise) watches policy drops
+    **across the whole cluster** by pointing it at the relay —
+    `cilium hubble port-forward` handles the connection:
 
     ```sh
     cilium hubble port-forward &                    # relay -> localhost:4245
@@ -100,6 +119,13 @@ carve-outs (DNS, apiserver, CSI, spegel), not part of this floor.
     BitTorrent peers, which the ingress floor is _supposed_ to drop. Actual
     BitTorrent on `:50413` is unaffected. Filter them out with
     `hubble observe --verdict DROPPED --follow | grep -v ICMP`.
+
+    **`toFQDNs` needs `ndots: 1`.** CoreDNS runs `autopath`, so under the
+    default `ndots:5` the first search-path query (`name.<ns>.svc.cluster.local`)
+    is answered with a CNAME and Cilium only records that long name. A
+    `matchName`/`matchPattern` rule then never matches, and the traffic shows up
+    as a policy drop to a bare `world` IP. Pods with FQDN allow-lists set
+    `dnsConfig.options: [{name: ndots, value: "1"}]` (gatus, pocket-id, tuppr).
 
     Optionally bisect: apply `default-deny-ingress` first, soak, then
     `default-deny-egress`. Either CCNP can be removed independently to restore

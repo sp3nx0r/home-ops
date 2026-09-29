@@ -61,6 +61,32 @@ spec:
               corresponding map size limit.
           labels:
             severity: warning
+        # A workload whose legitimate traffic the default-deny floor or its own
+        # CNP is blocking. ICMP is excluded (unsolicited peer ICMP to the
+        # torrent clients is expected), as is Plex's hourly NAT-PMP probe to
+        # the node. Drill into the exact flows with the Loki query in the
+        # description or the "Hubble Policy Drops" dashboard.
+        - alert: HubblePolicyDenied
+          expr: |
+            (
+              sum by (source, destination, protocol) (
+                increase(hubble_drop_total{reason="POLICY_DENIED", protocol!~"ICMP.*"}[30m])
+              ) > 0
+            )
+            unless on (source, destination, protocol)
+              hubble_drop_total{source="media/plex", destination="reserved:host", protocol="UDP"}
+          for: 15m
+          annotations:
+            summary: >-
+              {{ $labels.source }} -> {{ $labels.destination }} ({{ $labels.protocol }}) is policy-denied
+            description: >-
+              Cilium dropped {{ $value | humanize }} {{ $labels.protocol }} flows from
+              {{ $labels.source }} to {{ $labels.destination }} in the last 30 minutes
+              with reason POLICY_DENIED. Either a CNP is missing a legitimate rule or
+              something is attempting unexpected traffic. Flows in Loki:
+              {source="hubble"} |= "{{ $labels.source }} -> {{ $labels.destination }}"
+          labels:
+            severity: warning
         - alert: CiliumUnmanagedPods
           expr: cilium_operator_unmanaged_pods > 0
           for: 15m

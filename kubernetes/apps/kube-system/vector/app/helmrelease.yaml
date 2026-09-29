@@ -35,6 +35,14 @@ spec:
           include:
             - /var/log/audit/kube/*.log
           read_from: end
+        # Hubble policy-denied flows written by the Cilium dynamic flowlog
+        # exporter (see cilium helmrelease hubble.export). The glob also covers
+        # rotated backups so a file renamed mid-read is still drained.
+        hubble_drops:
+          type: file
+          include:
+            - /var/run/cilium/hubble/policy-drops*.log
+          read_from: beginning
       transforms:
         kube_parse:
           type: remap
@@ -114,6 +122,94 @@ spec:
             stage = to_string(.stage) ?? ""
             res = to_string(.objectRef.resource) ?? ""
             stage != "RequestReceived" && res != "events" && res != "leases"
+        # Flatten a Hubble flow into src/dst endpoint strings (namespace/workload
+        # for pods, reserved:<entity> or the IP otherwise) plus L4 port/proto, and
+        # a one-line summary so the Grafana logs panel is readable without | json.
+        hubble_parse:
+          type: remap
+          inputs: ["hubble_drops"]
+          source: |
+            parsed, err = parse_json(.message)
+            if err != null || !is_object(parsed) {
+              abort
+            }
+            f = object!(parsed.flow)
+
+            src_ns = to_string(f.source.namespace) ?? ""
+            dst_ns = to_string(f.destination.namespace) ?? ""
+            src_wl = to_string(f.source.workloads[0].name) ?? to_string(f.source.pod_name) ?? ""
+            dst_wl = to_string(f.destination.workloads[0].name) ?? to_string(f.destination.pod_name) ?? ""
+            src_res = filter(array(f.source.labels) ?? []) -> |_i, v| { starts_with(to_string(v) ?? "", "reserved:") }
+            dst_res = filter(array(f.destination.labels) ?? []) -> |_i, v| { starts_with(to_string(v) ?? "", "reserved:") }
+            src_ip = to_string(f.IP.source) ?? ""
+            dst_ip = to_string(f.IP.destination) ?? ""
+
+            src = src_ip
+            if src_ns != "" {
+              src = src_ns + "/" + src_wl
+            } else if length(src_res) > 0 {
+              src = to_string(src_res[0]) ?? src_ip
+            }
+            dst = dst_ip
+            if dst_ns != "" {
+              dst = dst_ns + "/" + dst_wl
+            } else if length(dst_res) > 0 {
+              dst = to_string(dst_res[0]) ?? dst_ip
+            }
+            dst_name = to_string(f.destination_names[0]) ?? ""
+            if dst_name != "" && dst_ns == "" {
+              dst = dst + "(" + dst_name + ")"
+            }
+
+            proto = ""
+            dport = ""
+            if exists(f.l4.TCP) {
+              proto = "TCP"
+              dport = to_string(f.l4.TCP.destination_port) ?? ""
+            } else if exists(f.l4.UDP) {
+              proto = "UDP"
+              dport = to_string(f.l4.UDP.destination_port) ?? ""
+            } else if exists(f.l4.SCTP) {
+              proto = "SCTP"
+              dport = to_string(f.l4.SCTP.destination_port) ?? ""
+            } else if exists(f.l4.ICMPv4) {
+              proto = "ICMPv4"
+            } else if exists(f.l4.ICMPv6) {
+              proto = "ICMPv6"
+            }
+
+            direction = downcase(to_string(f.traffic_direction) ?? "unknown")
+            reason = to_string(f.drop_reason_desc) ?? "UNKNOWN"
+            target = dst
+            if dport != "" {
+              target = dst + ":" + dport
+            }
+
+            ts, terr = parse_timestamp(to_string(f.time) ?? "", "%+")
+            if terr != null {
+              ts = now()
+            }
+            node = to_string(f.node_name) ?? to_string(parsed.node_name) ?? ""
+            summary = src + " -> " + target + " " + proto + " " + reason + " (" + direction + ")"
+            . = {
+              "timestamp": ts,
+              "message": summary,
+              "src": src,
+              "src_namespace": src_ns,
+              "src_ip": src_ip,
+              "dst": dst,
+              "dst_namespace": dst_ns,
+              "dst_ip": dst_ip,
+              "dst_port": dport,
+              "protocol": proto,
+              "direction": direction,
+              "drop_reason": reason,
+              "src_names": f.source_names,
+              "dst_names": f.destination_names,
+              "node": node
+            }
+            # Keep empty strings: the Loki sink templates src/dst_namespace labels.
+            . = compact(., string: false)
       sinks:
         loki:
           type: loki
@@ -164,6 +260,32 @@ spec:
             source: kube-audit
             verb: '{{ "{{ verb }}" }}'
           out_of_order_action: accept
+        loki_hubble:
+          type: loki
+          inputs: ["hubble_parse"]
+          endpoint: http://loki-gateway.o11y.svc.cluster.local
+          buffer:
+            type: memory
+            max_events: 5000
+            when_full: drop_newest
+          request:
+            concurrency: 2
+            rate_limit_num: 10
+            rate_limit_duration_secs: 1
+            retry_max_duration_secs: 30
+          batch:
+            max_bytes: 524288
+            timeout_secs: 5
+          encoding:
+            codec: json
+          labels:
+            service_name: hubble
+            source: hubble
+            node: '{{ "{{ node }}" }}'
+            direction: '{{ "{{ direction }}" }}'
+            src_namespace: '{{ "{{ src_namespace }}" }}'
+            dst_namespace: '{{ "{{ dst_namespace }}" }}'
+          out_of_order_action: accept
         prom_exporter:
           type: prometheus_exporter
           inputs: ["internal_metrics"]
@@ -184,6 +306,16 @@ spec:
         memory: 512Mi
       limits:
         memory: 2Gi
+
+    extraVolumes:
+      - name: hubble-flowlogs
+        hostPath:
+          path: /var/run/cilium/hubble
+          type: DirectoryOrCreate
+    extraVolumeMounts:
+      - name: hubble-flowlogs
+        mountPath: /var/run/cilium/hubble
+        readOnly: true
 
     podMonitor:
       enabled: true

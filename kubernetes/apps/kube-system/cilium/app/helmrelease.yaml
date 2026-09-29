@@ -39,7 +39,7 @@ spec:
       metrics:
         enabled:
           - dns:query;ignoreAAAA
-          - drop
+          - drop:sourceContext=workload|reserved-identity;destinationContext=workload|reserved-identity
           - tcp
           - flow
           - port-distribution
@@ -52,6 +52,34 @@ spec:
           enabled: true
           annotations:
             grafana_folder: Network
+      # Policy-denied flows to a rotated node file that Vector ships to Loki.
+      # Dynamic exporters reload from their ConfigMap without agent restarts.
+      export:
+        dynamic:
+          enabled: true
+          config:
+            content:
+              - name: policy-drops
+                filePath: /var/run/cilium/hubble/policy-drops.log
+                fieldMask:
+                  - time
+                  - verdict
+                  - drop_reason_desc
+                  - traffic_direction
+                  - IP
+                  - l4
+                  - source
+                  - destination
+                  - source_names
+                  - destination_names
+                  - node_name
+                includeFilters:
+                  - verdict: ["DROPPED"]
+                    drop_reason_desc: ["POLICY_DENIED"]
+                excludeFilters: []
+                fileMaxSizeMb: 10
+                fileMaxBackups: 5
+                fileCompress: false
       relay:
         enabled: true
         rollOutPods: true
