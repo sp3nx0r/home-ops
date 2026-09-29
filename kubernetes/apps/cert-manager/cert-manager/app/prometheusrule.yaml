@@ -1,0 +1,66 @@
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/monitoring.coreos.com/prometheusrule_v1.json
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: cert-manager
+spec:
+  groups:
+    - name: cert-manager.rules
+      rules:
+        # cert-manager metrics are scraped and dashboarded, but nothing alerted
+        # on them -- a stuck renewal would surface only as an expired cert (broken
+        # TLS on every ingress) with no warning.
+        - alert: CertManagerAbsent
+          expr: absent(up{job="cert-manager"})
+          for: 10m
+          annotations:
+            summary: >-
+              cert-manager has disappeared from Prometheus
+            description: >-
+              No cert-manager metrics have been scraped for 10 minutes. If it stays
+              down, certificates will not renew and TLS will break cluster-wide once
+              the current certs expire.
+          labels:
+            severity: critical
+        - alert: CertManagerCertNotReady
+          expr: |-
+            certmanager_certificate_ready_status{condition="True"} == 0
+          for: 15m
+          annotations:
+            summary: >-
+              Certificate {{ $labels.name }} is not ready
+            description: >-
+              The Certificate {{ $labels.name }} (namespace {{ $labels.exported_namespace }})
+              has not been in a Ready state for 15 minutes. Issuance or renewal is
+              failing -- check the Certificate/Order/Challenge:
+              `kubectl describe certificate {{ $labels.name }} -n {{ $labels.exported_namespace }}`.
+          labels:
+            severity: critical
+        - alert: CertManagerCertExpirySoon
+          expr: |-
+            certmanager_certificate_expiration_timestamp_seconds - time() < (21 * 24 * 3600)
+          for: 1h
+          annotations:
+            summary: >-
+              Certificate {{ $labels.name }} expires in under 21 days
+            description: >-
+              {{ $labels.name }} (namespace {{ $labels.exported_namespace }}) expires
+              in {{ $value | humanizeDuration }}. cert-manager normally renews well
+              before this, so a persistent warning means renewal is stuck.
+          labels:
+            severity: warning
+        - alert: CertManagerHittingRateLimits
+          expr: |-
+            increase(certmanager_http_acme_client_request_count{status="429"}[5m]) > 0
+          for: 5m
+          annotations:
+            summary: >-
+              cert-manager is being rate-limited by the ACME server
+            description: >-
+              cert-manager received HTTP 429 responses from the ACME server (Let's
+              Encrypt) in the last 5 minutes. Repeated failed issuance can exhaust
+              the weekly certificate/duplicate limits -- stop churning Certificates
+              until the limit resets.
+          labels:
+            severity: warning
