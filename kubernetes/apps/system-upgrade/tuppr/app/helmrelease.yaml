@@ -16,3 +16,19 @@ spec:
         enabled: true
       prometheusRule:
         enabled: true
+  # The chart has no dnsConfig value. Under the default ndots:5, CoreDNS autopath
+  # resolves ghcr.io as ghcr.io.system-upgrade.svc.cluster.local (CNAME), which the
+  # toFQDNs matchName in ciliumnetworkpolicy.yaml never matches.
+  postRenderers:
+    - kustomize:
+        patches:
+          - target:
+              kind: Deployment
+              name: tuppr
+            patch: |
+              - op: add
+                path: /spec/template/spec/dnsConfig
+                value:
+                  options:
+                    - name: ndots
+                      value: "1"
