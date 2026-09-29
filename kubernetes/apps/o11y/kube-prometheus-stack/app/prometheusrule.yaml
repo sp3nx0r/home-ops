@@ -190,3 +190,104 @@ spec:
               jsonpath='{.spec.containers[*].ports}').
           labels:
             severity: warning
+    - name: etcd.rules
+      rules:
+        # Talos exposes etcd metrics (kube-etcd job) and kube-prometheus-stack
+        # dashboards them, but nothing alerted. etcd is the cluster's source of
+        # truth -- quorum loss or disk-latency degradation on any of the three
+        # control-plane members is critical and easy to miss until the API server
+        # starts failing writes. Selectors and metrics verified against live data.
+        - alert: EtcdInsufficientMembers
+          expr: |-
+            sum by (job) (up{job="kube-etcd"} == bool 1)
+              < ((count by (job) (up{job="kube-etcd"}) + 1) / 2)
+          for: 3m
+          annotations:
+            summary: >-
+              etcd cluster has insufficient members
+            description: >-
+              Fewer than a quorum of etcd members are up. If another member is
+              lost the cluster loses quorum and the Kubernetes API becomes
+              read-only/unavailable.
+          labels:
+            severity: critical
+        - alert: EtcdNoLeader
+          expr: etcd_server_has_leader{job="kube-etcd"} == 0
+          for: 1m
+          annotations:
+            summary: >-
+              etcd member {{ $labels.instance }} has no leader
+            description: >-
+              etcd member {{ $labels.instance }} has not had a leader for over a
+              minute. Writes to the Kubernetes API will fail while this persists.
+          labels:
+            severity: critical
+        - alert: EtcdHighNumberOfLeaderChanges
+          expr: |-
+            increase(etcd_server_leader_changes_seen_total{job="kube-etcd"}[15m]) > 4
+          for: 5m
+          annotations:
+            summary: >-
+              etcd is seeing frequent leader elections
+            description: >-
+              etcd has recorded {{ $value }} leader changes in the last 15 minutes.
+              Repeated elections usually indicate disk or network latency between
+              control-plane nodes and hurt API responsiveness.
+          labels:
+            severity: warning
+        - alert: EtcdHighNumberOfFailedProposals
+          expr: |-
+            increase(etcd_server_proposals_failed_total{job="kube-etcd"}[1h]) > 5
+          for: 15m
+          annotations:
+            summary: >-
+              etcd member {{ $labels.instance }} has failed proposals
+            description: >-
+              etcd member {{ $labels.instance }} has recorded {{ $value }} failed
+              raft proposals in the last hour, typically caused by leader elections
+              or an overloaded/slow member.
+          labels:
+            severity: warning
+        - alert: EtcdHighFsyncDurations
+          expr: |-
+            histogram_quantile(0.99,
+              rate(etcd_disk_wal_fsync_duration_seconds_bucket{job="kube-etcd"}[5m])
+            ) > 0.5
+          for: 10m
+          annotations:
+            summary: >-
+              etcd WAL fsync latency is high on {{ $labels.instance }}
+            description: >-
+              99th percentile WAL fsync duration on {{ $labels.instance }} is
+              {{ $value }}s (>500ms). Slow disk fsync destabilizes the raft leader
+              and causes elections. Check disk health on this control-plane node.
+          labels:
+            severity: warning
+        - alert: EtcdHighCommitDurations
+          expr: |-
+            histogram_quantile(0.99,
+              rate(etcd_disk_backend_commit_duration_seconds_bucket{job="kube-etcd"}[5m])
+            ) > 0.25
+          for: 10m
+          annotations:
+            summary: >-
+              etcd backend commit latency is high on {{ $labels.instance }}
+            description: >-
+              99th percentile backend commit duration on {{ $labels.instance }} is
+              {{ $value }}s (>250ms), indicating storage-layer slowness.
+          labels:
+            severity: warning
+        - alert: EtcdDatabaseQuotaLowSpace
+          expr: |-
+            (etcd_mvcc_db_total_size_in_bytes{job="kube-etcd"}
+              / etcd_server_quota_backend_bytes{job="kube-etcd"}) > 0.95
+          for: 10m
+          annotations:
+            summary: >-
+              etcd database is nearly full on {{ $labels.instance }}
+            description: >-
+              The etcd db on {{ $labels.instance }} is using {{ $value | humanizePercentage }}
+              of its backend quota. Once the quota is hit etcd goes read-only
+              (alarm NOSPACE); defrag/compact or raise quota-backend-bytes.
+          labels:
+            severity: critical
