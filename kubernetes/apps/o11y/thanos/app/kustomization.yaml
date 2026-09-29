@@ -7,4 +7,5 @@ resources:
   - ./helmrelease.yaml
   - ./helmrepository.yaml
   - ./oidc-secret.sops.yaml
+  - ./prometheusrule.yaml
   - ./securitypolicy.yaml
