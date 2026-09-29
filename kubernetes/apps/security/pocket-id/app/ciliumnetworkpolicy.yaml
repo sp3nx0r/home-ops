@@ -65,3 +65,12 @@ spec:
         - ports:
             - port: "3900"
               protocol: TCP
+    # Hourly GeoLite2 City refresh for audit-log geolocation. download.maxmind.com
+    # 302s to MaxMind's published R2 bucket, so both names are required.
+    - toFQDNs:
+        - matchName: download.maxmind.com
+        - matchName: mm-prod-geoip-databases.a2649acb697e2c09b632799562c076f2.r2.cloudflarestorage.com
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
