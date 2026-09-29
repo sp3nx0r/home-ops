@@ -1,0 +1,248 @@
+{
+  "title": "Hubble Policy Drops",
+  "uid": "hubble-policy-drops",
+  "tags": ["cilium", "hubble", "network-policy"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "graphTooltip": 1,
+  "time": { "from": "now-24h", "to": "now" },
+  "refresh": "1m",
+  "templating": {
+    "list": [
+      {
+        "name": "prometheus",
+        "label": "Prometheus",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {},
+        "hide": 0
+      },
+      {
+        "name": "loki",
+        "label": "Loki",
+        "type": "datasource",
+        "query": "loki",
+        "current": {},
+        "hide": 0
+      },
+      {
+        "name": "filter",
+        "label": "Flow filter (regex)",
+        "type": "textbox",
+        "query": "",
+        "current": { "text": "", "value": "" },
+        "hide": 0
+      },
+      {
+        "name": "hide_icmp",
+        "label": "Hide ICMP",
+        "type": "custom",
+        "query": "ICMP.*,__none__",
+        "options": [
+          { "text": "yes", "value": "ICMP.*", "selected": true },
+          { "text": "no", "value": "__none__", "selected": false }
+        ],
+        "current": { "text": "yes", "value": "ICMP.*" },
+        "hide": 0
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Policy-denied drops (range)",
+      "description": "Flows dropped with reason POLICY_DENIED over the selected time range.",
+      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${prometheus}" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${prometheus}" },
+          "expr": "sum(increase(hubble_drop_total{reason=\"POLICY_DENIED\", protocol!~\"$hide_icmp\"}[$__range]))",
+          "instant": true
+        }
+      ],
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "value",
+        "graphMode": "none"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Distinct denied pairs (range)",
+      "description": "Number of distinct source -> destination -> protocol combinations that were policy-denied.",
+      "gridPos": { "h": 5, "w": 6, "x": 6, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${prometheus}" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${prometheus}" },
+          "expr": "count(sum by (source, destination, protocol) (increase(hubble_drop_total{reason=\"POLICY_DENIED\", protocol!~\"$hide_icmp\"}[$__range])) > 0)",
+          "instant": true
+        }
+      ],
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "value",
+        "graphMode": "none"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "noValue": "0",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 3,
+      "type": "bargauge",
+      "title": "All drops by reason (range)",
+      "description": "Every Cilium drop reason, including non-policy datapath drops (VLAN filter, unsupported L3, missing service backend).",
+      "gridPos": { "h": 5, "w": 12, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${prometheus}" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${prometheus}" },
+          "expr": "sort_desc(sum by (reason) (increase(hubble_drop_total[$__range])) > 0)",
+          "instant": true,
+          "legendFormat": "{{reason}}"
+        }
+      ],
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "basic",
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "showUnfilled": true
+      },
+      "fieldConfig": { "defaults": { "unit": "short", "decimals": 0 }, "overrides": [] }
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Policy-denied drops/s by source → destination",
+      "gridPos": { "h": 9, "w": 14, "x": 0, "y": 5 },
+      "datasource": { "type": "prometheus", "uid": "${prometheus}" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${prometheus}" },
+          "expr": "sum by (source, destination, protocol) (rate(hubble_drop_total{reason=\"POLICY_DENIED\", protocol!~\"$hide_icmp\"}[$__rate_interval])) > 0",
+          "legendFormat": "{{source}} → {{destination}} ({{protocol}})"
+        }
+      ],
+      "options": {
+        "legend": { "displayMode": "table", "placement": "right", "calcs": ["max"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "pps",
+          "custom": { "drawStyle": "bars", "fillOpacity": 60, "stacking": { "mode": "normal" } }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 5,
+      "type": "table",
+      "title": "Top denied pairs (range)",
+      "gridPos": { "h": 9, "w": 10, "x": 14, "y": 5 },
+      "datasource": { "type": "prometheus", "uid": "${prometheus}" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${prometheus}" },
+          "expr": "sort_desc(sum by (source, destination, protocol) (increase(hubble_drop_total{reason=\"POLICY_DENIED\", protocol!~\"$hide_icmp\"}[$__range])) > 0)",
+          "instant": true,
+          "format": "table"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": { "excludeByName": { "Time": true }, "renameByName": { "Value": "drops" } }
+        },
+        { "id": "sortBy", "options": { "sort": [{ "field": "drops", "desc": true }] } }
+      ],
+      "fieldConfig": { "defaults": { "decimals": 0 }, "overrides": [] }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Flows logged to Loki by destination namespace",
+      "description": "Policy-denied flows shipped by Vector from the Cilium flowlog exporter. Empty namespace = reserved identity (world, host, ...).",
+      "gridPos": { "h": 7, "w": 24, "x": 0, "y": 14 },
+      "datasource": { "type": "loki", "uid": "${loki}" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "loki", "uid": "${loki}" },
+          "expr": "sum by (dst_namespace) (count_over_time({source=\"hubble\"} |~ \"$filter\" [$__interval]))",
+          "legendFormat": "{{dst_namespace}}"
+        }
+      ],
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": { "drawStyle": "bars", "fillOpacity": 60, "stacking": { "mode": "normal" } }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 7,
+      "type": "logs",
+      "title": "Policy-denied flows",
+      "description": "One line per dropped flow: src -> dst:port proto reason (direction). Expand a line for IPs, node, and DNS names.",
+      "gridPos": { "h": 14, "w": 24, "x": 0, "y": 21 },
+      "datasource": { "type": "loki", "uid": "${loki}" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "loki", "uid": "${loki}" },
+          "expr": "{source=\"hubble\"} |~ \"$filter\" | json | line_format \"{{.message}}\""
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending",
+        "enableLogDetails": true,
+        "dedupStrategy": "none"
+      }
+    }
+  ]
+}
