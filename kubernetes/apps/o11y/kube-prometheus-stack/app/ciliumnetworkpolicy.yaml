@@ -115,7 +115,8 @@ spec:
   # Alert router. Selecting it makes it default-deny. Ingress: alerts from
   # Prometheus, the OIDC-gated gateway route, and the Grafana datasource, all on
   # :9093. Egress: DNS, the Discord webhook (discord.com over world:443) and the
-  # healthchecks.io heartbeat (hc-ping.com:443). Replicas gossip silences and
+  # healthchecks.io heartbeat (hc-ping.com:443) and ntfy.sh critical pushes
+  # (ntfy.sh:443). Replicas gossip silences and
   # the notification log with each other on :9094 (TCP + UDP, memberlist). The
   # in-pod config-reloader is scraped over loopback.
   endpointSelector:
@@ -208,8 +209,10 @@ spec:
     # healthchecks.io dead man's switch (Watchdog heartbeat). The world:443 rule
     # above also covers it today; this pins the dependency by name so it keeps
     # working if the Discord rule is narrowed to toFQDNs.
+    # Same for the ntfy.sh critical-push receiver.
     - toFQDNs:
         - matchName: hc-ping.com
+        - matchName: ntfy.sh
       toPorts:
         - ports:
             - port: "443"

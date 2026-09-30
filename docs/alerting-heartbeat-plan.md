@@ -209,8 +209,8 @@ don't depend on the Alertmanager webhook still being valid.
 2. **Integrations** (project → Integrations → Add):
     - Email: already present for the account owner.
     - Discord: "Add Integration" → Discord → authorise the new webhook/channel.
-    - Optional (see O2): ntfy (server `https://ntfy.sh`, a long random topic,
-      priority high) or Pushover.
+    - ntfy (see O2): server `https://ntfy.sh`, the same random topic as
+      `CRITICAL_PUSH_URL`, priority high.
     - Give each integration a unique name (the API can reference them by
       name).
 3. **Create the check.** Use either the API or the UI.
@@ -314,7 +314,7 @@ and GitHub shows failed webhook deliveries, so it is left out.
     ```
 
     Expect healthchecks.io to show `late` at about 5 min and `down` at about
-    10 min after the last ping, with email and Discord (plus ntfy/Pushover if
+    10 min after the last ping, with email and Discord (plus ntfy if
     configured) from healthchecks.io. Then restore:
 
     ```sh
@@ -346,41 +346,44 @@ and GitHub shows failed webhook deliveries, so it is left out.
 severity=warning --annotation=summary=test` from the Alertmanager pod
    reaches Discord exactly once, which confirms HA dedup.
 
-## O2: second notification path for critical alerts (plan only)
+## O2: second notification path for critical alerts
 
 The heartbeat covers "Alertmanager/Prometheus is dead" through a path that
 doesn't touch Discord. What's still single-channel is **critical alerts while
-the pipeline is healthy but Discord is broken or muted**. Options:
+the pipeline is healthy but Discord is broken or muted**. Options considered:
 
-| Option                          | Account                                             | Alertmanager support                                                                     | Notes                                                                                                                 |
-| ------------------------------- | --------------------------------------------------- | ---------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| **Pushover** (recommended)      | Yes ($5 one-time per platform after a 30-day trial) | Native `pushover_configs` (`user_key_file`, `token_file`)                                | Emergency priority (2) repeats until acknowledged and bypasses DND. What onedr0p and bjw-s use                        |
-| **ntfy.sh** (no account needed) | No                                                  | `webhook_configs` to `https://ntfy.sh/<topic>?template=alertmanager` (built-in template) | The topic name is the only secret: anyone with it can read or publish. Use a 32+ char random topic, or self-host ntfy |
-| Telegram                        | Bot + chat                                          | Native `telegram_configs`                                                                | Free                                                                                                                  |
-| Email                           | SMTP relay                                          | Native `email_configs`                                                                   | Needs an SMTP relay                                                                                                   |
+| Option               | Account                                             | Alertmanager support                                                                     | Notes                                                                                                                 |
+| -------------------- | --------------------------------------------------- | ---------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| **ntfy.sh** (chosen) | No                                                  | `webhook_configs` to `https://ntfy.sh/<topic>?template=alertmanager` (built-in template) | The topic name is the only secret: anyone with it can read or publish. Use a 32+ char random topic, or self-host ntfy |
+| Pushover             | Yes ($5 one-time per platform after a 30-day trial) | Native `pushover_configs` (`user_key_file`, `token_file`)                                | Emergency priority (2) repeats until acknowledged and bypasses DND. What onedr0p and bjw-s use                        |
+| Telegram             | Bot + chat                                          | Native `telegram_configs`                                                                | Free                                                                                                                  |
+| Email                | SMTP relay                                          | Native `email_configs`                                                                   | Needs an SMTP relay                                                                                                   |
 
-Proposed config for ntfy (Pushover is analogous with native
-`pushover_configs`):
+Implemented as the `critical-push` receiver: a webhook reading its URL from
+`CRITICAL_PUSH_URL` in `alertmanager-secret` (`url_file`), routed for
+`severity = critical` with `continue: true` so Discord still gets the alert.
+The CNP pins `ntfy.sh:443` by FQDN.
 
-```yaml
-receivers:
-    - name: critical-push
-      webhook_configs:
-          - url_file: /etc/alertmanager/secrets/alertmanager-secret/CRITICAL_PUSH_URL # https://ntfy.sh/<random>?template=alertmanager
-            send_resolved: true
-route:
-    routes:
-        # after the Watchdog/InfoInhibitor routes, before the Discord routes
-        - receiver: critical-push
-          matchers: [severity = critical]
-          continue: true
-```
+Setup:
 
-It also needs a CNP `toFQDNs: matchName: ntfy.sh` (or `api.pushover.net`) on
-443, and a `CRITICAL_PUSH_URL` key in `alertmanager-secret`. Point the
-healthchecks.io check at the same app so the phone gets both paths. This is
-not implemented here because it needs a choice of app and topic, and it would
-widen the conflict with PR #554.
+1. Generate a topic and store the URL. The committed placeholder uses an
+   `.invalid` host, so nothing is published until this is done:
+
+    ```sh
+    topic="home-ops-$(openssl rand -hex 16)"
+    sops set kubernetes/apps/o11y/kube-prometheus-stack/app/secret.sops.yaml \
+      '["stringData"]["CRITICAL_PUSH_URL"]' "\"https://ntfy.sh/${topic}?template=alertmanager&priority=high\""
+    echo "$topic"   # subscribe to this in the ntfy app, then clear your scrollback
+    ```
+
+2. Subscribe to the topic in the ntfy Android/iOS app and allow it to bypass
+   Do Not Disturb.
+3. Add the same topic as an ntfy integration in healthchecks.io (server
+   `https://ntfy.sh`, priority high) and re-run `just monitoring healthchecks`
+   so the heartbeat check attaches it. The phone then gets both paths.
+4. Test: `amtool alert add alertname=PushTest severity=critical
+--annotation=summary=test` from an Alertmanager pod; expect one ntfy push
+   and one Discord message.
 
 ## Rebase notes (PR #554, `feat/loki-ruler-sigma`)
 
