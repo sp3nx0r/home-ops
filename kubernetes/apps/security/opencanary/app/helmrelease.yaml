@@ -1,0 +1,110 @@
+---
+# yaml-language-server: $schema=https://raw.githubusercontent.com/bjw-s-labs/helm-charts/main/charts/other/app-template/schemas/helmrelease-helm-v2.schema.json
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: opencanary
+  namespace: security
+spec:
+  chartRef:
+    kind: OCIRepository
+    name: opencanary
+  interval: 1h
+  values:
+    controllers:
+      opencanary:
+        annotations:
+          reloader.stakater.com/auto: "true"
+        containers:
+          app:
+            image:
+              repository: docker.io/thinkst/opencanary
+              tag: 0.9.10@sha256:4e51338e3b6e349652b0604be656d9b8fc1cde2cd40409b2e956f1da3eb673a1
+            # The image's opencanaryd wrapper shells out to sudo when not root
+            # and writes a pidfile under /var/run; run twistd directly instead.
+            command: ["twistd"]
+            args: ["-noy", "/opencanary/.venv/bin/opencanary.tac", "--pidfile="]
+            probes:
+              # A bare TCP connect to the HTTP module logs nothing, so probes
+              # never trip the HoneypotTouched alert (an SSH connect would).
+              liveness: &probes
+                enabled: true
+                custom: true
+                spec:
+                  tcpSocket:
+                    port: &http 8080
+                  periodSeconds: 30
+                  timeoutSeconds: 3
+                  failureThreshold: 3
+              readiness: *probes
+            resources:
+              requests:
+                cpu: 10m
+                memory: 64Mi
+              limits:
+                memory: 256Mi
+            securityContext:
+              allowPrivilegeEscalation: false
+              readOnlyRootFilesystem: true
+              capabilities: { drop: ["ALL"] }
+    defaultPodOptions:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile: { type: RuntimeDefault }
+    service:
+      app:
+        type: LoadBalancer
+        allocateLoadBalancerNodePorts: false
+        annotations:
+          lbipam.cilium.io/ips: "192.168.5.27"
+        # Preserve the scanner's source IP in the honeypot events.
+        externalTrafficPolicy: Local
+        ports:
+          ssh:
+            port: 22
+            targetPort: &ssh 2222
+          http:
+            port: 80
+            targetPort: *http
+    configMaps:
+      config:
+        data:
+          opencanary.conf: |
+            {
+              "device.node_id": "nas-backup-01",
+              "ip.ignorelist": [],
+              "logtype.ignorelist": [],
+              "logger": {
+                "class": "PyLogger",
+                "kwargs": {
+                  "formatters": {"plain": {"format": "%(message)s"}},
+                  "handlers": {"console": {"class": "logging.StreamHandler", "stream": "ext://sys.stdout"}}
+                }
+              },
+              "ssh.enabled": true,
+              "ssh.port": 2222,
+              "ssh.version": "SSH-2.0-OpenSSH_9.2p1 Debian-2+deb12u3",
+              "http.enabled": true,
+              "http.port": 8080,
+              "http.banner": "Apache/2.4.62 (Debian)",
+              "http.skin": "nasLogin"
+            }
+    persistence:
+      config:
+        type: configMap
+        identifier: config
+        globalMounts:
+          - path: /etc/opencanaryd
+            readOnly: true
+      # The SSH module writes its host key to /var/tmp on first start.
+      tmp:
+        type: emptyDir
+        globalMounts:
+          - path: /var/tmp
+            subPath: var-tmp
+          - path: /tmp
+            subPath: tmp
