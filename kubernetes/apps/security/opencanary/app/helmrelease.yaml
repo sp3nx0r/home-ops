@@ -58,6 +58,7 @@ spec:
     service:
       app:
         type: LoadBalancer
+        allocateLoadBalancerNodePorts: false
         annotations:
           lbipam.cilium.io/ips: "192.168.5.27"
         # Preserve the scanner's source IP in the honeypot events.
