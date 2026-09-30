@@ -8,8 +8,12 @@ Kubescape Operator runs in-cluster (no ARMO cloud account) to provide:
   packages a container never loads are separated from the ones it does, and
   OpenVEX `not_affected` statements are generated for the unused ones.
 
-Runtime threat detection is deliberately left to Tetragon, admission
-enforcement to Kyverno, and network policy to the hand-authored CNPs.
+Kubescape is used for evaluation only. Its runtime threat detection and
+admission webhook stay off: runtime detection is planned for Tetragon (P1 in
+`docs/sre-and-security-evaluation.md`) and admission enforcement for Kyverno
+(PR #524). Neither is deployed yet, so the cluster currently has **no** runtime
+detection and **no** admission enforcement. Network policy stays with the
+hand-authored CNPs.
 
 > **Status:** Implemented in `kubernetes/apps/kubescape/` (chart
 > `kubescape-operator` 1.40.4). Post-merge verification steps are in
@@ -53,8 +57,8 @@ network access beyond the apiserver (see [Network policy](#network-policy)).
 | `relevancy`, `runtimeObservability`                          | on      | The differentiator vs. Trivy: CVEs are split into "loaded at runtime" and "present but unused".                                                            |
 | `vexGeneration`                                              | on      | Experimental. OpenVEX documents stored as `OpenVulnerabilityExchangeContainer`; advisory data only.                                                        |
 | `prometheusExporter`                                         | on      | Metrics + dashboard. `kubescape.serviceMonitor` stays off: every scrape of the scanner triggers a scan.                                                    |
-| `runtimeDetection`, `malwareDetection`, `httpDetection`      | off     | Tetragon is the runtime detector.                                                                                                                          |
-| `admissionController`                                        | off     | Detection-only webhook; Kyverno enforces, and exec/port-forward detection comes from audit logs.                                                           |
+| `runtimeDetection`, `malwareDetection`, `httpDetection`      | off     | Runtime detection is planned for Tetragon (not yet deployed).                                                                                              |
+| `admissionController`                                        | off     | Detection-only webhook; enforcement is planned for Kyverno (PR #524, not yet merged).                                                                      |
 | `networkPolicyService`                                       | off     | Emits vanilla NetworkPolicy (not CNP) and is the main storage CPU cost (~600m observed elsewhere).                                                         |
 | `seccompProfileService`                                      | off     | No path to ship generated profiles to Talos nodes.                                                                                                         |
 | `riskAcceptance`                                             | off     | No Git-managed `SecurityException`s yet; see [Expected Talos noise](#expected-talos-cis-noise).                                                            |
@@ -88,6 +92,9 @@ Other hardening:
 - **Headlamp** (`headlamp.${SECRET_DOMAIN}`): the Kubescape plugin adds
   Compliance and Vulnerabilities views (per control, namespace, workload, image,
   CVE). Access comes from `kubescape-results-view`, aggregated into `view`.
+  It deliberately omits `containerprofiles` (runtime profiles record the argv
+  and environment of every exec'd process), so the plugin's runtime-profile
+  views are empty for viewers and need an admin identity.
   Custom frameworks and exceptions created in the plugin are stored as
   ConfigMaps in `kubescape` and need an admin identity.
 - **Grafana** → `Security` → _Kubescape Vulnerabilities Overview_: control and
@@ -200,12 +207,13 @@ the ones worth triaging. If the noise becomes a problem, enable
 
 - The cluster default-deny floor selects the `kubescape` namespace; the CNPs
   above are the allow-list.
-- Kyverno's PSA-label policy (PR #524) only requires an explicit `enforce`
-  label, which this namespace has. The planned S7 policy "disallow `hostPath`
-  outside `kube-system`/`download`" must also allow `kubescape` (node-agent).
-- Tetragon and node-agent both attach eBPF programs; that is supported, but
-  expect node-agent in Tetragon exec/file telemetry (it reads `/proc` and the
-  container runtime socket).
+- Kyverno (PR #524, not yet merged): its PSA-label policy only requires an
+  explicit `enforce` label, which this namespace has. The planned S7 policy
+  "disallow `hostPath` outside `kube-system`/`download`" must also allow
+  `kubescape` (node-agent).
+- Tetragon (planned): both it and node-agent attach eBPF programs, which is
+  supported, but expect node-agent in Tetragon exec/file telemetry (it reads
+  `/proc` and the container runtime socket).
 
 ## Verification
 

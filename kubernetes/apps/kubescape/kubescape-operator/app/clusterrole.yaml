@@ -10,8 +10,25 @@ metadata:
   labels:
     rbac.authorization.k8s.io/aggregate-to-view: "true"
 rules:
+  # containerprofiles is deliberately omitted: runtime profiles record the argv
+  # and environment of every exec'd process, which can carry credentials that
+  # `view` is meant to withhold (it excludes Secrets for the same reason).
   - apiGroups:
       - spdx.softwarecomposition.kubescape.io
+    resources:
+      - configurationscansummaries
+      - generatednetworkpolicies
+      - knownservers
+      - openvulnerabilityexchangecontainers
+      - sbomsyftfiltereds
+      - sbomsyfts
+      - vulnerabilitymanifests
+      - vulnerabilitymanifestsummaries
+      - vulnerabilitysummaries
+      - workloadconfigurationscans
+      - workloadconfigurationscansummaries
+    verbs: ["get", "list", "watch"]
+  - apiGroups:
       - hostdata.kubescape.cloud
       - kubescape.io
     resources: ["*"]
