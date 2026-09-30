@@ -42,7 +42,6 @@ rules:
       - volsync-src-garage-data-cache
       - volsync-src-garage-meta-cache
     verbs:
-      - get
       - delete
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -70,9 +69,9 @@ spec:
   jobTemplate:
     spec:
       backoffLimit: 0
-      # Covers the jitter sleep (up to 900s) plus a delete and Bound poll for
+      # Covers the jitter sleep (up to 900s) plus the job check and delete for
       # each of the two sources (garage-data, garage-meta).
-      activeDeadlineSeconds: 1500
+      activeDeadlineSeconds: 1200
       ttlSecondsAfterFinished: 86400
       template:
         metadata:
@@ -123,32 +122,38 @@ spec:
                 - -ec
               args:
                 - |
+                  # Raw requests, because on a 404 `kubectl get/delete
+                  # --ignore-not-found` also GETs the (cluster-scoped)
+                  # Namespace, which this namespaced Role cannot grant.
+                  # Prints the body; returns 1 on NotFound; exits on any other error.
+                  raw() {
+                    if kubectl "$1" --raw "$2" 2>/tmp/raw.err; then
+                      return 0
+                    fi
+                    grep -q '(NotFound)' /tmp/raw.err && return 1
+                    cat /tmp/raw.err >&2
+                    exit 1
+                  }
+
                   for src in garage-data garage-meta; do
                     mover_job="volsync-src-$src"
                     cache_pvc="volsync-src-$src-cache"
 
-                    mover_active="$(kubectl -n "$POD_NAMESPACE" get job "$mover_job" -o jsonpath='{.status.active}' --ignore-not-found)"
+                    mover_active=""
+                    if job="$(raw get "/apis/batch/v1/namespaces/$POD_NAMESPACE/jobs/$mover_job")"; then
+                      mover_active="$(printf '%s' "$job" | grep -o '"active":[0-9]*' | cut -d: -f2 || true)"
+                    elif [ -s /tmp/raw.err ] && ! grep -q '(NotFound)' /tmp/raw.err; then
+                      exit 1
+                    fi
                     if [ -n "$mover_active" ] && [ "$mover_active" != "0" ]; then
                       echo "VolSync mover $mover_job is active; skipping $cache_pvc"
                       continue
                     fi
 
-                    echo "deleting disposable Kopia cache PVC $cache_pvc"
-                    kubectl -n "$POD_NAMESPACE" delete pvc "$cache_pvc" --ignore-not-found --wait=false
-
-                    phase=""
-                    deadline=$((SECONDS + 120))
-                    while [ "$SECONDS" -lt "$deadline" ]; do
-                      phase="$(kubectl -n "$POD_NAMESPACE" get pvc "$cache_pvc" -o jsonpath='{.status.phase}' --ignore-not-found)"
-                      if [ "$phase" = "Bound" ]; then
-                        echo "cache PVC $cache_pvc recreated and Bound"
-                        break
-                      fi
-                      sleep 5
-                    done
-
-                    if [ "$phase" != "Bound" ]; then
-                      echo "cache PVC $cache_pvc not yet recreated; VolSync restores it on the next sync"
+                    if raw delete "/api/v1/namespaces/$POD_NAMESPACE/persistentvolumeclaims/$cache_pvc" >/dev/null; then
+                      echo "deleted disposable Kopia cache PVC $cache_pvc; VolSync recreates it on the next sync"
+                    else
+                      echo "cache PVC $cache_pvc already absent"
                     fi
                   done
               resources:
