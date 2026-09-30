@@ -74,7 +74,7 @@ role_has_exact_least_privilege() {
       return has_exact(rule_number, "apiGroups", "batch", "", 1) && has_exact(rule_number, "resourceNames", "volsync-src-volsync-test", "", 1) && has_exact(rule_number, "resources", "jobs", "", 1) && has_exact(rule_number, "verbs", "get", "", 1)
     }
     function pvc_rule(rule_number) {
-      return has_exact(rule_number, "apiGroups", "", "", 1) && has_exact(rule_number, "resourceNames", "volsync-src-volsync-test-cache", "", 1) && has_exact(rule_number, "resources", "persistentvolumeclaims", "", 1) && has_exact(rule_number, "verbs", "get", "delete", 2)
+      return has_exact(rule_number, "apiGroups", "", "", 1) && has_exact(rule_number, "resourceNames", "volsync-src-volsync-test-cache", "", 1) && has_exact(rule_number, "resources", "persistentvolumeclaims", "", 1) && has_exact(rule_number, "verbs", "delete", "", 1)
     }
     /^[[:space:]]*rules:$/ {
       in_rules = 1
@@ -309,12 +309,17 @@ expected_command=$'- /bin/sh\n- -ec'
 # Behavioral contract of the scrub script.
 require_pattern "$scrub" 'mover_job="volsync-src-volsync-test"' 'mover job target'
 require_pattern "$scrub" 'cache_pvc="volsync-src-volsync-test-cache"' 'cache PVC target'
-require_pattern "$scrub" 'get job "\$mover_job" -o jsonpath=.\{\.status\.active\}. --ignore-not-found' 'reads mover job active status'
+require_pattern "$scrub" 'raw get "/apis/batch/v1/namespaces/\$POD_NAMESPACE/jobs/\$mover_job"' 'reads mover job via its own namespace'
+require_pattern "$scrub" "grep -o '\"active\":\[0-9\]\*'" 'reads mover job active status'
 require_pattern "$scrub" 'if \[ -n "\$mover_active" \] && \[ "\$mover_active" != "0" \]; then' 'skips while mover is active'
-require_pattern "$scrub" 'delete pvc "\$cache_pvc" --ignore-not-found' 'deletes only the cache PVC'
-require_pattern "$scrub" 'kubectl -n "\$POD_NAMESPACE"' 'operates in its own namespace via downward API'
-# The cache is disposable; a deferred recreation must not fail the job.
-reject_pattern "$scrub" 'exit 1' 'scrub must not fail on deferred cache recreation'
+require_pattern "$scrub" 'raw delete "/api/v1/namespaces/\$POD_NAMESPACE/persistentvolumeclaims/\$cache_pvc"' 'deletes only the cache PVC in its own namespace'
+# --ignore-not-found makes kubectl GET the cluster-scoped Namespace on a 404,
+# which the namespaced Role cannot grant (403s); requests must stay raw.
+reject_pattern "$scrub" '^[[:space:]]*[^#[:space:]].*--ignore-not-found' 'kubectl --ignore-not-found trips namespace 403s'
+# The cache is disposable: NotFound (already scrubbed, or not yet recreated)
+# must not fail the job. Other API errors still do.
+require_pattern "$scrub" "grep -q '\(NotFound\)' /tmp/raw.err && return 1" 'NotFound is non-fatal'
+require_pattern "$scrub" 'cache PVC \$cache_pvc already absent' 'absent cache PVC is success'
 # Guard against re-hardcoding a namespace instead of the downward-API value.
 reject_pattern "$scrub" 'namespace="default"' 'namespace must not be hardcoded'
 
