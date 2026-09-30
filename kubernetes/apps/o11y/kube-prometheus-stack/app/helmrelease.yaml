@@ -13,7 +13,13 @@ spec:
     cleanPrometheusOperatorObjectNames: true
 
     alertmanager:
+      # Storage is emptyDir, so silences and the notification log only survive
+      # a pod restart or node drain by gossiping to a peer over :9094. The chart
+      # default soft anti-affinity spreads the pair across nodes.
+      podDisruptionBudget:
+        enabled: true
       alertmanagerSpec:
+        replicas: 2
         externalUrl: https://alertmanager.${SECRET_DOMAIN}
         # Mounted at /etc/alertmanager/secrets/alertmanager-secret/<key>. The
         # heartbeat receiver reads its ping URL from here (url_file) so the URL

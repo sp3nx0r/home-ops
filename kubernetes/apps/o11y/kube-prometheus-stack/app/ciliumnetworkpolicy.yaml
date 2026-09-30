@@ -115,8 +115,9 @@ spec:
   # Alert router. Selecting it makes it default-deny. Ingress: alerts from
   # Prometheus, the OIDC-gated gateway route, and the Grafana datasource, all on
   # :9093. Egress: DNS, the Discord webhook (discord.com over world:443) and the
-  # healthchecks.io heartbeat (hc-ping.com:443). The in-pod config-reloader is
-  # scraped over loopback; the :9094 gossip mesh is unused at a single replica.
+  # healthchecks.io heartbeat (hc-ping.com:443). Replicas gossip silences and
+  # the notification log with each other on :9094 (TCP + UDP, memberlist). The
+  # in-pod config-reloader is scraped over loopback.
   endpointSelector:
     matchLabels:
       io.kubernetes.pod.namespace: o11y
@@ -152,6 +153,17 @@ spec:
         - ports:
             - port: "9093"
               protocol: TCP
+    # HA peer mesh :9094 from the other replica
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: o11y
+            app.kubernetes.io/name: alertmanager
+      toPorts:
+        - ports:
+            - port: "9094"
+              protocol: TCP
+            - port: "9094"
+              protocol: UDP
   egress:
     # DNS resolution (L7 so lookups are visible to Cilium's DNS proxy)
     - toEndpoints:
@@ -167,6 +179,17 @@ spec:
           rules:
             dns:
               - matchPattern: "*"
+    # HA peer mesh :9094 to the other replica
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: o11y
+            app.kubernetes.io/name: alertmanager
+      toPorts:
+        - ports:
+            - port: "9094"
+              protocol: TCP
+            - port: "9094"
+              protocol: UDP
     # Discord webhook notifications (discord.com) over HTTPS. Public internet
     # only -- Alertmanager only reaches Discord, never the LAN or in-cluster
     # services, so exclude all private/non-routable ranges.
