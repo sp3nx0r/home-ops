@@ -1,0 +1,52 @@
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/cilium.io/ciliumnetworkpolicy_v2.json
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: spegel
+spec:
+  # Spegel's registry is reachable on every node IP via hostPort 29999 and
+  # NodePort 30021 (containerd's mirror config dials both). Cilium serves those
+  # in eBPF ahead of the Talos host firewall, so this policy is what keeps the
+  # unauthenticated registry off the LAN: after translation the LAN client
+  # keeps its world identity and is denied here. Ingress-only; kube-system is
+  # outside the cluster-wide floor, so egress stays open.
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: spegel
+      app.kubernetes.io/component: spegel
+  ingress:
+    # Registry :5000 from containerd on the local node (hostPort / socket LB),
+    # containerd on peer nodes (NodePort fallback), and kubelet readiness
+    # probes. Peer nodes present as kube-apiserver + remote-node here.
+    - fromEntities:
+        - host
+        - remote-node
+        - kube-apiserver
+      toPorts:
+        - ports:
+            - port: "5000"
+              protocol: TCP
+    # P2P between Spegel instances: router :5001 (TCP + QUIC) and blob
+    # fetches from a peer's registry :5000.
+    - fromEndpoints:
+        - matchLabels:
+            app.kubernetes.io/name: spegel
+            app.kubernetes.io/component: spegel
+      toPorts:
+        - ports:
+            - port: "5000"
+              protocol: TCP
+            - port: "5001"
+              protocol: TCP
+            - port: "5001"
+              protocol: UDP
+    # Prometheus scrape :9090
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: o11y
+            app.kubernetes.io/name: prometheus
+      toPorts:
+        - ports:
+            - port: "9090"
+              protocol: TCP

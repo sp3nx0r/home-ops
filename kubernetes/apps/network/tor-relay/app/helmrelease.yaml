@@ -94,6 +94,7 @@ spec:
     service:
       app:
         type: LoadBalancer
+        allocateLoadBalancerNodePorts: false
         annotations:
           lbipam.cilium.io/ips: "192.168.5.22"
         externalTrafficPolicy: Cluster

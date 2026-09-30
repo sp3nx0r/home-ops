@@ -79,6 +79,7 @@ spec:
             port: *port
       bittorrent:
         type: LoadBalancer
+        allocateLoadBalancerNodePorts: false
         annotations:
           lbipam.cilium.io/ips: "192.168.5.23"
         externalTrafficPolicy: Cluster
