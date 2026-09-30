@@ -1,0 +1,54 @@
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/kustomize.toolkit.fluxcd.io/kustomization_v1.json
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: harbor
+spec:
+  interval: 1h
+  path: ./kubernetes/apps/registry/harbor/app
+  postBuild:
+    substitute:
+      # ${APP} names the Volsync-backed PVC, which holds Harbor's internal
+      # PostgreSQL data (the only Harbor state not stored in Garage).
+      APP: harbor
+      VOLSYNC_CAPACITY: "5Gi"
+      # harbor-db runs as postgres (999) with a 0700 PGDATA; the Kopia mover
+      # must match to read and restore it.
+      VOLSYNC_UID: "999"
+      VOLSYNC_GID: "999"
+    substituteFrom:
+      - name: cluster-secrets
+        kind: Secret
+  prune: true
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+    namespace: flux-system
+  targetNamespace: registry
+  timeout: 15m
+  wait: true
+  dependsOn:
+    - name: volsync
+      namespace: volsync-system
+    - name: garage
+      namespace: storage
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/kustomize.toolkit.fluxcd.io/kustomization_v1.json
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: harbor-bootstrap
+spec:
+  dependsOn:
+    - name: harbor
+  interval: 1h
+  path: ./kubernetes/apps/registry/harbor/bootstrap
+  prune: true
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+    namespace: flux-system
+  targetNamespace: registry
+  timeout: 15m
+  wait: true

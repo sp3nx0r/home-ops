@@ -1,0 +1,575 @@
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/cilium.io/ciliumnetworkpolicy_v2.json
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: harbor-core
+spec:
+  # Harbor API, token service, and proxy-cache engine (:8080, metrics :8001).
+  # Selecting it makes it default-deny. The UI/API/v2 route arrives from the
+  # internal gateway; the other Harbor components call back into it. It fronts
+  # every other component, does OIDC against Pocket ID via the envoy-internal
+  # VIP, and fetches proxy-cache misses from public upstream registries.
+  endpointSelector:
+    matchLabels:
+      io.kubernetes.pod.namespace: registry
+      app.kubernetes.io/name: harbor
+      component: core
+  ingress:
+    # /api, /service, /v2, /c from the internal gateway
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: network
+            gateway.envoyproxy.io/owning-gateway-name: envoy-internal
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+    # Intra-Harbor callbacks: jobservice job status, registry push/pull
+    # notifications, trivy artifact pulls via the core registry proxy,
+    # exporter health checks, and the bootstrap Job's API calls
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: registry
+            app.kubernetes.io/name: harbor
+            component: jobservice
+        - matchLabels:
+            io.kubernetes.pod.namespace: registry
+            app.kubernetes.io/name: harbor
+            component: registry
+        - matchLabels:
+            io.kubernetes.pod.namespace: registry
+            app.kubernetes.io/name: harbor
+            component: trivy
+        - matchLabels:
+            io.kubernetes.pod.namespace: registry
+            app.kubernetes.io/name: harbor
+            component: exporter
+        - matchLabels:
+            io.kubernetes.pod.namespace: registry
+            app.kubernetes.io/name: harbor-bootstrap
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+    # Prometheus scrape of the metrics endpoint :8001
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: o11y
+            app.kubernetes.io/name: prometheus
+      toPorts:
+        - ports:
+            - port: "8001"
+              protocol: TCP
+  egress:
+    # DNS resolution (L7 so lookups are visible to Cilium's DNS proxy)
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: registry
+            app.kubernetes.io/name: harbor
+            component: database
+      toPorts:
+        - ports:
+            - port: "5432"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: registry
+            app.kubernetes.io/name: harbor
+            component: redis
+      toPorts:
+        - ports:
+            - port: "6379"
+              protocol: TCP
+    # registry :5000 (v2 API) and registryctl :8080 (same pod)
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: registry
+            app.kubernetes.io/name: harbor
+            component: registry
+      toPorts:
+        - ports:
+            - port: "5000"
+              protocol: TCP
+            - port: "8080"
+              protocol: TCP
+    # Job submission (jobservice) and scanner metadata/ping (trivy)
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: registry
+            app.kubernetes.io/name: harbor
+            component: jobservice
+        - matchLabels:
+            io.kubernetes.pod.namespace: registry
+            app.kubernetes.io/name: harbor
+            component: trivy
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+    # OIDC (Pocket ID) via id.${SECRET_DOMAIN} -> envoy-internal VIP :10443
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: network
+            gateway.envoyproxy.io/owning-gateway-name: envoy-internal
+      toPorts:
+        - ports:
+            - port: "10443"
+              protocol: TCP
+    # Proxy-cache upstreams (registry-1.docker.io, ghcr.io and their blob
+    # CDNs) and registry-endpoint health checks. Public internet only; every
+    # in-cluster peer above is a separate rule, so exclude private ranges.
+    - toCIDRSet:
+        - cidr: 0.0.0.0/0
+          except:
+            - 10.0.0.0/8
+            - 172.16.0.0/12
+            - 192.168.0.0/16
+            - 169.254.0.0/16
+            - 100.64.0.0/10
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/cilium.io/ciliumnetworkpolicy_v2.json
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: harbor-portal
+spec:
+  # Static web UI (nginx :8080). Selecting it makes it default-deny. It is
+  # only served to the internal gateway and makes no outbound calls.
+  endpointSelector:
+    matchLabels:
+      io.kubernetes.pod.namespace: registry
+      app.kubernetes.io/name: harbor
+      component: portal
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: network
+            gateway.envoyproxy.io/owning-gateway-name: envoy-internal
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/cilium.io/ciliumnetworkpolicy_v2.json
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: harbor-jobservice
+spec:
+  # Async job runner (:8080, metrics :8001): GC, tag retention, scans, and
+  # audit/log sweeps. Selecting it makes it default-deny. Jobs are queued in
+  # Valkey, logged to PostgreSQL, and drive core, registry(ctl), and trivy.
+  # No replication targets or webhooks are configured, so no world egress.
+  endpointSelector:
+    matchLabels:
+      io.kubernetes.pod.namespace: registry
+      app.kubernetes.io/name: harbor
+      component: jobservice
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: registry
+            app.kubernetes.io/name: harbor
+            component: core
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: o11y
+            app.kubernetes.io/name: prometheus
+      toPorts:
+        - ports:
+            - port: "8001"
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: registry
+            app.kubernetes.io/name: harbor
+            component: database
+      toPorts:
+        - ports:
+            - port: "5432"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: registry
+            app.kubernetes.io/name: harbor
+            component: redis
+      toPorts:
+        - ports:
+            - port: "6379"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: registry
+            app.kubernetes.io/name: harbor
+            component: registry
+      toPorts:
+        - ports:
+            - port: "5000"
+              protocol: TCP
+            - port: "8080"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: registry
+            app.kubernetes.io/name: harbor
+            component: core
+        - matchLabels:
+            io.kubernetes.pod.namespace: registry
+            app.kubernetes.io/name: harbor
+            component: trivy
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/cilium.io/ciliumnetworkpolicy_v2.json
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: harbor-registry
+spec:
+  # distribution registry (:5000) + registryctl sidecar (:8080), metrics :8001.
+  # Selecting it makes it default-deny. Blobs and manifests are stored in the
+  # Garage `harbor` bucket (storage/garage :3900); redirects are disabled so
+  # all blob traffic flows through this pod. Push/pull events are posted back
+  # to core.
+  endpointSelector:
+    matchLabels:
+      io.kubernetes.pod.namespace: registry
+      app.kubernetes.io/name: harbor
+      component: registry
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: registry
+            app.kubernetes.io/name: harbor
+            component: core
+        - matchLabels:
+            io.kubernetes.pod.namespace: registry
+            app.kubernetes.io/name: harbor
+            component: jobservice
+      toPorts:
+        - ports:
+            - port: "5000"
+              protocol: TCP
+            - port: "8080"
+              protocol: TCP
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: registry
+            app.kubernetes.io/name: harbor
+            component: trivy
+      toPorts:
+        - ports:
+            - port: "5000"
+              protocol: TCP
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: o11y
+            app.kubernetes.io/name: prometheus
+      toPorts:
+        - ports:
+            - port: "8001"
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    # Image storage: Garage S3 API in the storage namespace :3900
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: storage
+            app.kubernetes.io/name: garage
+      toPorts:
+        - ports:
+            - port: "3900"
+              protocol: TCP
+    # Blob descriptor cache
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: registry
+            app.kubernetes.io/name: harbor
+            component: redis
+      toPorts:
+        - ports:
+            - port: "6379"
+              protocol: TCP
+    # Push/pull notifications to core /service/notifications
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: registry
+            app.kubernetes.io/name: harbor
+            component: core
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/cilium.io/ciliumnetworkpolicy_v2.json
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: harbor-trivy
+spec:
+  # Trivy scanner adapter (:8080). Selecting it makes it default-deny. Scan
+  # requests come from core/jobservice; it pulls the artifact back through
+  # core/registry, keeps its queue in Valkey, and downloads the vulnerability
+  # DBs from mirror.gcr.io / ghcr.io (world:443).
+  endpointSelector:
+    matchLabels:
+      io.kubernetes.pod.namespace: registry
+      app.kubernetes.io/name: harbor
+      component: trivy
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: registry
+            app.kubernetes.io/name: harbor
+            component: core
+        - matchLabels:
+            io.kubernetes.pod.namespace: registry
+            app.kubernetes.io/name: harbor
+            component: jobservice
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: registry
+            app.kubernetes.io/name: harbor
+            component: redis
+      toPorts:
+        - ports:
+            - port: "6379"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: registry
+            app.kubernetes.io/name: harbor
+            component: core
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: registry
+            app.kubernetes.io/name: harbor
+            component: registry
+      toPorts:
+        - ports:
+            - port: "5000"
+              protocol: TCP
+    # Trivy DB / Java DB OCI pulls (mirror.gcr.io, ghcr.io and their blob
+    # storage). Public internet only.
+    - toCIDRSet:
+        - cidr: 0.0.0.0/0
+          except:
+            - 10.0.0.0/8
+            - 172.16.0.0/12
+            - 192.168.0.0/16
+            - 169.254.0.0/16
+            - 100.64.0.0/10
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/cilium.io/ciliumnetworkpolicy_v2.json
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: harbor-database
+spec:
+  # Internal PostgreSQL (:5432). Selecting it makes it default-deny. Only the
+  # components that hold DB connections may reach it; it makes no outbound
+  # calls (probes are exec-based).
+  endpointSelector:
+    matchLabels:
+      io.kubernetes.pod.namespace: registry
+      app.kubernetes.io/name: harbor
+      component: database
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: registry
+            app.kubernetes.io/name: harbor
+            component: core
+        - matchLabels:
+            io.kubernetes.pod.namespace: registry
+            app.kubernetes.io/name: harbor
+            component: jobservice
+        - matchLabels:
+            io.kubernetes.pod.namespace: registry
+            app.kubernetes.io/name: harbor
+            component: exporter
+      toPorts:
+        - ports:
+            - port: "5432"
+              protocol: TCP
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/cilium.io/ciliumnetworkpolicy_v2.json
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: harbor-redis
+spec:
+  # Internal Valkey (:6379): session store, job queue, registry blob cache,
+  # and trivy queue. Selecting it makes it default-deny; no outbound calls.
+  endpointSelector:
+    matchLabels:
+      io.kubernetes.pod.namespace: registry
+      app.kubernetes.io/name: harbor
+      component: redis
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: registry
+            app.kubernetes.io/name: harbor
+            component: core
+        - matchLabels:
+            io.kubernetes.pod.namespace: registry
+            app.kubernetes.io/name: harbor
+            component: jobservice
+        - matchLabels:
+            io.kubernetes.pod.namespace: registry
+            app.kubernetes.io/name: harbor
+            component: registry
+        - matchLabels:
+            io.kubernetes.pod.namespace: registry
+            app.kubernetes.io/name: harbor
+            component: trivy
+        - matchLabels:
+            io.kubernetes.pod.namespace: registry
+            app.kubernetes.io/name: harbor
+            component: exporter
+      toPorts:
+        - ports:
+            - port: "6379"
+              protocol: TCP
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/cilium.io/ciliumnetworkpolicy_v2.json
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: harbor-exporter
+spec:
+  # Harbor Prometheus exporter (:8001). Selecting it makes it default-deny.
+  # It derives project/quota/job-queue metrics from PostgreSQL, Valkey, and
+  # core's health API.
+  endpointSelector:
+    matchLabels:
+      io.kubernetes.pod.namespace: registry
+      app.kubernetes.io/name: harbor
+      component: exporter
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: o11y
+            app.kubernetes.io/name: prometheus
+      toPorts:
+        - ports:
+            - port: "8001"
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: registry
+            app.kubernetes.io/name: harbor
+            component: database
+      toPorts:
+        - ports:
+            - port: "5432"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: registry
+            app.kubernetes.io/name: harbor
+            component: redis
+      toPorts:
+        - ports:
+            - port: "6379"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: registry
+            app.kubernetes.io/name: harbor
+            component: core
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP

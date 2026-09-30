@@ -1,0 +1,15 @@
+---
+# Harbor's internal PostgreSQL data (projects, users, robot accounts, artifact
+# metadata, proxy-cache and retention config). Backed up by the volsync
+# component; image blobs live in Garage and are backed up with it.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ${APP}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: iscsi
+  resources:
+    requests:
+      storage: ${VOLSYNC_CAPACITY}

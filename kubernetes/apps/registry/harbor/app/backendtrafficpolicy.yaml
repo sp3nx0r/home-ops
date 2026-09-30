@@ -1,0 +1,22 @@
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/gateway.envoyproxy.io/backendtrafficpolicy_v1alpha1.json
+# Route-level policy; it replaces the gateway-wide network/envoy policy for
+# Harbor's route. Layer pushes/pulls are multi-GB streams: no compression
+# (layers are already compressed), no retries (a retried PATCH/PUT would replay
+# a partial upload), and a long stream idle timeout so a proxy-cache miss that
+# is still fetching from upstream is not cut off.
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: BackendTrafficPolicy
+metadata:
+  name: harbor
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: harbor-route
+  tcpKeepalive: {}
+  timeout:
+    http:
+      connectionIdleTimeout: 60s
+      requestTimeout: 0s
+      streamIdleTimeout: 15m

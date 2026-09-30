@@ -1,0 +1,80 @@
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/monitoring.coreos.com/prometheusrule_v1.json
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: harbor
+spec:
+  groups:
+    - name: harbor.rules
+      rules:
+        - alert: HarborAbsent
+          expr: absent(up{namespace="registry", job="harbor"} == 1)
+          for: 15m
+          annotations:
+            summary: >-
+              Harbor has disappeared from Prometheus
+            description: >-
+              No Harbor metrics endpoint (core, registry, jobservice, exporter)
+              has been scraped successfully for 15 minutes.
+          labels:
+            severity: critical
+        # harbor_up is reported by the exporter from core's /api/v2.0/health,
+        # so it covers components without a metrics endpoint (portal,
+        # database, redis, trivy).
+        - alert: HarborComponentDown
+          expr: harbor_up{namespace="registry"} == 0
+          for: 10m
+          annotations:
+            summary: >-
+              Harbor component {{ $labels.component }} is unhealthy
+            description: >-
+              Harbor's health API has reported {{ $labels.component }} as down for
+              10 minutes.
+          labels:
+            severity: warning
+        # The registry only returns 5xx when its storage driver (Garage S3)
+        # or cache fails; client errors (401/404) are normal token/probe flow.
+        - alert: HarborRegistryStorageErrors
+          expr: |-
+            100 * sum(rate(registry_http_requests_total{namespace="registry", code=~"5.."}[10m]))
+            /
+            sum(rate(registry_http_requests_total{namespace="registry"}[10m])) > 5
+          for: 15m
+          annotations:
+            summary: >-
+              Harbor registry is returning 5xx errors
+            description: >-
+              {{ printf "%.2f" $value }}% of registry requests failed with a 5xx over
+              the last 15 minutes. Check the registry logs and the Garage `harbor`
+              bucket (quota exhausted, Garage down, or credentials rejected).
+          labels:
+            severity: warning
+        - alert: HarborGarbageCollectionFailing
+          expr: |-
+            increase(harbor_jobservice_task_total{namespace="registry", type="GARBAGE_COLLECTION", status="fail"}[1d]) > 0
+          for: 5m
+          annotations:
+            summary: >-
+              Harbor garbage collection is failing
+            description: >-
+              A Harbor GARBAGE_COLLECTION job failed in the last 24 hours. Deleted
+              and expired layers are not being reclaimed from Garage, so the
+              bucket will keep growing toward its quota.
+          labels:
+            severity: warning
+        - alert: HarborProjectQuotaNearlyFull
+          expr: |-
+            harbor_project_quota_usage_byte{namespace="registry"}
+              / on (project_name)
+            (harbor_project_quota_byte{namespace="registry"} > 0) > 0.9
+          for: 1h
+          annotations:
+            summary: >-
+              Harbor project {{ $labels.project_name }} is above 90% of its quota
+            description: >-
+              Project {{ $labels.project_name }} uses {{ $value | humanizePercentage }}
+              of its storage quota. Pushes and proxy-cache fills will start failing;
+              tighten retention or raise the quota (and the Garage bucket quota).
+          labels:
+            severity: warning

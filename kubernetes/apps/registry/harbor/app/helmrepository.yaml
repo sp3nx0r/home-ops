@@ -1,0 +1,12 @@
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/source.toolkit.fluxcd.io/helmrepository_v1.json
+# Harbor does not publish its chart to an OCI registry, so this uses the
+# upstream HTTP Helm repository (same pattern as garage).
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: harbor
+spec:
+  interval: 1h
+  type: default
+  url: https://helm.goharbor.io

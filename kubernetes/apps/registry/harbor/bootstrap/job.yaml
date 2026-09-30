@@ -1,0 +1,101 @@
+---
+# Applies Harbor's API-only settings (proxy-cache projects, quotas, retention,
+# GC schedule) from bootstrap.py. The ConfigMap name carries a content hash, so
+# editing the script changes the Job spec; force lets Flux replace the
+# otherwise-immutable Job and re-run it.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: harbor-bootstrap
+  annotations:
+    kustomize.toolkit.fluxcd.io/force: enabled
+spec:
+  backoffLimit: 3
+  activeDeadlineSeconds: 1200
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: harbor-bootstrap
+    spec:
+      automountServiceAccountToken: false
+      restartPolicy: OnFailure
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: bootstrap
+          image: docker.io/library/python:3.14-alpine@sha256:9e9fde4d32eedce0b661d9ab91e826b62dddf28e928c230ec55f1866cac66b01
+          command:
+            - python3
+            - /scripts/bootstrap.py
+          env:
+            - name: HARBOR_URL
+              value: http://harbor-core.registry.svc.cluster.local
+            - name: HARBOR_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: harbor-secret
+                  key: HARBOR_ADMIN_PASSWORD
+            - name: PYTHONDONTWRITEBYTECODE
+              value: "1"
+            - name: PYTHONUNBUFFERED
+              value: "1"
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+              readOnly: true
+      volumes:
+        - name: scripts
+          configMap:
+            name: harbor-bootstrap
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/cilium.io/ciliumnetworkpolicy_v2.json
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: harbor-bootstrap
+spec:
+  # Bootstrap Job. Selecting it makes it default-deny; it only talks to the
+  # Harbor core API (harbor-core Service :80 -> pod :8080).
+  endpointSelector:
+    matchLabels:
+      io.kubernetes.pod.namespace: registry
+      app.kubernetes.io/name: harbor-bootstrap
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: registry
+            app.kubernetes.io/name: harbor
+            component: core
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
