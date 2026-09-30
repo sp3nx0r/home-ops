@@ -59,6 +59,13 @@ spec:
       # Key format: keyId = "GK" + 24 hex chars (openssl rand -hex 12)
       # Secret format: 64 hex chars / 32 bytes (openssl rand -hex 32)
       keys:
+        harbor:
+          keyId: "${HARBOR_S3_KEY_ID}"
+          secretKey: "${HARBOR_S3_SECRET_KEY}"
+          buckets:
+            - name: harbor
+              read: true
+              write: true
         loki:
           keyId: "${GARAGE_S3_KEY_ID}"
           secretKey: "${GARAGE_S3_SECRET_KEY}"
@@ -84,6 +91,10 @@ spec:
               read: true
               write: true
       buckets:
+        - name: harbor
+          keys:
+            - name: harbor
+              permissions: ["read", "write"]
         - name: loki-chunks
           keys:
             - name: loki
@@ -100,6 +111,11 @@ spec:
           keys:
             - name: thanos
               permissions: ["read", "write"]
+      # Hard cap so Harbor's image layers cannot starve Loki/Thanos/Pocket ID on
+      # the shared data volume. Keep it above the sum of Harbor's project quotas
+      # (see docs/harbor-registry.md) and below free Garage capacity.
+      extraCommands:
+        - bucket set-quotas harbor --max-size 40GiB
 
     monitoring:
       metrics:

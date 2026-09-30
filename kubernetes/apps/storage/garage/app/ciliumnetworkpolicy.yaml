@@ -6,7 +6,7 @@ metadata:
   name: garage
 spec:
   # Self-hosted S3 (Garage), storage backend for loki (chunks/ruler), thanos,
-  # and pocket-id. Selecting it makes it default-deny. Ports: S3 API :3900,
+  # pocket-id, and the harbor registry. Selecting it makes it default-deny. Ports: S3 API :3900,
   # RPC :3901, S3 web :3902, admin/metrics :3903. Single replica (no S3 web
   # route and no kubelet probes on this chart), so ingress is limited to the
   # in-cluster S3 clients, the Prometheus metrics scrape, and intra-cluster RPC.
@@ -16,9 +16,10 @@ spec:
       app.kubernetes.io/name: garage
   ingress:
     # S3 API :3900 from the in-cluster clients: loki + thanos (o11y),
-    # pocket-id (security), and prometheus (o11y) -- the thanos sidecar runs
-    # inside the prometheus pod, so its block uploads carry the prometheus
-    # identity rather than thanos.
+    # pocket-id (security), the harbor registry (registry; its registryctl
+    # sidecar runs GC from the same pod), and prometheus (o11y) -- the thanos
+    # sidecar runs inside the prometheus pod, so its block uploads carry the
+    # prometheus identity rather than thanos.
     - fromEndpoints:
         - matchLabels:
             io.kubernetes.pod.namespace: o11y
@@ -32,6 +33,10 @@ spec:
         - matchLabels:
             io.kubernetes.pod.namespace: security
             app.kubernetes.io/name: pocket-id
+        - matchLabels:
+            io.kubernetes.pod.namespace: registry
+            app.kubernetes.io/name: harbor
+            component: registry
       toPorts:
         - ports:
             - port: "3900"
