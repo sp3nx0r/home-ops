@@ -1,0 +1,58 @@
+title: Exclude Known Operator Reconciliation
+id: daba80de-507d-4048-9fc0-68f65a3fa6d4
+description: >-
+  In-cluster operators that write the matched resources as part of normal reconciliation, each
+  scoped to the resource it owns so the exclusion stays narrow. Observed over 7 days of audit logs
+  (2026-09-23..30).
+date: 2026-09-30
+logsource:
+  product: kubernetes
+  service: audit
+filter:
+  rules:
+    - eed82177-38f5-4299-8a76-098d50d225ab # kubernetes_audit_change_admission_controller
+    - 0c9b3bda-41a6-4442-9345-356ae86343dc # kubernetes_audit_cronjob_modification
+    - eeb3e9e1-b685-44e4-9232-6bb701f925b5 # kubernetes_audit_secrets_enumeration
+    - 10b97915-ec8d-455f-a815-9a78926585f6 # kubernetes_audit_rolebinding_modification
+    - 58d31a75-a4f8-4c40-985b-373d58162ca2 # kubernetes_audit_secrets_modified_or_deleted
+    - e31bae15-83ed-473e-bf31-faf4f8a17d36 # kubernetes_audit_serviceaccount_creation
+    - ad9012a6-e518-4432-9890-f3b82b8fc71f # kubernetes_audit_sidecar_injection
+    - aa7b2df4-a77e-4c8a-a280-85ad14f47bfb # homelab: role/clusterrole modification
+  # cert-manager cainjector and the kube-prometheus-stack admission job patch caBundle into
+  # webhooks; tuppr toggles its own webhook during Talos/Kubernetes upgrades.
+  op_webhook_ca_injection:
+    objectRef.resource:
+      - mutatingwebhookconfigurations
+      - validatingwebhookconfigurations
+    user.username:
+      - system:serviceaccount:cert-manager:cert-manager-cainjector
+      - system:serviceaccount:o11y:kube-prometheus-stack-admission
+      - system:serviceaccount:system-upgrade:tuppr
+  # Volsync creates mover Jobs plus their ServiceAccount/Role/RoleBinding per ReplicationSource.
+  op_volsync_movers:
+    objectRef.resource:
+      - jobs
+      - serviceaccounts
+      - roles
+      - rolebindings
+    user.username: system:serviceaccount:volsync-system:volsync
+  # Prometheus Operator renders Prometheus/Alertmanager config and web-config Secrets.
+  op_prometheus_operator_secrets:
+    objectRef.resource: secrets
+    user.username: system:serviceaccount:o11y:kube-prometheus-stack-operator
+  # cert-manager writes the TLS Secrets it issues.
+  op_cert_manager_secrets:
+    objectRef.resource: secrets
+    user.username: system:serviceaccount:cert-manager:cert-manager
+  # Envoy Gateway owns its per-Gateway proxy Deployments; Reloader restarts Deployments.
+  op_deployment_managers:
+    objectRef.resource: deployments
+    user.username:
+      - system:serviceaccount:network:envoy-gateway
+      - system:serviceaccount:kube-system:reloader
+  # The Grafana dashboard/datasource sidecars list Secrets cluster-wide on (re)connect.
+  op_grafana_sidecars:
+    objectRef.resource: secrets
+    verb: list
+    user.username: system:serviceaccount:o11y:grafana
+  condition: not 1 of op_*

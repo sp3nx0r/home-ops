@@ -1,0 +1,20 @@
+title: Exclude Known Authorization Failure Noise
+id: bee675bc-eb5c-43ff-9230-60ac8e59f962
+description: >-
+  Every Volsync cache-scrub Job (<app>-cache-scrub service account) retries `get namespaces` 25
+  times and is denied, because its Role is namespaced. That is a known misconfiguration, not an
+  attack, and it would otherwise dominate the 401/403 spike threshold. Scoped to exactly that
+  request so any other denial for those service accounts still counts.
+date: 2026-09-30
+logsource:
+  product: kubernetes
+  service: audit
+filter:
+  rules:
+    - 0d933542-1f1f-420d-97d4-21b2c3c492d9 # kubernetes_audit_unauthorized_unauthenticated_actions
+  cache_scrub:
+    user.username|re: "^system:serviceaccount:[a-z0-9-]+:[a-z0-9-]+-cache-scrub$"
+    objectRef.resource: namespaces
+    verb: get
+    responseStatus.code: 403
+  condition: not cache_scrub

@@ -15,6 +15,9 @@ mod github 'github.just'
 [group('kubernetes')]
 mod kube 'kubernetes'
 
+[group('sigma')]
+mod sigma 'sigma'
+
 [group('talos')]
 mod talos 'talos'
 
