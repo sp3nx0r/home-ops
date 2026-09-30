@@ -4,10 +4,14 @@ machine:
     # Talos API with os:admin for node upgrades. Any pod in the system-upgrade
     # namespace inherits this node-root access, so the namespace is default-denied
     # by a CiliumNetworkPolicy (tuppr/app/ciliumnetworkpolicy.yaml).
+    # Talos checks roles and namespaces independently (every listed namespace
+    # may request every listed role), so os:etcd:backup is only used from
+    # system-upgrade too (etcd-backup) rather than widening the namespace list.
     kubernetesTalosAPIAccess:
       enabled: true
       allowedRoles:
         - os:admin
+        - os:etcd:backup
       allowedKubernetesNamespaces:
         - system-upgrade
 cluster:

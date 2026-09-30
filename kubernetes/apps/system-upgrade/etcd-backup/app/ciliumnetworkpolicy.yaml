@@ -1,0 +1,57 @@
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/cilium.io/ciliumnetworkpolicy_v2.json
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: etcd-backup
+spec:
+  # talos-backup CronJob: pulls an etcd snapshot from apid and uploads it to
+  # Backblaze B2. No ingress (nothing listens). tuppr's namespace-wide policy
+  # also selects these pods; this one is self-contained so it keeps working if
+  # that policy is ever narrowed to the tuppr controller.
+  endpointSelector:
+    matchLabels:
+      io.kubernetes.pod.namespace: system-upgrade
+      app.kubernetes.io/name: etcd-backup
+  egress:
+    # DNS resolution. L7 DNS rules make lookups visible to Cilium's DNS proxy so
+    # the toFQDNs egress below can be enforced (required for FQDN policy).
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    # Talos API (apid) via the talos.default Service. Node IPs carry
+    # host/remote-node identities, not CIDR.
+    - toEntities:
+        - host
+        - remote-node
+      toPorts:
+        - ports:
+            - port: "50000"
+              protocol: TCP
+    # Talos API on the nodes and the floating API VIP (which may lack a node identity)
+    - toCIDRSet:
+        - cidr: 192.168.5.50/32
+        - cidr: 192.168.5.51/32
+        - cidr: 192.168.5.52/32
+        - cidr: 192.168.5.254/32
+      toPorts:
+        - ports:
+            - port: "50000"
+              protocol: TCP
+    # Backblaze B2 S3 API (path-style, so only the regional endpoint is needed)
+    - toFQDNs:
+        - matchName: s3.us-west-000.backblazeb2.com
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
