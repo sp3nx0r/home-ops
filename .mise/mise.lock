@@ -533,6 +533,31 @@ url = "https://github.com/evilmartians/lefthook/releases/download/v2.1.14/leftho
 url_api = "https://api.github.com/repos/evilmartians/lefthook/releases/assets/563149898"
 provenance = "github-attestations"
 
+[[tools.loki-logcli]]
+version = "3.7.8"
+backend = "aqua:grafana/loki/logcli"
+specifiers = ["3.7.8"]
+
+[tools.loki-logcli."platforms.linux-arm64"]
+checksum = "sha256:830b431e1b28ee0291a0f3827484cc481e06849dd6e6f3dc5e984e34d5a645a7"
+url = "https://github.com/grafana/loki/releases/download/v3.7.8/logcli-linux-arm64.zip"
+url_api = "https://api.github.com/repos/grafana/loki/releases/assets/570551185"
+
+[tools.loki-logcli."platforms.linux-x64"]
+checksum = "sha256:44b790601963193df9cc496f0c8d6782e5d28c90754ca7a697e3f5683dad2588"
+url = "https://github.com/grafana/loki/releases/download/v3.7.8/logcli-linux-amd64.zip"
+url_api = "https://api.github.com/repos/grafana/loki/releases/assets/570551069"
+
+[tools.loki-logcli."platforms.macos-arm64"]
+checksum = "sha256:2f4dff99d7acfaacd08f99d8220989977d771bf28a83363b6b5396516db20c02"
+url = "https://github.com/grafana/loki/releases/download/v3.7.8/logcli-darwin-arm64.zip"
+url_api = "https://api.github.com/repos/grafana/loki/releases/assets/570550966"
+
+[tools.loki-logcli."platforms.macos-x64"]
+checksum = "sha256:9f312919b384d048e9cfcf542bf00bd768644ef18064577af414bf61f4cdbd81"
+url = "https://github.com/grafana/loki/releases/download/v3.7.8/logcli-darwin-amd64.zip"
+url_api = "https://api.github.com/repos/grafana/loki/releases/assets/570550947"
+
 [[tools.node]]
 version = "24.21.0"
 backend = "core:node"

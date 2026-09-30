@@ -1,0 +1,49 @@
+title: Exclude GitOps And Kubernetes Control-Plane Principals
+id: 26ecfed7-d1f1-48f5-ab4b-5ef9ee22b3cc
+description: >-
+  Flux applies every change from Git, and the control plane (controller-manager service accounts,
+  scheduler, kubelets, Talos) reconciles objects continuously. Their writes are the expected path,
+  so detections that mean "changed outside GitOps" drop them. Human identities (admin, oidc:*) and
+  app service accounts are never listed here.
+date: 2026-09-30
+logsource:
+  product: kubernetes
+  service: audit
+filter:
+  rules:
+    - eed82177-38f5-4299-8a76-098d50d225ab # kubernetes_audit_change_admission_controller
+    - 0c9b3bda-41a6-4442-9345-356ae86343dc # kubernetes_audit_cronjob_modification
+    - 40967487-139b-4811-81d9-c9767a92aa5a # kubernetes_audit_deployment_deleted
+    - a80d927d-ac6e-443f-a867-e8d6e3897318 # kubernetes_audit_pod_in_system_namespace
+    - 10b97915-ec8d-455f-a815-9a78926585f6 # kubernetes_audit_rolebinding_modification
+    - eeb3e9e1-b685-44e4-9232-6bb701f925b5 # kubernetes_audit_secrets_enumeration
+    - 58d31a75-a4f8-4c40-985b-373d58162ca2 # kubernetes_audit_secrets_modified_or_deleted
+    - e31bae15-83ed-473e-bf31-faf4f8a17d36 # kubernetes_audit_serviceaccount_creation
+    - ad9012a6-e518-4432-9890-f3b82b8fc71f # kubernetes_audit_sidecar_injection
+    - aa7b2df4-a77e-4c8a-a280-85ad14f47bfb # homelab: role/clusterrole modification
+    - 6efc04e6-9591-4a01-8752-2c7c346b5640 # homelab: network policy modification
+  selection:
+    user.username:
+      # Flux
+      - system:serviceaccount:flux-system:kustomize-controller
+      - system:serviceaccount:flux-system:helm-controller
+      - system:serviceaccount:flux-system:flux-operator
+      # Control plane identities
+      - system:apiserver
+      - system:kube-controller-manager
+      - system:kube-scheduler
+      - talos:admin
+      - system:node:*
+      # kube-controller-manager per-controller service accounts
+      - system:serviceaccount:kube-system:clusterrole-aggregation-controller
+      - system:serviceaccount:kube-system:cronjob-controller
+      - system:serviceaccount:kube-system:daemon-set-controller
+      - system:serviceaccount:kube-system:deployment-controller
+      - system:serviceaccount:kube-system:generic-garbage-collector
+      - system:serviceaccount:kube-system:job-controller
+      - system:serviceaccount:kube-system:namespace-controller
+      - system:serviceaccount:kube-system:replicaset-controller
+      - system:serviceaccount:kube-system:service-account-controller
+      - system:serviceaccount:kube-system:statefulset-controller
+      - system:serviceaccount:kube-system:ttl-after-finished-controller
+  condition: not selection

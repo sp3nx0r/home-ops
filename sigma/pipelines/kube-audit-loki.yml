@@ -1,0 +1,59 @@
+---
+# pySigma processing pipeline: map Sigma `product: kubernetes, service: audit`
+# rules onto the kube-apiserver audit events Vector ships to Loki
+# (kubernetes/apps/kube-system/vector/app/helmrelease.yaml, sink loki_audit).
+#
+# Each event is the raw audit.k8s.io/v1 Event JSON with stream labels
+# {source="kube-audit", service_name="kube-apiserver-audit", verb="<verb>"}.
+# `| json` flattens nested keys with `_`, and the Loki backend rewrites Sigma's
+# dotted field names the same way (objectRef.resource -> objectRef_resource),
+# so the upstream SigmaHQ field names need no renaming except the handful of
+# rules that use a bare `apiGroup`.
+name: Homelab kube-apiserver audit via Vector -> Loki
+priority: 20
+transformations:
+  - id: kube_audit_stream_selector
+    type: set_custom_attribute
+    attribute: logsource_loki_selection
+    value: '{source="kube-audit"}'
+    rule_conditions:
+      - type: logsource
+        product: kubernetes
+        service: audit
+  - id: kube_audit_json_parser
+    type: set_custom_attribute
+    attribute: loki_parser
+    value: json
+    rule_conditions:
+      - type: logsource
+        product: kubernetes
+        service: audit
+  # A few SigmaHQ rules reference `apiGroup`, which only exists under objectRef.
+  - id: kube_audit_apigroup
+    type: field_name_mapping
+    mapping:
+      apiGroup: objectRef.apiGroup
+    rule_conditions:
+      - type: logsource
+        product: kubernetes
+        service: audit
+  # `kubectl apply --dry-run=server` is audited like a real write (dryRun=All in
+  # the request URI) and is a large share of human activity here; never alert
+  # on it.
+  - id: kube_audit_drop_dry_run
+    type: add_condition
+    negated: true
+    conditions:
+      requestURI|contains: dryRun=
+    rule_conditions:
+      - type: logsource
+        product: kubernetes
+        service: audit
+  - id: kube_audit_only
+    type: rule_failure
+    message: This pipeline only supports product=kubernetes service=audit rules.
+    rule_conditions:
+      - type: logsource
+        product: kubernetes
+        service: audit
+    rule_cond_not: true
