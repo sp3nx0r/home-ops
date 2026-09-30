@@ -15,6 +15,11 @@ spec:
     alertmanager:
       alertmanagerSpec:
         externalUrl: https://alertmanager.${SECRET_DOMAIN}
+        # Mounted at /etc/alertmanager/secrets/alertmanager-secret/<key>. The
+        # heartbeat receiver reads its ping URL from here (url_file) so the URL
+        # never lands in the HelmRelease spec or the generated config Secret.
+        secrets:
+          - alertmanager-secret
       route:
         main:
           enabled: true
@@ -77,6 +82,16 @@ spec:
                     -# recovered {{ .EndsAt.Format "Jan 02 15:04 MST" }}
                   {{- end }}
                   {{- end }}
+          # External dead man's switch (healthchecks.io). Watchdog always fires,
+          # so each POST is a success ping; when Prometheus, Alertmanager, a node
+          # or the uplink dies the pings stop and healthchecks.io alerts from
+          # outside the cluster. send_resolved must stay false: Watchdog resolves
+          # when Prometheus stops re-sending it, and that POST would count as a
+          # ping. See docs/alerting-heartbeat-plan.md.
+          - name: heartbeat
+            webhook_configs:
+              - url_file: /etc/alertmanager/secrets/alertmanager-secret/HEARTBEAT_PING_URL
+                send_resolved: false
           # Uncomment with kube-agent deployment:
           # - name: kube-agent
           #   webhook_configs:
@@ -94,9 +109,16 @@ spec:
             - receiver: blackhole
               matchers:
                 - alertname = InfoInhibitor
-            - receiver: blackhole
+            # Ping once per group_interval. Dedup compares the previous send
+            # time (logged after the POST returns) with the flush tick, so a
+            # repeat_interval equal to group_interval only fires every other
+            # tick; it must stay below group_interval.
+            - receiver: heartbeat
               matchers:
                 - alertname = Watchdog
+              group_wait: 0s
+              group_interval: 1m
+              repeat_interval: 50s
             # Node / infrastructure down. Grouped per-node and re-notified
             # hourly (instead of the global 12h repeat) so a node that stays
             # down keeps nagging until it recovers. Must precede the generic
