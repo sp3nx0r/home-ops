@@ -1,0 +1,43 @@
+---
+# Role for Pocket ID operators (oidc:k8s_admins) signing in through Headlamp:
+# everything in `view` plus the day-2 writes below, none of which can escalate
+# to cluster-admin. Anything that can is deliberately absent: Secrets,
+# pods/exec|attach|portforward, nodes/proxy, serviceaccounts/token, RBAC,
+# webhooks, CRDs, CSRs, impersonate, and create/patch on workloads or Flux
+# objects (a pod template or Flux spec edit runs arbitrary manifests with the
+# controller's privileges). Full allow/deny rationale:
+# docs/oidc-least-privilege-plan.md.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: homelab-operator
+aggregationRule:
+  clusterRoleSelectors:
+    - matchLabels:
+        rbac.authorization.k8s.io/aggregate-to-view: "true"
+    - matchLabels:
+        securimancy.com/aggregate-to-homelab-operator: "true"
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: custom:aggregate-homelab-operator-day2
+  labels:
+    securimancy.com/aggregate-to-homelab-operator: "true"
+rules:
+  # Restart a workload by deleting its pods; the owning controller recreates
+  # them from the Git-managed template.
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["delete"]
+  - apiGroups: [""]
+    resources: ["pods/eviction"]
+    verbs: ["create"]
+  # The scale subresource only carries spec.replicas, unlike patch on the
+  # parent object.
+  - apiGroups: ["apps"]
+    resources: ["deployments/scale", "statefulsets/scale"]
+    verbs: ["get", "update", "patch"]
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["delete"]
