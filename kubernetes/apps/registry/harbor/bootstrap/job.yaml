@@ -39,6 +39,18 @@ spec:
                 secretKeyRef:
                   name: harbor-secret
                   key: HARBOR_ADMIN_PASSWORD
+            - name: DOCKERHUB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: harbor-secret
+                  key: DOCKERHUB_USERNAME
+                  optional: true
+            - name: DOCKERHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: harbor-secret
+                  key: DOCKERHUB_TOKEN
+                  optional: true
             - name: PYTHONDONTWRITEBYTECODE
               value: "1"
             - name: PYTHONUNBUFFERED

@@ -23,7 +23,13 @@ AUTH = base64.b64encode(
 
 # Sum of storage limits must stay below the Garage `harbor` bucket quota.
 PROXY_CACHES = [
-    {"name": "dockerhub", "type": "docker-hub", "url": "https://hub.docker.com", "storage_gib": 15},
+    {
+        "name": "dockerhub",
+        "type": "docker-hub",
+        "url": "https://hub.docker.com",
+        "storage_gib": 15,
+        "credential_env": ("DOCKERHUB_USERNAME", "DOCKERHUB_TOKEN"),
+    },
     {"name": "ghcr", "type": "github-ghcr", "url": "https://ghcr.io", "storage_gib": 15},
 ]
 PROJECT_QUOTAS_GIB = {"library": 10}
@@ -71,17 +77,38 @@ def find_registry(name):
     return None
 
 
+def registry_credential(cache):
+    user_env, token_env = cache.get("credential_env", (None, None))
+    user = os.environ.get(user_env or "", "")
+    token = os.environ.get(token_env or "", "")
+    if not user or not token or token.startswith("REPLACE_"):
+        return None
+    return {"type": "basic", "access_key": user, "access_secret": token}
+
+
 def ensure_registry(cache):
+    credential = registry_credential(cache)
     registry_id = find_registry(cache["name"])
     if registry_id is None:
         print(f"creating registry endpoint {cache['name']}")
-        api("POST", "/registries", {
+        body = {
             "name": cache["name"],
             "type": cache["type"],
             "url": cache["url"],
             "insecure": False,
-        })
+        }
+        if credential:
+            body["credential"] = credential
+        api("POST", "/registries", body)
         registry_id = find_registry(cache["name"])
+    elif credential:
+        # Harbor never returns the stored secret, so re-apply it every run.
+        print(f"updating credentials for registry endpoint {cache['name']}")
+        api("PUT", f"/registries/{registry_id}", {
+            "credential_type": credential["type"],
+            "access_key": credential["access_key"],
+            "access_secret": credential["access_secret"],
+        })
     return registry_id
 
 

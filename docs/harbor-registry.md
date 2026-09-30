@@ -62,13 +62,13 @@ The popular repos don't run CNCF Dragonfly. Their "dragonfly" is the database.
 
 Proxy-cache endpoints/projects, quotas, tag retention, and the GC schedule are Harbor database objects, not config. `harbor-bootstrap` (a separate Flux Kustomization that `dependsOn: harbor`) runs `bootstrap/bootstrap.py` (stdlib Python, admin basic auth against `harbor-core`). Each step is idempotent:
 
-| Object                     | Setting                                                                                                    |
-| -------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| Registry endpoints         | `dockerhub` (`docker-hub`, `https://hub.docker.com`), `ghcr` (`github-ghcr`, `https://ghcr.io`), anonymous |
-| Proxy projects             | `dockerhub`, `ghcr`: public, 15 GiB quota each                                                             |
-| `library` quota            | 10 GiB                                                                                                     |
-| Retention (proxy projects) | keep artifacts pulled within the last 90 days, daily 03:00                                                 |
-| GC                         | weekly Sunday 04:00, `delete_untagged: true`                                                               |
+| Object                     | Setting                                                                                                                                                                                                         |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Registry endpoints         | `dockerhub` (`docker-hub`, `https://hub.docker.com`), `ghcr` (`github-ghcr`, `https://ghcr.io`), anonymous; `dockerhub` authenticates with `DOCKERHUB_USERNAME`/`DOCKERHUB_TOKEN` from `harbor-secret` when set |
+| Proxy projects             | `dockerhub`, `ghcr`: public, 15 GiB quota each                                                                                                                                                                  |
+| `library` quota            | 10 GiB                                                                                                                                                                                                          |
+| Retention (proxy projects) | keep artifacts pulled within the last 90 days, daily 03:00                                                                                                                                                      |
+| GC                         | weekly Sunday 04:00, `delete_untagged: true`                                                                                                                                                                    |
 
 Editing the script changes the ConfigMap hash, and `kustomize.toolkit.fluxcd.io/force: enabled` lets Flux replace the Job so it runs again.
 
@@ -143,6 +143,6 @@ Backup side effect: `garage-data` is snapshotted hourly into the shared Kopia re
 ## Follow-ups / open questions
 
 - **Talos containerd mirrors** (deliberately not done): pointing `docker.io`/`ghcr.io` at `https://registry.securimancy.com/v2/{dockerhub,ghcr}/` with `overridePath: true` would make Harbor a node-level cache. The chicken-and-egg problem is that Harbor, Envoy, Cilium, Garage, and iSCSI must all be running to serve pulls. It's only safe with containerd's default fallback to upstream (never `skipFallback`), with Spegel listed first. An alternative is bjw-s' layout (registry on the NAS, outside the cluster).
-- **Docker Hub rate limits**: anonymous upstream pulls are rate-limited per IP. Adding a Docker Hub PAT to the `dockerhub` endpoint (UI, or extend the bootstrap Job with a SOPS-sourced credential) raises the limit.
+- **Docker Hub rate limits**: anonymous upstream pulls are rate-limited per IP. Set a Docker Hub PAT (read-only scope) in the `harbor-secret` document of `kubernetes/apps/registry/harbor/app/secret.sops.yaml` (`sops set <file> '["stringData"]["DOCKERHUB_TOKEN"]' '"<pat>"'`, same for `DOCKERHUB_USERNAME`). The bootstrap Job re-applies it on every run, but a secret-only change does not re-run the Job: after rotating the token, re-run it with `kubectl -n registry delete job harbor-bootstrap && flux reconcile ks harbor-bootstrap -n registry`.
 - More upstreams (`quay.io`, `registry.k8s.io` as `docker-registry` type) can be added to `PROXY_CACHES` in `bootstrap.py`. Keep the quota sum under the Garage bucket quota.
 - A logical `pg_dump` backup; Harbor webhooks → Discord for scan findings (needs jobservice world egress).
