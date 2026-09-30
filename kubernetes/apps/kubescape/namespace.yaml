@@ -1,0 +1,14 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kubescape
+  annotations:
+    kustomize.toolkit.fluxcd.io/prune: disabled
+  labels:
+    # node-agent (DaemonSet) needs hostPID, hostPath /, and SYS_ADMIN/SYS_PTRACE/
+    # NET_ADMIN for eBPF. Every other Kubescape component is restricted-compliant.
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/audit: baseline
+    pod-security.kubernetes.io/audit-version: latest

@@ -1,0 +1,18 @@
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/rbac.authorization.k8s.io/clusterrole_v1.json
+# Read-only access to Kubescape results for anyone bound to `view` (Headlamp's
+# service account and the oidc:k8s_viewers group). The chart ships no
+# aggregated roles, so the Headlamp plugin would otherwise see nothing.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kubescape-results-view
+  labels:
+    rbac.authorization.k8s.io/aggregate-to-view: "true"
+rules:
+  - apiGroups:
+      - spdx.softwarecomposition.kubescape.io
+      - hostdata.kubescape.cloud
+      - kubescape.io
+    resources: ["*"]
+    verbs: ["get", "list", "watch"]

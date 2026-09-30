@@ -1,0 +1,373 @@
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/cilium.io/ciliumnetworkpolicy_v2.json
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: kubescape-operator
+spec:
+  # Scan orchestrator. Ingress: scan triggers from the scheduler CronJobs on
+  # :4002. Egress: the apiserver (watches workloads, reads/writes results via
+  # the aggregated storage API) and the scanner/kubevuln HTTP APIs on :8080.
+  endpointSelector:
+    matchLabels:
+      io.kubernetes.pod.namespace: kubescape
+      app.kubernetes.io/component: operator
+  ingress:
+    # Scheduler CronJobs POST scan triggers to :4002
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kubescape
+            app.kubernetes.io/component: kubescape-scheduler
+        - matchLabels:
+            io.kubernetes.pod.namespace: kubescape
+            app.kubernetes.io/component: kubevuln-scheduler
+      toPorts:
+        - ports:
+            - port: "4002"
+              protocol: TCP
+    # kubelet httpGet probes :8000
+    - fromEntities:
+        - host
+      toPorts:
+        - ports:
+            - port: "8000"
+              protocol: TCP
+  egress:
+    # DNS resolution (L7 so lookups are visible to Cilium's DNS proxy)
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    - toEntities:
+        - kube-apiserver
+      toPorts:
+        - ports:
+            - port: "6443"
+              protocol: TCP
+    # Starts posture scans (kubescape) and image scans (kubevuln) on :8080
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kubescape
+            app.kubernetes.io/component: kubescape
+        - matchLabels:
+            io.kubernetes.pod.namespace: kubescape
+            app.kubernetes.io/component: kubevuln
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/cilium.io/ciliumnetworkpolicy_v2.json
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: kubescape-scanner
+spec:
+  # Posture scanner. Ingress: scan requests from the operator on :8080.
+  # Egress: the apiserver (reads every object, writes WorkloadConfigurationScans)
+  # and the regolibrary release download on GitHub.
+  endpointSelector:
+    matchLabels:
+      io.kubernetes.pod.namespace: kubescape
+      app.kubernetes.io/component: kubescape
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kubescape
+            app.kubernetes.io/component: operator
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+    # kubelet httpGet probes :8080
+    - fromEntities:
+        - host
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+  egress:
+    # DNS resolution (L7 so lookups are visible to Cilium's DNS proxy)
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    - toEntities:
+        - kube-apiserver
+      toPorts:
+        - ports:
+            - port: "6443"
+              protocol: TCP
+    # Control library: github.com/kubescape/regolibrary/releases/... redirects to
+    # release-assets.githubusercontent.com. Newer regolibrary versions also verify
+    # the release checksums against the Sigstore trusted root fetched over TUF.
+    # Requires ndots:1 (HelmRelease postRenderer) for toFQDNs to match.
+    - toFQDNs:
+        - matchName: github.com
+        - matchName: release-assets.githubusercontent.com
+        - matchName: tuf-repo-cdn.sigstore.dev
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/cilium.io/ciliumnetworkpolicy_v2.json
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: kubescape-kubevuln
+spec:
+  # Image CVE matcher (Grype). SBOMs come from the node-agent through the
+  # storage API, so no registry egress is needed. Ingress: scan requests from
+  # the operator on :8080. Egress: the apiserver and the Grype v6 database
+  # (listing + archive both on grype.anchore.io).
+  endpointSelector:
+    matchLabels:
+      io.kubernetes.pod.namespace: kubescape
+      app.kubernetes.io/component: kubevuln
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kubescape
+            app.kubernetes.io/component: operator
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+    # kubelet httpGet probes :8080
+    - fromEntities:
+        - host
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+  egress:
+    # DNS resolution (L7 so lookups are visible to Cilium's DNS proxy)
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    - toEntities:
+        - kube-apiserver
+      toPorts:
+        - ports:
+            - port: "6443"
+              protocol: TCP
+    # Requires ndots:1 (HelmRelease postRenderer) for toFQDNs to match.
+    - toFQDNs:
+        - matchName: grype.anchore.io
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/cilium.io/ciliumnetworkpolicy_v2.json
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: kubescape-storage
+spec:
+  # Aggregated API server (v1beta1.spdx.softwarecomposition.kubescape.io).
+  # Every client reaches it through the kube-apiserver, never directly.
+  # Ingress: aggregation-layer calls from the apiserver (host-networked on the
+  # control plane) to :8443. Egress: delegated authn/authz and the certgen
+  # initContainers' Secret/APIService writes, both against the apiserver.
+  endpointSelector:
+    matchLabels:
+      io.kubernetes.pod.namespace: kubescape
+      app.kubernetes.io/component: storage
+  ingress:
+    # Aggregated API calls + kubelet HTTPS probes on :8443
+    - fromEntities:
+        - kube-apiserver
+        - host
+        - remote-node
+      toPorts:
+        - ports:
+            - port: "8443"
+              protocol: TCP
+  egress:
+    # DNS resolution (L7 so lookups are visible to Cilium's DNS proxy)
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    - toEntities:
+        - kube-apiserver
+      toPorts:
+        - ports:
+            - port: "6443"
+              protocol: TCP
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/cilium.io/ciliumnetworkpolicy_v2.json
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: kubescape-node-agent
+spec:
+  # eBPF sensor DaemonSet (not host-networked, so policy applies). It reads
+  # containers through the hostPath containerd socket, not the network. Ingress:
+  # kubelet probes on :7888. Egress: the apiserver only (profiles, SBOMs and
+  # host data are written through it).
+  endpointSelector:
+    matchLabels:
+      io.kubernetes.pod.namespace: kubescape
+      app.kubernetes.io/component: node-agent
+  ingress:
+    # kubelet httpGet probes :7888
+    - fromEntities:
+        - host
+      toPorts:
+        - ports:
+            - port: "7888"
+              protocol: TCP
+  egress:
+    # DNS resolution (L7 so lookups are visible to Cilium's DNS proxy)
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    - toEntities:
+        - kube-apiserver
+      toPorts:
+        - ports:
+            - port: "6443"
+              protocol: TCP
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/cilium.io/ciliumnetworkpolicy_v2.json
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: kubescape-prometheus-exporter
+spec:
+  # Turns scan summaries into Prometheus metrics. Ingress: Prometheus scrape on
+  # :8080. Egress: the apiserver (reads summaries from the storage API).
+  endpointSelector:
+    matchLabels:
+      io.kubernetes.pod.namespace: kubescape
+      app.kubernetes.io/component: prometheus-exporter
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: o11y
+            app.kubernetes.io/name: prometheus
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+    # kubelet tcpSocket probes :8080
+    - fromEntities:
+        - host
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+  egress:
+    # DNS resolution (L7 so lookups are visible to Cilium's DNS proxy)
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    - toEntities:
+        - kube-apiserver
+      toPorts:
+        - ports:
+            - port: "6443"
+              protocol: TCP
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/cilium.io/ciliumnetworkpolicy_v2.json
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: kubescape-schedulers
+spec:
+  # Daily posture/vulnerability scan CronJobs: a one-shot HTTP POST to the
+  # operator. Nothing connects to them (the cluster floor denies ingress).
+  endpointSelector:
+    matchExpressions:
+      - key: io.kubernetes.pod.namespace
+        operator: In
+        values:
+          - kubescape
+      - key: app.kubernetes.io/component
+        operator: In
+        values:
+          - kubescape-scheduler
+          - kubevuln-scheduler
+  egress:
+    # DNS resolution (L7 so lookups are visible to Cilium's DNS proxy)
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kubescape
+            app.kubernetes.io/component: operator
+      toPorts:
+        - ports:
+            - port: "4002"
+              protocol: TCP
