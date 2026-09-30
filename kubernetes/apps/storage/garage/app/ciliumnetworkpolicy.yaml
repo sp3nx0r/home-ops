@@ -45,6 +45,17 @@ spec:
         - ports:
             - port: "3903"
               protocol: TCP
+    # Admin API :3903 from the chart's post-install/upgrade configure hook,
+    # which carries the same app.kubernetes.io/name label as the server pods
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: storage
+            app.kubernetes.io/name: garage
+            batch.kubernetes.io/job-name: garage-configure
+      toPorts:
+        - ports:
+            - port: "3903"
+              protocol: TCP
     # Intra-cluster RPC :3901 between Garage nodes (self today; future replicas)
     - fromEndpoints:
         - matchLabels:
@@ -77,6 +88,15 @@ spec:
       toPorts:
         - ports:
             - port: "3901"
+              protocol: TCP
+    # Admin API :3903 from the configure hook to the Garage server pods
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: storage
+            app.kubernetes.io/name: garage
+      toPorts:
+        - ports:
+            - port: "3903"
               protocol: TCP
     # Kubernetes API -- [kubernetes_discovery] publishes node metadata for peer
     # discovery (namespace: storage, service_name: garage)
