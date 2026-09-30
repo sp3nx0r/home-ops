@@ -30,6 +30,7 @@ spec:
           enabled: true
           name: headlamp-oidc
           hasScopes: true
+        usePKCE: true
       extraArgs:
         - -oidc-callback-url=https://headlamp.${SECRET_DOMAIN}/oidc-callback
         # Load init-copied plugins from a second dir the pluginsManager sidecar
