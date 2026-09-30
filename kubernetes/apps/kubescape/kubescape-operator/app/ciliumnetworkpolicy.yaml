@@ -278,6 +278,13 @@ spec:
         - ports:
             - port: "6443"
               protocol: TCP
+  egressDeny:
+    # The host sensor probes the cloud metadata endpoint every 5m to detect a
+    # provider; there is none on bare metal. An explicit deny drops it as
+    # POLICY_DENY rather than default-deny POLICY_DENIED, so HubblePolicyDenied
+    # keeps alerting only on unexpected egress.
+    - toCIDR:
+        - 169.254.169.254/32
 ---
 # yaml-language-server: $schema=https://k8s-schemas.home-operations.com/cilium.io/ciliumnetworkpolicy_v2.json
 apiVersion: cilium.io/v2
