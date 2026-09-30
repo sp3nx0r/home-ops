@@ -9,5 +9,6 @@ components:
 
 resources:
   - ./namespace.yaml
+  - ./opencanary/ks.yaml
   - ./pocket-id/ks.yaml
   - ./shared-credentials/ks.yaml

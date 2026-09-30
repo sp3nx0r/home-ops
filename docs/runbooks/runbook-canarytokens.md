@@ -11,6 +11,10 @@
   cluster): a decoy credential was actually _used_ somewhere (AWS API call,
   DNS lookup of the registry hostname, or `kubectl` against the fake cluster).
 
+- **HoneypotTouched** (critical, Loki ruler): something on the LAN connected
+  to the OpenCanary honeypot at 192.168.5.27 (see
+  [HoneypotTouched](#honeypottouched)).
+
 All of these are high-signal: nothing legitimate reads or uses the decoys.
 
 ## What is deployed
@@ -201,6 +205,35 @@ A decoy value left the cluster and was used. This is confirmed exfiltration.
 Correlate the time with the audit log to find who read it: search for the
 Secret name as above, and widen the search to `list` events. Then follow the
 containment steps.
+
+### HoneypotTouched
+
+An OpenCanary honeypot (`kubernetes/apps/security/opencanary/`) listens on
+the LAN at **192.168.5.27**: fake SSH on 22 and a fake NAS login page on 80.
+Nothing legitimate talks to it, so any SSH connection, SSH login attempt, or
+HTTP request fires the critical alert. `externalTrafficPolicy: Local` keeps the
+real client IP in `src_host`.
+
+1. Identify the device behind `src_host` (UniFi → Clients, or the DHCP
+   leases).
+2. Read what it did. Login attempts include the username and password it
+   tried:
+
+    ```logql
+    {namespace="security", container="app", pod=~"opencanary-.+"} |= `"logtype"`
+      | json | logtype >= 2000
+    ```
+
+3. A lone HTTP GET from a known device (for example a phone's
+   network-discovery scan, or a vulnerability scanner you run) is benign.
+   Note it here if it recurs. Credential attempts, or any scanning from a
+   server or IoT device, point to a compromised host: isolate it at the switch
+   or UniFi, then investigate.
+
+The pod runs as nobody with a read-only rootfs, no ServiceAccount token, and
+a CiliumNetworkPolicy that allows ingress only from RFC 1918 sources on the
+two ports and no egress beyond DNS. To drop the honeypot, remove
+`./opencanary/ks.yaml` from `kubernetes/apps/security/kustomization.yaml`.
 
 ## Rotation
 
