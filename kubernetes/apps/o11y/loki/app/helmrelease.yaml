@@ -71,7 +71,10 @@ spec:
           type: local
           local:
             directory: /rules
-        alertmanager_url: http://kube-prometheus-stack-alertmanager.o11y.svc.cluster.local:9093
+        # SRV discovery on the headless Service so every Alertmanager replica
+        # receives each alert (HA peers dedupe notifications, not alerts).
+        alertmanager_url: dnssrvnoa+http://_http-web._tcp.alertmanager-operated.o11y.svc.cluster.local
+        enable_alertmanager_discovery: true
         external_labels:
           source: loki-ruler
 
