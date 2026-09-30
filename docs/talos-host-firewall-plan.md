@@ -166,6 +166,16 @@ which breaks scraping. So the firewall rule
 the real control. `control-plane/00-cluster.yaml` is left untouched. It would
 also need per-node templating (`.tpl`), and other branches edit that file.
 
+## Decisions
+
+- **apid admin source: `192.168.5.181/32` only.** This is the sole admin
+  workstation, and it has a DHCP reservation/static address. No other VLAN or
+  VPN client needs apid. The reservation is a rollout prerequisite (see
+  pre-flight).
+- **kube-apiserver 6443 stays open to all of `192.168.5.0/24`**, plus the pod
+  CIDR. It's authenticated (certs/OIDC), and LAN kubectl clients shouldn't
+  need firewall edits.
+
 ## Port matrix
 
 Node set = `192.168.5.50/32`, `.51/32`, `.52/32`. Pods = `10.42.0.0/16`.
@@ -204,6 +214,8 @@ Prometheus) last.
 ```sh
 # Pre-flight (from the admin workstation, 192.168.5.181)
 ip -4 addr | grep 192.168.5.181          # rules assume this source IP
+# Confirm the UniFi DHCP reservation (or static config) for the workstation
+# still pins 192.168.5.181 before applying; apid is allowed from it only.
 talosctl -n 192.168.5.50,192.168.5.51,192.168.5.52 etcd status
 kubectl get nodes; kubectl -n kube-system exec ds/cilium -c cilium-agent -- cilium-dbg status | grep 'Cluster health'
 just talos diff                          # expect only the 9 new documents per node
@@ -301,7 +313,8 @@ the same reviewed diff.
   files, run `just talos render`, and apply that config the same way.
 - **Workstation IP changed** (the rules pin `192.168.5.181`): set the
   workstation, or any laptop, to `192.168.5.181` statically on the
-  `192.168.5.0/24` LAN. Better: add a DHCP reservation in UniFi now.
+  `192.168.5.0/24` LAN. It's normally pinned by a DHCP reservation, so this
+  only happens if the reservation is lost or the NIC changes.
 - **Kube API works but no apid path works:** the in-cluster Talos API
   (`kubernetesTalosAPIAccess`, `os:admin`, `system-upgrade` namespace) is
   allowed from the pod CIDR. Run a `talosctl` pod there with a
