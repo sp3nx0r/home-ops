@@ -72,6 +72,11 @@ spec:
           - name: flux
             source: https://artifacthub.io/packages/headlamp/headlamp-plugins/headlamp_flux
             version: 0.7.0
+          # Compliance, vulnerability and relevancy views over the Kubescape
+          # storage API (read access via kubescape-results-view -> view).
+          - name: kubescape
+            source: https://artifacthub.io/packages/headlamp/kubescape-headlamp-plugin/headlamp_kubescape
+            version: 0.11.2
         installOptions:
           parallel: true
           maxConcurrent: 2

@@ -1,0 +1,23 @@
+---
+# yaml-language-server: $schema=https://json.schemastore.org/kustomization
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ./ciliumnetworkpolicy.yaml
+  - ./clusterrole.yaml
+  - ./helmrelease.yaml
+  - ./helmrepository.yaml
+  - ./prometheusrule.yaml
+configMapGenerator:
+  # Vendored from kubescape/prometheus-exporter@369139f1ad46271bd1bfe482caf0a0b471cbf73b
+  # (dashboards/grafana_dashboard.json).
+  - name: grafana-dashboard-kubescape
+    files:
+      - ./dashboards/kubescape-overview.json
+    options:
+      labels:
+        grafana_dashboard: "1"
+      annotations:
+        grafana_folder: Security
+generatorOptions:
+  disableNameSuffixHash: true

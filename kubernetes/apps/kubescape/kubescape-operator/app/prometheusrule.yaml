@@ -1,0 +1,99 @@
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/monitoring.coreos.com/prometheusrule_v1.json
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: kubescape
+spec:
+  groups:
+    - name: kubescape.rules
+      rules:
+        - alert: KubescapeStorageAPIServiceUnavailable
+          expr: |-
+            max by (name) (
+              aggregator_unavailable_apiservice{name="v1beta1.spdx.softwarecomposition.kubescape.io"}
+            ) == 1
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: >-
+              Kubescape storage APIService is unavailable
+            description: >-
+              The kube-apiserver reports v1beta1.spdx.softwarecomposition.kubescape.io as
+              unavailable. API discovery is degraded while it stays down, which breaks
+              Flux dry-runs, `kubectl api-resources` and anything else that walks every
+              API group. Check the storage pod and its PVC in the kubescape namespace.
+            runbook_url: >-
+              https://github.com/sp3nx0r/home-ops/blob/main/docs/kubescape.md#storage-apiservice-unavailable
+
+        - alert: KubescapeStorageAPIServiceUnavailableCritical
+          expr: |-
+            max by (name) (
+              aggregator_unavailable_apiservice{name="v1beta1.spdx.softwarecomposition.kubescape.io"}
+            ) == 1
+          for: 30m
+          labels:
+            severity: critical
+          annotations:
+            summary: >-
+              Kubescape storage APIService has been unavailable for 30+ minutes
+            description: >-
+              API discovery has been degraded for over 30 minutes. If the storage pod
+              cannot be recovered, suspend the kubescape HelmRelease and delete the
+              APIService to restore discovery for Flux.
+            runbook_url: >-
+              https://github.com/sp3nx0r/home-ops/blob/main/docs/kubescape.md#storage-apiservice-unavailable
+
+        - alert: KubescapeComponentDown
+          expr: |-
+            kube_deployment_status_replicas_available{namespace="kubescape"}
+              < kube_deployment_spec_replicas{namespace="kubescape"}
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: >-
+              Kubescape {{ $labels.deployment }} is not available
+            description: >-
+              Deployment kubescape/{{ $labels.deployment }} has had fewer available replicas
+              than desired for more than 15 minutes.
+
+        - alert: KubescapeNodeAgentUnavailable
+          expr: |-
+            kube_daemonset_status_number_unavailable{namespace="kubescape", daemonset="node-agent"} > 0
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: >-
+              Kubescape node-agent is unavailable on {{ $value }} node(s)
+            description: >-
+              Without the node-agent on a node, SBOMs, relevancy and host posture data for
+              that node stop updating.
+
+        - alert: KubescapeScanStale
+          expr: |-
+            time() - kube_cronjob_status_last_successful_time{namespace="kubescape"} > 26 * 3600
+          for: 30m
+          labels:
+            severity: warning
+          annotations:
+            summary: >-
+              Kubescape {{ $labels.cronjob }} has not succeeded in over a day
+            description: >-
+              The daily scan trigger {{ $labels.cronjob }} has not completed successfully in
+              more than 26 hours, so posture or vulnerability results are going stale.
+
+        - alert: KubescapeExporterTargetDown
+          expr: |-
+            max by (namespace, service) (up{namespace="kubescape", service="prometheus-exporter"}) == 0
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: >-
+              Prometheus cannot scrape the Kubescape exporter
+            description: >-
+              The kubescape/prometheus-exporter target has been unreachable for more than
+              15 minutes; the Kubescape dashboard is not updating.

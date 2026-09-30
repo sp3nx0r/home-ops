@@ -22,11 +22,24 @@
       customType: "regex",
       managerFilePatterns: ["/kubernetes/apps/o11y/headlamp/app/helmrelease\\.yaml$/"],
       matchStrings: [
-        "- name: (?<depName>\\S+)\\n\\s+source: \\S+\\n\\s+version: (?<currentValue>\\S+)",
+        "- name: (?<depName>\\S+)\\n\\s+source: \\S+/headlamp-plugins/\\S+\\n\\s+version: (?<currentValue>\\S+)",
       ],
       datasourceTemplate: "github-releases",
       packageNameTemplate: "headlamp-k8s/plugins",
       extractVersionTemplate: "^{{{depName}}}-(?<version>.+)$",
+      versioningTemplate: "semver",
+    },
+    {
+      // The Kubescape Headlamp plugin lives in its own Artifact Hub repo and is
+      // released as vX.Y.Z tags in kubescape/headlamp-plugin.
+      customType: "regex",
+      managerFilePatterns: ["/kubernetes/apps/o11y/headlamp/app/helmrelease\\.yaml$/"],
+      matchStrings: [
+        "- name: (?<depName>kubescape)\\n\\s+source: \\S+/kubescape-headlamp-plugin/\\S+\\n\\s+version: (?<currentValue>\\S+)",
+      ],
+      datasourceTemplate: "github-releases",
+      packageNameTemplate: "kubescape/headlamp-plugin",
+      extractVersionTemplate: "^v(?<version>.+)$",
       versioningTemplate: "semver",
     },
   ],

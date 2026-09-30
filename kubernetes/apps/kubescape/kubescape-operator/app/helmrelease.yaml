@@ -1,0 +1,177 @@
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/helm.toolkit.fluxcd.io/helmrelease_v2.json
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: kubescape
+spec:
+  chart:
+    spec:
+      chart: kubescape-operator
+      version: 1.40.4
+      sourceRef:
+        kind: HelmRepository
+        name: kubescape
+  interval: 1h
+  values:
+    clusterName: homelab
+    # Scan kube-system too: it holds the most privileged workloads.
+    excludeNamespaces: kubescape,kube-public,kube-node-lease
+    # Frameworks for the startup scan and exception-triggered rescans; the daily
+    # CronJob below names the same set explicitly.
+    defaultFrameworks:
+      - nsa
+      - mitre
+      - cis-v1.12.0
+      - security
+    # Posture + vulnerabilities + relevancy only. Runtime detection (planned:
+    # Tetragon) and admission enforcement (planned: Kyverno) stay off, and CNPs
+    # are hand-authored, so the node-agent is only used for SBOMs, host sensing
+    # and runtime relevancy.
+    capabilities:
+      configurationScan: enable
+      # Also gates storage of detailed WorkloadConfigurationScan objects; without
+      # it only the summaries are refreshed.
+      continuousScan: enable
+      nodeScan: enable
+      vulnerabilityScan: enable
+      nodeSbomGeneration: enable
+      relevancy: enable
+      runtimeObservability: enable
+      vexGeneration: enable
+      prometheusExporter: enable
+      admissionController: disable
+      autoUpgrading: disable
+      httpDetection: disable
+      malwareDetection: disable
+      manageWorkloads: disable
+      networkEventsStreaming: disable
+      networkPolicyService: disable
+      nodeProfileService: disable
+      remediation: disable
+      riskAcceptance: disable
+      runtimeDetection: disable
+      seccompProfileService: disable
+    # An empty watch set keeps continuousScan from rescanning on every resource
+    # event; the daily scheduled scan still persists detailed results.
+    continuousScanning:
+      matchingRules:
+        match: []
+        namespaces: []
+    certificates:
+      # Generates the storage mTLS certs at runtime and reuses the CA Secret, so
+      # Flux upgrades don't rotate them.
+      strategy: initContainer
+      certgen:
+        image:
+          repository: quay.io/kubescape/kubectl
+          tag: 1.36.1@sha256:e2b97dde9666986c61c56d49aae85a714b89b69392baa531438e74ec34096fb4
+    global:
+      # Node-agent SBOMs remove the need to read image pull secrets cluster-wide.
+      enableClusterWideSecretAccess: false
+    kubescape:
+      image:
+        repository: quay.io/kubescape/kubescape
+        tag: v4.0.13@sha256:58651dce3376309cd9a064021c4b1f0655ab307631ee4259f5a531e7dcb44cc2
+      skipUpdateCheck: true
+    kubescapeScheduler:
+      image:
+        repository: quay.io/kubescape/http-request
+        tag: v0.2.23@sha256:4ff502a33423cd362b7fd70e98b0ac2121799fb7df22d7def326e528cbec5685
+      # Posture and vulnerability scans are staggered: both write heavily to the
+      # storage component's single-writer SQLite database.
+      scanSchedule: "0 5 * * *"
+      requestBody:
+        commands:
+          - CommandName: kubescapeScan
+            args:
+              scanV1:
+                keepLocal: true
+                targetType: framework
+                targetNames:
+                  - nsa
+                  - mitre
+                  - cis-v1.12.0
+                  - security
+    kubevulnScheduler:
+      image:
+        repository: quay.io/kubescape/http-request
+        tag: v0.2.23@sha256:4ff502a33423cd362b7fd70e98b0ac2121799fb7df22d7def326e528cbec5685
+      scanSchedule: "0 1 * * *"
+    # Template for operator-created registry-scan CronJobs (unused, pinned anyway).
+    registryScanScheduler:
+      image:
+        repository: quay.io/kubescape/http-request
+        tag: v0.2.23@sha256:4ff502a33423cd362b7fd70e98b0ac2121799fb7df22d7def326e528cbec5685
+    operator:
+      image:
+        repository: quay.io/kubescape/operator
+        tag: v0.2.169@sha256:01b2694425e935018daf5d2aee1fb6f7fa110160ea99f22ac98c1786a645dd3b
+    kubevuln:
+      image:
+        repository: quay.io/kubescape/kubevuln
+        tag: v0.3.430@sha256:9bed2f723ea09807ea31d656018feca35c8cb49eb4707006ae890b01f8830e28
+      config:
+        grypeDbPersistence: true
+      resources:
+        requests:
+          cpu: 100m
+          memory: 512Mi
+          ephemeral-storage: 2Gi
+        limits:
+          memory: 3Gi
+          ephemeral-storage: 10Gi
+    storage:
+      image:
+        repository: quay.io/kubescape/storage
+        tag: v0.0.331@sha256:01f2b053ace1f276a1f46fcf41eaee58cf0f43d59e667c0d6a27b2920fd44ba1
+      resources:
+        requests:
+          cpu: 200m
+          memory: 400Mi
+        limits:
+          memory: 1500Mi
+    nodeAgent:
+      image:
+        repository: quay.io/kubescape/node-agent
+        tag: v0.3.219@sha256:2044ed750f5e20a7c5150479963e2b33108c304a40d526c0de7ed412495467c6
+      resources:
+        requests:
+          cpu: 100m
+          memory: 600Mi
+        limits:
+          memory: 1400Mi
+    prometheusExporter:
+      image:
+        repository: quay.io/kubescape/prometheus-exporter
+        tag: v0.2.23@sha256:dddc28ca3d46918cb6e68097f76f6af20a8c05e401118692d06041b401903c7f
+      enableWorkloadMetrics: true
+      serviceMonitor:
+        enabled: true
+  postRenderers:
+    - kustomize:
+        patches:
+          # The exporter emits its own `namespace`/`workload` labels; without
+          # honorLabels Prometheus renames them to exported_* and every series
+          # is attributed to the kubescape namespace.
+          - target:
+              group: monitoring.coreos.com
+              kind: ServiceMonitor
+              name: prometheus-exporter
+            patch: |
+              - op: add
+                path: /spec/endpoints/0/honorLabels
+                value: true
+          # The chart has no dnsConfig value. Under the default ndots:5, CoreDNS
+          # autopath answers the first search-path query with a CNAME, so the
+          # toFQDNs rules in ciliumnetworkpolicy.yaml never match.
+          - target:
+              kind: Deployment
+              name: kubescape|kubevuln
+            patch: |
+              - op: add
+                path: /spec/template/spec/dnsConfig
+                value:
+                  options:
+                    - name: ndots
+                      value: "1"

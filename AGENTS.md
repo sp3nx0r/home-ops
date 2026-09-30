@@ -56,19 +56,20 @@ kubernetes/apps/<namespace>/<app-name>/
 
 ### Namespaces
 
-| Namespace          | Purpose                                                    |
-| ------------------ | ---------------------------------------------------------- |
-| `media`            | Media stack — Plex, Sonarr, Radarr, qBittorrent, etc.      |
-| `network`          | Ingress, DNS, tunnels — Envoy Gateway, Cloudflare, CoreDNS |
-| `o11y`             | Observability — Grafana, Loki, Prometheus, Kromgo, Vector  |
-| `security`         | Auth — Pocket ID (OIDC)                                    |
-| `storage`          | Distributed storage — Garage (S3)                          |
-| `cert-manager`     | TLS certificate automation                                 |
-| `external-secrets` | External secret management                                 |
-| `kube-system`      | Core cluster services — Cilium, CoreDNS, metrics-server    |
-| `flux-system`      | Flux controllers and bootstrap                             |
-| `volsync-system`   | Volsync backup operator                                    |
-| `default`          | Misc tools — IT-Tools, Ollama, SearXNG, OpenWebUI          |
+| Namespace          | Purpose                                                                                 |
+| ------------------ | --------------------------------------------------------------------------------------- |
+| `media`            | Media stack — Plex, Sonarr, Radarr, qBittorrent, etc.                                   |
+| `network`          | Ingress, DNS, tunnels — Envoy Gateway, Cloudflare, CoreDNS                              |
+| `o11y`             | Observability — Grafana, Loki, Prometheus, Kromgo, Vector                               |
+| `security`         | Auth — Pocket ID (OIDC)                                                                 |
+| `kubescape`        | Posture + vulnerability scanning — Kubescape Operator (PSA `privileged` for node-agent) |
+| `storage`          | Distributed storage — Garage (S3)                                                       |
+| `cert-manager`     | TLS certificate automation                                                              |
+| `external-secrets` | External secret management                                                              |
+| `kube-system`      | Core cluster services — Cilium, CoreDNS, metrics-server                                 |
+| `flux-system`      | Flux controllers and bootstrap                                                          |
+| `volsync-system`   | Volsync backup operator                                                                 |
+| `default`          | Misc tools — IT-Tools, Ollama, SearXNG, OpenWebUI                                       |
 
 ### Reusable Components
 
