@@ -366,17 +366,18 @@ queries.
       `email_verified` rule locks them out).
 5. **After #554 merges:** reword its S2 descriptions (see above).
 
-## Open questions
+## Decisions
 
-1. Exec through OIDC: none (recommended), or a namespaced RoleBinding for
-   `media`/`download`?
-2. Keep the Pocket ID group name `k8s_admins` (no Pocket ID change needed), or
-   rename it to `k8s_operators` to match the role? Renaming needs a Pocket ID
-   edit and a binding edit in lockstep.
-3. Enable `config.oidc.usePKCE: true` in Headlamp as a follow-up?
-4. Is viewing Secrets in Headlamp (e.g. `media/autobrr-volsync-secret`)
-   something you do regularly? After this change, use the cert kubeconfig or
-   the SOPS file in Git instead.
+1. Exec/port-forward through OIDC: **none**. Use the talosctl admin
+   kubeconfig for exec.
+2. Keep the Pocket ID group name `k8s_admins`; no rename.
+3. Headlamp PKCE: **enabled**. `config.oidc.usePKCE: true` makes the chart pass
+   `-oidc-use-pkce=$(OIDC_USE_PKCE)`, and in `externalSecret` mode that env var
+   comes from `headlamp-oidc`, so the Secret carries `OIDC_USE_PKCE: "true"`.
+   Without the key Headlamp gets the literal `$(OIDC_USE_PKCE)` and fails to
+   start.
+4. Losing Secret views in Headlamp is accepted. Use the cert kubeconfig or the
+   SOPS file in Git instead.
 
 [fg-sac]: https://kubernetes.io/docs/reference/command-line-tools-reference/feature-gates/
 [k8s-authn]: https://kubernetes.io/docs/reference/access-authn-authz/authentication/#using-authentication-configuration
