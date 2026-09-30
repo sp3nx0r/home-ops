@@ -45,7 +45,7 @@ spec:
         size: 5Gi
         storageClass: iscsi
       data:
-        size: 50Gi
+        size: 1Ti
         storageClass: iscsi
 
     service:

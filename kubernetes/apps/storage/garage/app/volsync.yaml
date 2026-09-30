@@ -88,7 +88,7 @@ spec:
       - ReadWriteOnce
     cacheCapacity: 5Gi
     cacheStorageClassName: iscsi
-    capacity: 50Gi
+    capacity: 1Ti
     cleanupCachePVC: true
     cleanupTempPVC: true
     copyMethod: Snapshot
