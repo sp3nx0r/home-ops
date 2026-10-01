@@ -24,6 +24,14 @@ b2_buckets:
     noncurrent_version_expiration_days: 30
     abort_multipart_days: 7
 
+  # talos-backup writes a uniquely named object per etcd snapshot, so retention
+  # comes from hiding current versions (30d), not noncurrent expiry.
+  - name: sp3nx0r-homelab-etcd
+    versioning: true
+    current_version_expiration_days: 30
+    noncurrent_version_expiration_days: 1
+    abort_multipart_days: 7
+
   - name: sp3nx0r-homelab-kopia
     versioning: true
     noncurrent_version_expiration_days: 1

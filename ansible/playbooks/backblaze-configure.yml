@@ -53,6 +53,9 @@
             except s3.exceptions.ClientError:
               rules = []
             managed = {'noncurrent-version-cleanup', 'abort-incomplete-multipart'}
+            {% if item.current_version_expiration_days is defined %}
+            managed |= {'current-version-expiration', 'current-version-expiration_marker'}
+            {% endif %}
             kept = [r for r in rules if r['ID'] in managed]
             if len(kept) < len(rules):
               if kept:
@@ -66,6 +69,50 @@
       register: _b2_purge
       changed_when: "'purged' in _b2_purge.stdout"
       loop: "{{ b2_buckets }}"
+      loop_control:
+        label: "{{ item.name }}"
+      tags: [lifecycle]
+
+    # B2 only accepts an Expiration-by-days rule together with an
+    # ExpiredObjectDeleteMarker rule on the same prefix, so both are written in
+    # one PUT (community.aws.s3_lifecycle would PUT them one at a time).
+    - name: Configure current version expiration rule
+      no_log: true
+      ansible.builtin.command:
+        argv:
+          - "{{ ansible_playbook_python }}"
+          - "-c"
+          - |
+            import boto3
+            s3 = boto3.client('s3',
+              endpoint_url='{{ b2_endpoint }}',
+              region_name='{{ b2_region }}',
+              aws_access_key_id='{{ b2_access_key_id }}',
+              aws_secret_access_key='{{ b2_secret_access_key }}')
+            bucket = '{{ item.name }}'
+            days = {{ item.current_version_expiration_days | int }}
+            try:
+              rules = s3.get_bucket_lifecycle_configuration(Bucket=bucket)['Rules']
+            except s3.exceptions.ClientError:
+              rules = []
+            by_id = {r['ID']: r for r in rules}
+            current = by_id.get('current-version-expiration', {}).get('Expiration', {}).get('Days')
+            if current == days and 'current-version-expiration_marker' in by_id:
+              print('clean')
+            else:
+              ids = {'current-version-expiration', 'current-version-expiration_marker'}
+              desired = [r for r in rules if r['ID'] not in ids] + [
+                {'ID': 'current-version-expiration', 'Filter': {'Prefix': ''},
+                 'Status': 'Enabled', 'Expiration': {'Days': days}},
+                {'ID': 'current-version-expiration_marker', 'Filter': {'Prefix': ''},
+                 'Status': 'Enabled', 'Expiration': {'ExpiredObjectDeleteMarker': True}},
+              ]
+              s3.put_bucket_lifecycle_configuration(Bucket=bucket,
+                LifecycleConfiguration={'Rules': desired})
+              print('changed')
+      register: _b2_expiration
+      changed_when: "'changed' in _b2_expiration.stdout"
+      loop: "{{ b2_buckets | selectattr('current_version_expiration_days', 'defined') | list }}"
       loop_control:
         label: "{{ item.name }}"
       tags: [lifecycle]

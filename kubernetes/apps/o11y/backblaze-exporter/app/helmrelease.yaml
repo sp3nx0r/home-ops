@@ -31,6 +31,7 @@ spec:
                   "sp3nx0r-backups-archive": [""],
                   "sp3nx0r-backups-truenas-config": [""],
                   "sp3nx0r-homelab": [""],
+                  "sp3nx0r-homelab-etcd": [""],
                   "sp3nx0r-homelab-kopia": [""],
                   "sp3nx0r-media": [""]
                 }

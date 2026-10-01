@@ -1,0 +1,55 @@
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/monitoring.coreos.com/prometheusrule_v1.json
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: etcd-backup
+spec:
+  groups:
+    - name: etcd-backup.rules
+      rules:
+        # Schedule is every 6h; alert at 2x the interval. Individual failed
+        # runs are already covered by the default KubeJobFailed rule.
+        - alert: EtcdBackupStale
+          expr: |-
+            time() - kube_cronjob_status_last_successful_time{namespace="system-upgrade", cronjob="etcd-backup"} > 12 * 60 * 60
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: >-
+              etcd snapshot backup has not succeeded in the last 12 hours
+            description: >-
+              CronJob system-upgrade/etcd-backup last completed successfully
+              {{ $value | humanizeDuration }} ago. Check the job logs, the
+              etcd-backup-talos Talos ServiceAccount status, and the B2
+              application key.
+
+        - alert: EtcdBackupNeverSucceeded
+          expr: |-
+            absent(kube_cronjob_status_last_successful_time{namespace="system-upgrade", cronjob="etcd-backup"})
+          for: 12h
+          labels:
+            severity: warning
+          annotations:
+            summary: >-
+              etcd snapshot backup has no successful run on record
+            description: >-
+              kube-state-metrics reports no lastSuccessfulTime for CronJob
+              system-upgrade/etcd-backup for 12 hours: it has never succeeded,
+              or the CronJob no longer exists.
+
+        # End-to-end check that objects actually land offsite. The exporter
+        # refreshes hourly and reports milliseconds despite the metric name.
+        - alert: EtcdBackupOffsiteStale
+          expr: |-
+            (time() * 1000 - backblaze_b2_path_last_upload_seconds{bucket="sp3nx0r-homelab-etcd"}) / 1000 > 13 * 60 * 60
+          for: 30m
+          labels:
+            severity: warning
+          annotations:
+            summary: >-
+              No etcd snapshot has reached B2 in the last 13 hours
+            description: >-
+              The newest object in sp3nx0r-homelab-etcd is older than 13 hours,
+              even though snapshots are uploaded every 6 hours.

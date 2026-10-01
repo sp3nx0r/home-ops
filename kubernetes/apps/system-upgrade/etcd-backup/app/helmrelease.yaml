@@ -1,0 +1,86 @@
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/helm.toolkit.fluxcd.io/helmrelease_v2.json
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: etcd-backup
+spec:
+  chartRef:
+    kind: OCIRepository
+    name: etcd-backup
+  interval: 1h
+  values:
+    controllers:
+      etcd-backup:
+        type: cronjob
+        cronjob:
+          schedule: "15 */6 * * *"
+          timeZone: America/Chicago
+          concurrencyPolicy: Forbid
+          startingDeadlineSeconds: 3600
+          activeDeadlineSeconds: 1800
+          backoffLimit: 2
+          successfulJobsHistory: 1
+          failedJobsHistory: 2
+        pod:
+          restartPolicy: Never
+        containers:
+          app:
+            # Untagged main build: v0.1.0-beta.3 (the last tag) predates the
+            # minio-go S3 client, zstd compression, and multi-recipient age.
+            image:
+              repository: ghcr.io/siderolabs/talos-backup
+              tag: v0.1.0-beta.3-10-gb9fd478@sha256:7fc186ff37a3137f470082cb609bf1dc3bcece13dd9a6421ec09cfdf4f33ae6c
+            workingDir: /tmp
+            env:
+              # Needed by the Talos client to resolve its config paths; the
+              # scratch image has no passwd entry for the uid.
+              HOME: /tmp
+              TALOSCONFIG: /var/run/secrets/talos.dev/config
+              CLUSTER_NAME: kubernetes
+              CUSTOM_S3_ENDPOINT: https://s3.us-west-000.backblazeb2.com
+              AWS_REGION: us-west-000
+              USE_PATH_STYLE: "true"
+              BUCKET: sp3nx0r-homelab-etcd
+              ENABLE_COMPRESSION: "true"
+              # Comma-separated. The first is the repo's SOPS recipient (age.key);
+              # append an offline recipient here to survive loss of that key.
+              AGE_RECIPIENT_PUBLIC_KEY: age1j8auc0sy76etmugnrnqv7j0v9de5l9ffswnqj7ndrzqndh5rdpjq5atgj8
+            envFrom:
+              - secretRef:
+                  name: etcd-backup-secret
+            securityContext:
+              allowPrivilegeEscalation: false
+              readOnlyRootFilesystem: true
+              capabilities: { drop: ["ALL"] }
+            resources:
+              requests:
+                cpu: 10m
+                memory: 64Mi
+              limits:
+                memory: 256Mi
+    defaultPodOptions:
+      automountServiceAccountToken: false
+      # Keeps the B2 endpoint lookup un-search-pathed so the toFQDNs rule in
+      # ciliumnetworkpolicy.yaml matches (see #548).
+      dnsConfig:
+        options:
+          - name: ndots
+            value: "1"
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
+    persistence:
+      tmp:
+        type: emptyDir
+        sizeLimit: 2Gi
+        globalMounts:
+          - path: /tmp
+      talos:
+        type: secret
+        name: etcd-backup-talos
+        globalMounts:
+          - path: /var/run/secrets/talos.dev
+            readOnly: true
