@@ -74,6 +74,28 @@ spec:
 
     gateway:
       enabled: true
+      verboseLogging: false
+      image:
+        registry: docker.io
+        repository: nginxinc/nginx-unprivileged
+        tag: 1.31-alpine@sha256:26b0bf6fbf07297983cb341998d79c831508787de26627dd2a112321b9c3a4af
+      resources:
+        requests:
+          cpu: 10m
+          memory: 32Mi
+        limits:
+          memory: 64Mi
+      metrics:
+        image:
+          registry: ghcr.io
+          repository: jkroepke/access-log-exporter
+          tag: 0.4.21@sha256:3cb30dcc03071b3f35ff06b1ed426ae712acb351469dc6349ced68d4ba18c54a
+        resources:
+          requests:
+            cpu: 10m
+            memory: 48Mi
+          limits:
+            memory: 96Mi
 
     backend:
       replicas: 0
