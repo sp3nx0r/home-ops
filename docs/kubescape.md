@@ -42,7 +42,7 @@ hand-authored CNPs.
 | `storage`             | Deployment | Aggregated API server `v1beta1.spdx.softwarecomposition.kubescape.io`, SQLite on a PVC.                | restricted-compliant                                                      |
 | `node-agent`          | DaemonSet  | eBPF sensor: SBOMs from container rootfs, runtime relevancy profiles, host sensing (kubelet/OS/ports). | **hostPID, hostPath `/`, SYS_ADMIN/SYS_PTRACE/NET_ADMIN/…, runs as root** |
 | `prometheus-exporter` | Deployment | Converts scan summaries into `kubescape_*` metrics.                                                    | restricted-compliant                                                      |
-| schedulers            | CronJobs   | Daily HTTP POST to the operator.                                                                       | restricted-compliant                                                      |
+| schedulers            | CronJobs   | Weekly HTTP POST to the operator.                                                                      | restricted-compliant                                                      |
 
 The node-agent is the only reason the namespace is `privileged`. It has no
 network access beyond the apiserver (see [Network policy](#network-policy)).
@@ -82,9 +82,11 @@ Other hardening:
 - `excludeNamespaces: kubescape,kube-public,kube-node-lease` — `kube-system`
   **is** scanned (the chart excludes it by default). The `kubescape` namespace
   itself is not scanned.
-- Frameworks: `nsa`, `mitre`, `cis-v1.12.0`, `security` (daily scan and
+- Frameworks: `nsa`, `mitre`, `cis-v1.12.0`, `security` (weekly scan and
   `defaultFrameworks` for the startup scan).
-- Posture `0 5 * * *`, vulnerabilities `0 1 * * *`. They are staggered because
+- Posture `0 5 * * 0`, vulnerabilities `0 1 * * 0` (Sundays, UTC). They are
+  weekly because storage's SQLite database sits on the HDD-backed iSCSI pool,
+  and sync-heavy load there slows every other zvol. They are staggered because
   both write heavily to storage's single-writer SQLite database.
 
 ## Viewing results

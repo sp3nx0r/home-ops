@@ -17,7 +17,7 @@ spec:
     clusterName: homelab
     # Scan kube-system too: it holds the most privileged workloads.
     excludeNamespaces: kubescape,kube-public,kube-node-lease
-    # Frameworks for the startup scan and exception-triggered rescans; the daily
+    # Frameworks for the startup scan and exception-triggered rescans; the weekly
     # CronJob below names the same set explicitly.
     defaultFrameworks:
       - nsa
@@ -53,7 +53,7 @@ spec:
       runtimeDetection: disable
       seccompProfileService: disable
     # An empty watch set keeps continuousScan from rescanning on every resource
-    # event; the daily scheduled scan still persists detailed results.
+    # event; the weekly scheduled scan still persists detailed results.
     continuousScanning:
       matchingRules:
         match: []
@@ -78,9 +78,9 @@ spec:
       image:
         repository: quay.io/kubescape/http-request
         tag: v0.2.23@sha256:4ff502a33423cd362b7fd70e98b0ac2121799fb7df22d7def326e528cbec5685
-      # Posture and vulnerability scans are staggered: both write heavily to the
-      # storage component's single-writer SQLite database.
-      scanSchedule: "0 5 * * *"
+      # Weekly, and staggered after the vulnerability scan: both write heavily to
+      # the storage component's single-writer SQLite database on HDD-backed iSCSI.
+      scanSchedule: "0 5 * * 0"
       requestBody:
         commands:
           - CommandName: kubescapeScan
@@ -97,7 +97,7 @@ spec:
       image:
         repository: quay.io/kubescape/http-request
         tag: v0.2.23@sha256:4ff502a33423cd362b7fd70e98b0ac2121799fb7df22d7def326e528cbec5685
-      scanSchedule: "0 1 * * *"
+      scanSchedule: "0 1 * * 0"
     # Template for operator-created registry-scan CronJobs (unused, pinned anyway).
     registryScanScheduler:
       image:
