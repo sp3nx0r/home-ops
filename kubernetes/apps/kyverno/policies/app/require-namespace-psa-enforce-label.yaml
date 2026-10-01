@@ -15,13 +15,11 @@ metadata:
       posture is never left implicit. System and operator-managed namespaces
       that cannot carry the label are excluded.
 spec:
-  # Start in report-only mode (Audit records a PolicyReport, Warn returns an
-  # API warning). Flip to `Deny` once every in-scope namespace carries the
-  # label — notably `media`, which is deferred until the qbittorrent-gluetun
-  # split lands.
+  # Deny rejects the request; Audit keeps PolicyReports populated. Deny and
+  # Warn are mutually exclusive in the admission API.
   validationActions:
+    - Deny
     - Audit
-    - Warn
   # Evaluate existing namespaces in the background so violations show up in
   # PolicyReports without a create/update event.
   evaluation:
