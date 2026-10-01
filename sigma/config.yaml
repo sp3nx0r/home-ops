@@ -1,0 +1,93 @@
+---
+# Sigma -> Loki ruler generation config, read by scripts/sigma-to-loki.py.
+# See docs/loki-ruler-detections.md for the workflow.
+
+# Upstream SigmaHQ rules are vendored into sigma/vendor/sigmahq/ at this commit
+# (`just sigma vendor`). Bump `ref`, re-vendor, re-tune, regenerate.
+sigmahq:
+  repo: SigmaHQ/sigma
+  ref: 07ec293a51695cb1131a2e05260247872b31e1e1 # master @ 2026-09-25
+  rules:
+    - rules/application/kubernetes/audit/kubernetes_audit_change_admission_controller.yml
+    - rules/application/kubernetes/audit/kubernetes_audit_cronjob_modification.yml
+    - rules/application/kubernetes/audit/kubernetes_audit_deployment_deleted.yml
+    - rules/application/kubernetes/audit/kubernetes_audit_pod_in_system_namespace.yml
+    - rules/application/kubernetes/audit/kubernetes_audit_rolebinding_modification.yml
+    - rules/application/kubernetes/audit/kubernetes_audit_secrets_enumeration.yml
+    - rules/application/kubernetes/audit/kubernetes_audit_secrets_modified_or_deleted.yml
+    - rules/application/kubernetes/audit/kubernetes_audit_serviceaccount_creation.yml
+    - rules/application/kubernetes/audit/kubernetes_audit_sidecar_injection.yml
+    - rules/application/kubernetes/audit/kubernetes_audit_unauthorized_unauthenticated_actions.yml
+  # Not adopted -- the data they need never reaches Loki, or they are broken:
+  #   kubernetes_audit_events_deleted            Vector drops `events` audit records.
+  #   kubernetes_audit_exec_into_container       verb=create only; misses WebSocket exec (verb get).
+  #                                              Replaced by homelab interactive-pod-access rules.
+  #   kubernetes_audit_hostpath_mount            needs the pod spec; pods are audited at Metadata.
+  #   kubernetes_audit_privileged_pod_creation   needs the pod spec; pods are audited at Metadata.
+  #   kubernetes_audit_rbac_permisions_listing   selfsubjectrulesreviews are audit level None.
+  #   kubernetes_audit_potential_enumeration_activity
+  #                                              matches responseStatus.code "ALLOW" (never true).
+
+pipeline: pipelines/kube-audit-loki.yml
+
+outputs:
+  - file: kubernetes/apps/o11y/loki/app/rules/sigma-kube-audit.yaml
+    group: sigma-kube-audit
+    interval: 1m
+    # Range each evaluation looks back over. Longer than `interval` so an event
+    # ingested a little late is still counted; an alert stays active for about
+    # one window after the last matching event, then resolves.
+    window: 5m
+    # Alert labels (after label_renames). One alert per distinct combination.
+    group_by: [user, namespace, verb, resource, subresource, name]
+    label_renames:
+      user: user_username
+      resource: objectRef_resource
+      subresource: objectRef_subresource
+      name: objectRef_name
+      code: responseStatus_code
+    labels:
+      category: security
+    summary: >-
+      {{ $labels.user }} {{ $labels.verb }} {{ $labels.resource }}{{ if $labels.subresource }}/{{
+      $labels.subresource }}{{ end }} {{ if $labels.namespace }}{{ $labels.namespace }}/{{ end }}{{
+      $labels.name }}
+    repo_url: https://github.com/sp3nx0r/home-ops/blob/main
+    runbook_url: https://github.com/sp3nx0r/home-ops/blob/main/docs/loki-ruler-detections.md
+    # <sigma rule id>: optional overrides
+    #   severity   critical|warning|info (default: from Sigma level;
+    #              low->info, medium->warning, high/critical->critical)
+    #   threshold  fire when the per-window count is greater than this (default 0)
+    #   window, group_by, summary, for, alert
+    rules:
+      # --- SigmaHQ ---
+      eed82177-38f5-4299-8a76-098d50d225ab: # admission webhook modification
+      0c9b3bda-41a6-4442-9345-356ae86343dc: # cronjob/job modification
+      40967487-139b-4811-81d9-c9767a92aa5a: # deployment deleted
+      a80d927d-ac6e-443f-a867-e8d6e3897318: # pod created in kube-system
+      10b97915-ec8d-455f-a815-9a78926585f6: # rolebinding modification
+      eeb3e9e1-b685-44e4-9232-6bb701f925b5: # secrets list
+      58d31a75-a4f8-4c40-985b-373d58162ca2: # secrets modified or deleted
+      e31bae15-83ed-473e-bf31-faf4f8a17d36: # serviceaccount created
+      ad9012a6-e518-4432-9890-f3b82b8fc71f: # deployment patched (sidecar injection)
+        # `kubectl rollout restart` by the owner is a deployment patch too.
+        severity: info
+      0d933542-1f1f-420d-97d4-21b2c3c492d9: # 401/403
+        # Per-event 401/403 is noise (expired Headlamp tokens, PSA-rejected pods);
+        # alert on a burst from one principal instead.
+        severity: warning
+        threshold: 20
+        window: 10m
+        group_by: [user, code]
+        summary: >-
+          {{ $value }} requests by {{ if $labels.user }}{{ $labels.user }}{{ else }}an
+          unauthenticated client{{ end }} got HTTP {{ $labels.code }} in 10m
+      # --- homelab (sigma/rules/homelab) ---
+      a9fa466f-6bf1-43b2-b754-266c6aebf70d: # interactive pod access, non-admin
+      f6c2cd70-8f0d-417c-892d-af7da684501c: # interactive pod access, break-glass admin
+      aa7b2df4-a77e-4c8a-a280-85ad14f47bfb: # role/clusterrole modification
+      6efc04e6-9591-4a01-8752-2c7c346b5640: # network policy modification
+      e0d7f781-af63-4eff-9c6a-e1e9029acc3b: # secret read by oidc user
+      1e89db58-19db-4e5b-8b9d-49a5a2f3a45f: # write by oidc user
+      8357084f-be39-4f4b-a42d-e29b6860fa5f: # rbac/secret/webhook write by oidc user
+      07b702c5-6e00-4543-9f74-28c31153e41c: # anonymous request allowed

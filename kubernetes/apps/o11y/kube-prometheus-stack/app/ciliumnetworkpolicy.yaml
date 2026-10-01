@@ -113,7 +113,7 @@ metadata:
   name: alertmanager
 spec:
   # Alert router. Selecting it makes it default-deny. Ingress: alerts from
-  # Prometheus, the OIDC-gated gateway route, and the Grafana datasource, all on
+  # Prometheus and the Loki ruler, the OIDC-gated gateway route, and the Grafana datasource, all on
   # :9093. Egress: DNS + the Discord webhook (discord.com over world:443). The
   # in-pod config-reloader is scraped over loopback; the :9094 gossip mesh is
   # unused at a single replica.
@@ -132,6 +132,16 @@ spec:
             - port: "9093"
               protocol: TCP
             - port: "8080"
+              protocol: TCP
+    # Loki ruler (single binary) pushes log-based alerts :9093
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: o11y
+            app.kubernetes.io/name: loki
+            app.kubernetes.io/component: single-binary
+      toPorts:
+        - ports:
+            - port: "9093"
               protocol: TCP
     # OIDC-gated web/API :9093 from the internal gateway + Grafana datasource
     - fromEndpoints:

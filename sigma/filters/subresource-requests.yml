@@ -1,0 +1,18 @@
+title: Exclude Subresource Requests From Object Create Rules
+id: d50c1ae8-91f0-406b-a7e8-55bdfef8d965
+description: >-
+  The upstream "pod in system namespace" and "service account created" rules match on the parent
+  resource only, so they also fire on pods/exec, pods/binding (scheduler), pods/eviction, and
+  serviceaccounts/token (every kubelet token refresh). Only whole-object creates are in scope;
+  interactive pod access has its own homelab rule.
+date: 2026-09-30
+logsource:
+  product: kubernetes
+  service: audit
+filter:
+  rules:
+    - a80d927d-ac6e-443f-a867-e8d6e3897318 # kubernetes_audit_pod_in_system_namespace
+    - e31bae15-83ed-473e-bf31-faf4f8a17d36 # kubernetes_audit_serviceaccount_creation
+  subresource:
+    objectRef.subresource|re: ".+"
+  condition: not subresource

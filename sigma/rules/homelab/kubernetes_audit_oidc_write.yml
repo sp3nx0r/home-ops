@@ -1,0 +1,47 @@
+title: Kubernetes Write By OIDC User
+id: 1e89db58-19db-4e5b-8b9d-49a5a2f3a45f
+status: experimental
+description: >-
+  Detects any mutating request by a Pocket ID (oidc:*) user. Human changes are expected to go
+  through Git; Headlamp is meant for viewing. RBAC, Secret, token, and admission-webhook writes are
+  excluded here because the critical-severity companion rule covers them.
+references:
+  - https://kubernetes.io/docs/reference/access-authn-authz/authentication/#openid-connect-tokens
+author: securimancer
+date: 2026-09-30
+tags:
+  - attack.persistence
+  - attack.t1078.004
+logsource:
+  product: kubernetes
+  service: audit
+detection:
+  selection:
+    user.username|startswith: "oidc:"
+    verb:
+      - create
+      - update
+      - patch
+      - delete
+      - deletecollection
+  filter_self_review:
+    objectRef.resource:
+      - selfsubjectreviews
+      - selfsubjectaccessreviews
+      - selfsubjectrulesreviews
+  filter_sensitive:
+    objectRef.resource:
+      - roles
+      - rolebindings
+      - clusterroles
+      - clusterrolebindings
+      - secrets
+      - mutatingwebhookconfigurations
+      - validatingwebhookconfigurations
+  filter_token:
+    objectRef.resource: serviceaccounts
+    objectRef.subresource: token
+  condition: selection and not 1 of filter_*
+falsepositives:
+  - The cluster owner restarting or scaling a workload from Headlamp
+level: medium

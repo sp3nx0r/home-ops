@@ -1,0 +1,36 @@
+title: Kubernetes Network Policy Modification
+id: 6efc04e6-9591-4a01-8752-2c7c346b5640
+status: experimental
+description: >-
+  Detects create, update, patch, or delete of a CiliumNetworkPolicy, CiliumClusterwideNetworkPolicy,
+  or NetworkPolicy spec. The cluster relies on a default-deny floor, so an out-of-band policy change
+  can silently open lateral movement. GitOps and control-plane principals are excluded by the shared
+  filter; status subresource writes by cilium-operator are ignored.
+references:
+  - https://docs.cilium.io/en/stable/security/policy/
+author: securimancer
+date: 2026-09-30
+tags:
+  - attack.defense-evasion
+  - attack.t1562.007
+logsource:
+  product: kubernetes
+  service: audit
+detection:
+  selection:
+    objectRef.resource:
+      - ciliumnetworkpolicies
+      - ciliumclusterwidenetworkpolicies
+      - networkpolicies
+    verb:
+      - create
+      - update
+      - patch
+      - delete
+      - deletecollection
+  filter_status:
+    objectRef.subresource: status
+  condition: selection and not filter_status
+falsepositives:
+  - Manual policy changes by the cluster owner while debugging
+level: medium

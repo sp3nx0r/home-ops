@@ -21,7 +21,8 @@ kubernetes/           Flux GitOps manifests (the primary workload)
   flux/               Flux system bootstrap (cluster Kustomization)
 ansible/              Ansible playbooks and inventory (TrueNAS, infrastructure)
 talos/                Talos Linux node configs (topf)
-scripts/              Helper scripts (SOPS pre-commit hook)
+sigma/                Sigma detections -> Loki ruler rules (`just sigma ...`, docs/loki-ruler-detections.md)
+scripts/              Helper scripts (SOPS pre-commit hook, sigma-to-loki.py)
 justfile              Task runner entrypoint; per-area recipes live in <area>/mod.just
 .github/workflows/    CI — flux-local validation, label sync
 docs/                 Plans, runbooks, and architecture docs

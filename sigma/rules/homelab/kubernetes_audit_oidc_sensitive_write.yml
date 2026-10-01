@@ -1,0 +1,44 @@
+title: Kubernetes RBAC Secret Or Webhook Write By OIDC User
+id: 8357084f-be39-4f4b-a42d-e29b6860fa5f
+status: experimental
+description: >-
+  Detects a Pocket ID (oidc:*) user modifying RBAC, Secrets, or admission webhooks, or minting a
+  ServiceAccount token. With the OIDC group bound to cluster-admin this is the IdP-to-cluster
+  escalation path (finding S2), so it is critical.
+references:
+  - https://kubernetes.io/docs/reference/access-authn-authz/authentication/#openid-connect-tokens
+author: securimancer
+date: 2026-09-30
+tags:
+  - attack.privilege-escalation
+  - attack.persistence
+  - attack.t1098
+logsource:
+  product: kubernetes
+  service: audit
+detection:
+  selection_user:
+    user.username|startswith: "oidc:"
+  selection_write:
+    verb:
+      - create
+      - update
+      - patch
+      - delete
+      - deletecollection
+    objectRef.resource:
+      - roles
+      - rolebindings
+      - clusterroles
+      - clusterrolebindings
+      - secrets
+      - mutatingwebhookconfigurations
+      - validatingwebhookconfigurations
+  selection_token:
+    verb: create
+    objectRef.resource: serviceaccounts
+    objectRef.subresource: token
+  condition: selection_user and (selection_write or selection_token)
+falsepositives:
+  - None expected; human RBAC and Secret changes go through Git
+level: high

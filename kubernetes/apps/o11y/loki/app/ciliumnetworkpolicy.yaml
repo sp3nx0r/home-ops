@@ -82,7 +82,8 @@ metadata:
 spec:
   # Backend (single binary). Selecting it makes it default-deny; loki listens
   # on :3100 (http/metrics), :9095 (grpc), :7946 (memberlist); a loki-sc-rules
-  # sidecar exposes :8080 and watches the K8s API for rule ConfigMaps.
+  # sidecar exposes :8080 and watches the K8s API for rule ConfigMaps. The
+  # embedded ruler evaluates in-process and pushes alerts to Alertmanager.
   endpointSelector:
     matchLabels:
       io.kubernetes.pod.namespace: o11y
@@ -136,6 +137,15 @@ spec:
       toPorts:
         - ports:
             - port: "3900"
+              protocol: TCP
+    # Ruler sends alerts to Alertmanager :9093
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: o11y
+            app.kubernetes.io/name: alertmanager
+      toPorts:
+        - ports:
+            - port: "9093"
               protocol: TCP
     # loki-sc-rules sidecar watches the Kubernetes API for rule ConfigMaps
     - toEntities:

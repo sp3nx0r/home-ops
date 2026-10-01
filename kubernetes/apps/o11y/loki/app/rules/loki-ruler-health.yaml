@@ -1,0 +1,23 @@
+---
+# Native LogQL (not generated from Sigma): Loki ruler self-monitoring.
+groups:
+  - name: loki-ruler-health
+    interval: 1m
+    rules:
+      # A loki_rule ConfigMap that fails to parse makes every rule listing fail.
+      # The already-loaded rules keep running (so this rule can still fire), but
+      # rule changes stop applying and a restart would load nothing
+      # (LokiRulerNoRuleGroups in prometheusrule.yaml covers that case).
+      - alert: LokiRulerRuleSyncFailing
+        expr: |
+          sum(count_over_time({source="kubernetes", namespace="o11y", container="loki"} |~ `unable to (list|load) rules` [5m])) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Loki ruler cannot load rule files; rule changes are not applied
+          description: >-
+            The Loki ruler has logged "unable to list rules" for 5 minutes. A ConfigMap labeled
+            loki_rule="true" contains an invalid rule file. Find it with
+            `kubectl -n o11y logs loki-0 -c loki | grep "unable to list rules"`.
+          runbook_url: https://github.com/sp3nx0r/home-ops/blob/main/docs/loki-ruler-detections.md

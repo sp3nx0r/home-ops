@@ -1,0 +1,33 @@
+title: Kubernetes Interactive Pod Access
+id: a9fa466f-6bf1-43b2-b754-266c6aebf70d
+status: experimental
+description: >-
+  Detects exec, attach, port-forward, proxy, or ephemeral-container (kubectl debug) access to a pod
+  by any principal other than the Talos break-glass `admin` certificate. Matches every verb because
+  WebSocket streaming (the kubectl default since 1.31) is audited as `get`, which the upstream SigmaHQ
+  exec rule (verb `create` only) misses.
+references:
+  - https://kubernetes.io/docs/reference/access-authn-authz/authorization/#determine-the-request-verb
+author: securimancer
+date: 2026-09-30
+tags:
+  - attack.execution
+  - attack.t1609
+logsource:
+  product: kubernetes
+  service: audit
+detection:
+  selection:
+    objectRef.resource: pods
+    objectRef.subresource:
+      - exec
+      - attach
+      - portforward
+      - proxy
+      - ephemeralcontainers
+  filter_breakglass:
+    user.username: admin
+  condition: selection and not filter_breakglass
+falsepositives:
+  - The cluster owner opening a Headlamp terminal (oidc:* user)
+level: medium

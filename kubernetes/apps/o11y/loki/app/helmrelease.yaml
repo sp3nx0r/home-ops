@@ -59,6 +59,34 @@ spec:
           insecure: true
       commonConfig:
         replication_factor: 1
+      # Rule groups come only from ConfigMaps labeled loki_rule="true" (any
+      # namespace), which the loki-sc-rules sidecar writes to /rules/fake --
+      # `fake` is the tenant ID while auth_enabled is false. The local store is
+      # read-only, so the ruler API cannot create rules; Git is the only source.
+      # One unparseable file blocks every reload for the tenant: the rules
+      # already loaded keep running, but a restart would start with none (see
+      # the LokiRuler* alerts and docs/loki-ruler-detections.md).
+      rulerConfig:
+        storage:
+          type: local
+          local:
+            directory: /rules
+        # SRV discovery on the headless Service so every Alertmanager replica
+        # receives each alert (HA peers dedupe notifications, not alerts).
+        alertmanager_url: dnssrvnoa+http://_http-web._tcp.alertmanager-operated.o11y.svc.cluster.local
+        enable_alertmanager_discovery: true
+        external_labels:
+          source: loki-ruler
+
+    sidecar:
+      # Namespace-prefixed file names so equal data keys in different
+      # ConfigMaps cannot overwrite each other.
+      enableUniqueFilenames: true
+      rules:
+        folder: /rules/fake
+        labelValue: "true"
+        searchNamespace: ALL
+        resource: configmap
 
     singleBinary:
       replicas: 1
@@ -100,3 +128,20 @@ spec:
     monitoring:
       serviceMonitor:
         enabled: true
+
+  # The chart's ClusterRole lets the rules sidecar read configmaps AND secrets
+  # cluster-wide (for `resource: both`). Rules only come from ConfigMaps, so drop
+  # secrets. Patched in place because a ClusterRoleBinding's roleRef is immutable.
+  postRenderers:
+    - kustomize:
+        patches:
+          - target:
+              kind: ClusterRole
+              name: loki-clusterrole
+            patch: |
+              - op: replace
+                path: /rules
+                value:
+                  - apiGroups: [""]
+                    resources: ["configmaps"]
+                    verbs: ["get", "list", "watch"]
