@@ -17,6 +17,11 @@ spec:
     clusterName: homelab
     # Scan kube-system too: it holds the most privileged workloads.
     excludeNamespaces: kubescape,kube-public,kube-node-lease
+    # Hourly Volsync movers and daily cache scrubs would each get a fresh SBOM,
+    # container profile and CVE scan per run. node-agent matches values exactly.
+    excludeLabels:
+      app.kubernetes.io/created-by: ["volsync"]
+      app.kubernetes.io/component: ["cache-scrub"]
     # Frameworks for the startup scan and exception-triggered rescans; the weekly
     # CronJob below names the same set explicitly.
     defaultFrameworks:
@@ -146,6 +151,13 @@ spec:
           memory: 600Mi
         limits:
           memory: 1400Mi
+      config:
+        extra:
+          # Containers already running when node-agent starts get a "partial"
+          # profile that kubevuln refuses to scan, yet node-agent still rewrites
+          # it every updatePeriod for maxLearningPeriod. With runtimeDetection
+          # off they have no other use, so skip them.
+          partialProfileGenerationEnabled: false
     prometheusExporter:
       image:
         repository: quay.io/kubescape/prometheus-exporter

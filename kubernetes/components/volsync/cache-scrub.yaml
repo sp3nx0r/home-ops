@@ -68,6 +68,7 @@ spec:
         metadata:
           labels:
             app.kubernetes.io/name: ${APP}-cache-scrub
+            app.kubernetes.io/component: cache-scrub
         spec:
           serviceAccountName: ${APP}-cache-scrub
           automountServiceAccountToken: true

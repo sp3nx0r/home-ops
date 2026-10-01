@@ -82,6 +82,18 @@ Other hardening:
 - `excludeNamespaces: kubescape,kube-public,kube-node-lease` — `kube-system`
   **is** scanned (the chart excludes it by default). The `kubescape` namespace
   itself is not scanned.
+- `excludeLabels` skips Volsync mover pods (`app.kubernetes.io/created-by:
+volsync`) and cache-scrub pods (`app.kubernetes.io/component: cache-scrub`).
+  Both run on a schedule, and node-agent would otherwise build a fresh SBOM,
+  container profile and CVE scan for every run. node-agent matches label values
+  exactly, so new short-lived job pods need a fixed label to be excluded.
+- `nodeAgent.config.extra.partialProfileGenerationEnabled: false`: node-agent
+  only profiles containers it saw start. Containers already running when
+  node-agent starts would get a "partial" profile, which kubevuln refuses to use
+  for relevancy, and node-agent rewrites it every `updatePeriod` (10m) for
+  `maxLearningPeriod` (24h). On every node-agent restart that was ~900 failed
+  scans per hour plus SQLite writes on HDD-backed iSCSI. Trade-off: a workload
+  has no relevancy split until it restarts after node-agent is up.
 - Frameworks: `nsa`, `mitre`, `cis-v1.12.0`, `security` (weekly scan and
   `defaultFrameworks` for the startup scan).
 - Posture `0 5 * * 0`, vulnerabilities `0 1 * * 0` (Sundays, UTC). They are
