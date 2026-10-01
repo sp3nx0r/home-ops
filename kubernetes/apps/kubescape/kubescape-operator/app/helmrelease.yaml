@@ -131,6 +131,11 @@ spec:
           memory: 400Mi
         limits:
           memory: 1500Mi
+      kindQueues:
+        # The 500KB default rejects (413) VEX documents for images with large
+        # package sets; Helm merges this key into the chart's other defaults.
+        openvulnerabilityexchangecontainers:
+          maxObjectSize: 5000000
     nodeAgent:
       image:
         repository: quay.io/kubescape/node-agent

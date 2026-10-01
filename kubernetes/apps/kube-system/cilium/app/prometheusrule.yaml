@@ -65,7 +65,9 @@ spec:
         # CNP is blocking. ICMP is excluded (unsolicited peer ICMP to the
         # torrent clients is expected), as is Plex's hourly NAT-PMP probe to
         # the node (labelled reserved:kube-apiserver on control-plane nodes,
-        # whose host identity carries both labels). The 10m window plus
+        # whose host identity carries both labels), and kubevuln's nightly
+        # registry pulls for init-container images node-agent never SBOMs
+        # (kubevuln is only allowed to reach the Grype DB). The 10m window plus
         # for: 15m fires only on drops sustained for ~5m+ and clears ~10m after
         # they stop. Drill into the exact flows with the Loki query in the
         # description or the "Hubble Policy Drops" dashboard.
@@ -78,6 +80,8 @@ spec:
             )
             unless on (source, destination, protocol)
               hubble_drop_total{source="media/plex", destination=~"reserved:(host|kube-apiserver)", protocol="UDP"}
+            unless on (source, destination, protocol)
+              hubble_drop_total{source="kubescape/kubevuln", destination="reserved:world", protocol="TCP"}
           for: 15m
           annotations:
             summary: >-
