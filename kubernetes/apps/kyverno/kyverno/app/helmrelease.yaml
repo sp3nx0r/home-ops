@@ -1,0 +1,30 @@
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/helm.toolkit.fluxcd.io/helmrelease_v2.json
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: kyverno
+spec:
+  chartRef:
+    kind: OCIRepository
+    name: kyverno
+  interval: 1h
+  values:
+    # CRDs are managed by the chart (v1.19+ pulls them via the kyverno-api
+    # sub-chart, gated by crds.install).
+    crds:
+      install: true
+    # Expose Prometheus ServiceMonitors for each controller — the cluster
+    # scrapes everything via kube-prometheus-stack.
+    admissionController:
+      serviceMonitor:
+        enabled: true
+    backgroundController:
+      serviceMonitor:
+        enabled: true
+    cleanupController:
+      serviceMonitor:
+        enabled: true
+    reportsController:
+      serviceMonitor:
+        enabled: true

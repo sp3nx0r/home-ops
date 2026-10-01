@@ -1,0 +1,54 @@
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/policies.kyverno.io/validatingpolicy_v1.json
+apiVersion: policies.kyverno.io/v1
+kind: ValidatingPolicy
+metadata:
+  name: require-namespace-psa-enforce-label
+  annotations:
+    policies.kyverno.io/title: Require PSA enforce label on Namespaces
+    policies.kyverno.io/category: Pod Security Admission
+    policies.kyverno.io/severity: medium
+    policies.kyverno.io/subject: Namespace
+    policies.kyverno.io/description: >-
+      Every Namespace must declare an explicit Pod Security Admission level via
+      the pod-security.kubernetes.io/enforce label, so the cluster's security
+      posture is never left implicit. System and operator-managed namespaces
+      that cannot carry the label are excluded.
+spec:
+  # Start in report-only mode (Audit records a PolicyReport, Warn returns an
+  # API warning). Flip to `Deny` once every in-scope namespace carries the
+  # label — notably `media`, which is deferred until the qbittorrent-gluetun
+  # split lands.
+  validationActions:
+    - Audit
+    - Warn
+  # Evaluate existing namespaces in the background so violations show up in
+  # PolicyReports without a create/update event.
+  evaluation:
+    background:
+      enabled: true
+  matchConstraints:
+    resourceRules:
+      - apiGroups:
+          - ""
+        apiVersions:
+          - v1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - namespaces
+  # System / operator-owned namespaces are exempt: they are either owned by a
+  # controller that stamps its own labels (flux-system via flux-operator) or
+  # created outside GitOps (kube-*, cilium-secrets), and kube-system is
+  # intentionally `privileged`.
+  matchConditions:
+    - name: exclude-system-namespaces
+      expression: >-
+        !(object.metadata.name in ['kube-system', 'kube-public', 'kube-node-lease', 'flux-system', 'kyverno', 'cilium-secrets'])
+  validations:
+    - expression: >-
+        'pod-security.kubernetes.io/enforce' in object.metadata.?labels.orValue([])
+      message: >-
+        Namespace must set the 'pod-security.kubernetes.io/enforce' label
+        (an explicit Pod Security Admission level is required).
