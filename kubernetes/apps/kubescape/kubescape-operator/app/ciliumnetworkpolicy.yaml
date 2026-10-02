@@ -342,7 +342,7 @@ kind: CiliumNetworkPolicy
 metadata:
   name: kubescape-schedulers
 spec:
-  # Daily posture/vulnerability scan CronJobs: a one-shot HTTP POST to the
+  # Weekly posture/vulnerability scan CronJobs: a one-shot HTTP POST to the
   # operator. Nothing connects to them (the cluster floor denies ingress).
   endpointSelector:
     matchExpressions:
