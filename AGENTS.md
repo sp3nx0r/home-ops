@@ -174,6 +174,7 @@ Tools are version-pinned in `.mise/config.toml` (with a checksum lockfile at `.m
 - `talosctl` / `topf` — Talos node management
 - `sops` / `age` — Secret encryption
 - `kubeconform` — YAML schema validation
+- `logcli` / `promtool` / `amtool` — Loki, Prometheus/Thanos and Alertmanager CLIs, pinned to the versions running in-cluster. `promtool` also covers Thanos Query (Prometheus HTTP API) and offline rule checks; `amtool` covers Alertmanager config checks
 - `gum` — Shell UI used by just recipes for structured logging (`gum log`)
 - `gh` — GitHub CLI for issues, PRs, checks, and releases
 
