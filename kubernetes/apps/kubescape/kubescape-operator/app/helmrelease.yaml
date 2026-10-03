@@ -115,7 +115,7 @@ spec:
     kubevuln:
       image:
         repository: quay.io/kubescape/kubevuln
-        tag: v0.3.430@sha256:9bed2f723ea09807ea31d656018feca35c8cb49eb4707006ae890b01f8830e28
+        tag: v0.3.501@sha256:8b810f2598861f7120047e2d6a090125200d628ba8e50e2b9b94a8dd5031d098
       config:
         grypeDbPersistence: true
       resources:
