@@ -85,6 +85,31 @@ checksum = "sha256:a7da3a17132b3ae97b59e6f8a58d2751a414779421de8c0596bc0f1e46416
 url = "https://github.com/cilium/hubble/releases/download/v1.19.4/hubble-darwin-amd64.tar.gz"
 url_api = "https://api.github.com/repos/cilium/hubble/releases/assets/439544237"
 
+[[tools."aqua:prometheus/alertmanager"]]
+version = "0.34.1"
+backend = "aqua:prometheus/alertmanager"
+specifiers = ["0.34.1"]
+
+[tools."aqua:prometheus/alertmanager"."platforms.linux-arm64"]
+checksum = "sha256:d98d6cbaf52151c7e76e24355fec88b11cebcb9875d4cdd8b76ddce7a7e5535c"
+url = "https://github.com/prometheus/alertmanager/releases/download/v0.34.1/alertmanager-0.34.1.linux-arm64.tar.gz"
+url_api = "https://api.github.com/repos/prometheus/alertmanager/releases/assets/569768188"
+
+[tools."aqua:prometheus/alertmanager"."platforms.linux-x64"]
+checksum = "sha256:265b9d1e55ef0d5306a436018af6d2b686c2ce051f03d968f7464ecb1372a7e8"
+url = "https://github.com/prometheus/alertmanager/releases/download/v0.34.1/alertmanager-0.34.1.linux-amd64.tar.gz"
+url_api = "https://api.github.com/repos/prometheus/alertmanager/releases/assets/569768116"
+
+[tools."aqua:prometheus/alertmanager"."platforms.macos-arm64"]
+checksum = "sha256:a3941879f340ef12a4cc1a479c82bd8520611265ea8d1ee25c88bd5f944d8293"
+url = "https://github.com/prometheus/alertmanager/releases/download/v0.34.1/alertmanager-0.34.1.darwin-arm64.tar.gz"
+url_api = "https://api.github.com/repos/prometheus/alertmanager/releases/assets/569767473"
+
+[tools."aqua:prometheus/alertmanager"."platforms.macos-x64"]
+checksum = "sha256:9f3a3806c81a2ef3546fea9bae3dd39abcf2206edd112c9433133a9355875fce"
+url = "https://github.com/prometheus/alertmanager/releases/download/v0.34.1/alertmanager-0.34.1.darwin-amd64.tar.gz"
+url_api = "https://api.github.com/repos/prometheus/alertmanager/releases/assets/569767394"
+
 [[tools.cilium-cli]]
 version = "0.20.1"
 backend = "aqua:cilium/cilium-cli"
@@ -521,6 +546,31 @@ url = "https://github.com/evilmartians/lefthook/releases/download/v2.1.16/leftho
 url_api = "https://api.github.com/repos/evilmartians/lefthook/releases/assets/603767199"
 provenance = "github-attestations"
 
+[[tools.loki-logcli]]
+version = "3.7.8"
+backend = "aqua:grafana/loki/logcli"
+specifiers = ["3.7.8"]
+
+[tools.loki-logcli."platforms.linux-arm64"]
+checksum = "sha256:830b431e1b28ee0291a0f3827484cc481e06849dd6e6f3dc5e984e34d5a645a7"
+url = "https://github.com/grafana/loki/releases/download/v3.7.8/logcli-linux-arm64.zip"
+url_api = "https://api.github.com/repos/grafana/loki/releases/assets/570551185"
+
+[tools.loki-logcli."platforms.linux-x64"]
+checksum = "sha256:44b790601963193df9cc496f0c8d6782e5d28c90754ca7a697e3f5683dad2588"
+url = "https://github.com/grafana/loki/releases/download/v3.7.8/logcli-linux-amd64.zip"
+url_api = "https://api.github.com/repos/grafana/loki/releases/assets/570551069"
+
+[tools.loki-logcli."platforms.macos-arm64"]
+checksum = "sha256:2f4dff99d7acfaacd08f99d8220989977d771bf28a83363b6b5396516db20c02"
+url = "https://github.com/grafana/loki/releases/download/v3.7.8/logcli-darwin-arm64.zip"
+url_api = "https://api.github.com/repos/grafana/loki/releases/assets/570550966"
+
+[tools.loki-logcli."platforms.macos-x64"]
+checksum = "sha256:9f312919b384d048e9cfcf542bf00bd768644ef18064577af414bf61f4cdbd81"
+url = "https://github.com/grafana/loki/releases/download/v3.7.8/logcli-darwin-amd64.zip"
+url_api = "https://api.github.com/repos/grafana/loki/releases/assets/570550947"
+
 [[tools.node]]
 version = "24.21.0"
 backend = "core:node"
@@ -546,6 +596,31 @@ url = "https://nodejs.org/dist/v24.21.0/node-v24.21.0-darwin-x64.tar.gz"
 version = "0.71.0"
 backend = "npm:oxfmt"
 specifiers = ["0.71.0"]
+
+[[tools.promtool]]
+version = "3.15.0"
+backend = "aqua:prometheus/prometheus"
+specifiers = ["3.15.0"]
+
+[tools.promtool."platforms.linux-arm64"]
+checksum = "sha256:f1f90ec08e849d494ca66c611470afc50192f0355f1a61c33f2cbde02d067823"
+url = "https://github.com/prometheus/prometheus/releases/download/v3.15.0/prometheus-3.15.0.linux-arm64.tar.gz"
+url_api = "https://api.github.com/repos/prometheus/prometheus/releases/assets/587862303"
+
+[tools.promtool."platforms.linux-x64"]
+checksum = "sha256:2a542df32eac02ee17b9d844fb2aa1de00dafa5476579ba8a3ba862e9d572ea0"
+url = "https://github.com/prometheus/prometheus/releases/download/v3.15.0/prometheus-3.15.0.linux-amd64.tar.gz"
+url_api = "https://api.github.com/repos/prometheus/prometheus/releases/assets/587862123"
+
+[tools.promtool."platforms.macos-arm64"]
+checksum = "sha256:920df4d17e78b3b0175af144eb318b0c74d1cf7b1d1251b326966f0e81977260"
+url = "https://github.com/prometheus/prometheus/releases/download/v3.15.0/prometheus-3.15.0.darwin-arm64.tar.gz"
+url_api = "https://api.github.com/repos/prometheus/prometheus/releases/assets/587860828"
+
+[tools.promtool."platforms.macos-x64"]
+checksum = "sha256:2d79e744c2d7e505db936fbc898e05abc74fcb6e437c25befd26e9c9f00aa58b"
+url = "https://github.com/prometheus/prometheus/releases/download/v3.15.0/prometheus-3.15.0.darwin-amd64.tar.gz"
+url_api = "https://api.github.com/repos/prometheus/prometheus/releases/assets/587860719"
 
 [[tools.shellcheck]]
 version = "0.11.0"
