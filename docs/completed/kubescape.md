@@ -10,10 +10,10 @@ Kubescape Operator runs in-cluster (no ARMO cloud account) to provide:
 
 Kubescape is used for evaluation only. Its runtime threat detection and
 admission webhook stay off: runtime detection is planned for Tetragon (P1 in
-`docs/sre-and-security-evaluation.md`) and admission enforcement for Kyverno
-(PR #524). Neither is deployed yet, so the cluster currently has **no** runtime
-detection and **no** admission enforcement. Network policy stays with the
-hand-authored CNPs.
+`docs/sre-and-security-evaluation.md`) and admission enforcement belongs to
+Kyverno. Kyverno is deployed (#524) but only enforces the PSA-label policy, and
+Tetragon isn't deployed yet, so the cluster has **no** runtime detection.
+Network policy stays with the hand-authored CNPs.
 
 > **Status:** Implemented in `kubernetes/apps/kubescape/` (chart
 > `kubescape-operator` 1.40.4). Post-merge verification steps are in
@@ -58,7 +58,7 @@ network access beyond the apiserver (see [Network policy](#network-policy)).
 | `vexGeneration`                                              | on      | Experimental. OpenVEX documents stored as `OpenVulnerabilityExchangeContainer`; advisory data only.                                                        |
 | `prometheusExporter`                                         | on      | Metrics + dashboard. `kubescape.serviceMonitor` stays off: every scrape of the scanner triggers a scan.                                                    |
 | `runtimeDetection`, `malwareDetection`, `httpDetection`      | off     | Runtime detection is planned for Tetragon (not yet deployed).                                                                                              |
-| `admissionController`                                        | off     | Detection-only webhook; enforcement is planned for Kyverno (PR #524, not yet merged).                                                                      |
+| `admissionController`                                        | off     | Detection-only webhook; enforcement belongs to Kyverno (deployed in #524).                                                                                 |
 | `networkPolicyService`                                       | off     | Emits vanilla NetworkPolicy (not CNP) and is the main storage CPU cost (~600m observed elsewhere).                                                         |
 | `seccompProfileService`                                      | off     | No path to ship generated profiles to Talos nodes.                                                                                                         |
 | `riskAcceptance`                                             | off     | No Git-managed `SecurityException`s yet; see [Expected Talos noise](#expected-talos-cis-noise).                                                            |
@@ -156,7 +156,7 @@ Notes on the FQDN rules:
   is not needed. The DB is cached on a PVC (`grypeDbPersistence`).
 - `kubescape` and `kubevuln` are post-rendered with `ndots: 1`, because CoreDNS
   autopath otherwise defeats `toFQDNs` (see
-  [the default-deny floor runbook](./cluster-default-deny-floor.md)).
+  [the default-deny floor runbook](./completed/cluster-default-deny-floor.md)).
 - Prometheus already egresses to `cluster`, and Headlamp reads results through
   the apiserver, so neither CNP needed changes.
 
@@ -221,7 +221,7 @@ the ones worth triaging. If the noise becomes a problem, enable
 
 - The cluster default-deny floor selects the `kubescape` namespace; the CNPs
   above are the allow-list.
-- Kyverno (PR #524, not yet merged): its PSA-label policy only requires an
+- Kyverno (deployed in #524, policy set to `Deny` in #564): its PSA-label policy only requires an
   explicit `enforce` label, which this namespace has. The planned S7 policy
   "disallow `hostPath` outside `kube-system`/`download`" must also allow
   `kubescape` (node-agent).

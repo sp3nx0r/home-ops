@@ -116,9 +116,9 @@ Tracked work now that Hubble is live:
       to `certManager` with a dedicated internal CA `Issuer` (see
       [TLS / future work](#tls--future-work)). `cronJob` is the fallback if cert
       churn appears before this lands.
-- [ ] **Drive the default-deny CNP rollout (security plan #1):** use the Hubble
-      flow/policy-verdict view to validate per-namespace default-deny policies
-      before enforcing (the original motivation for enabling Hubble).
+- [x] **Drive the default-deny CNP rollout (security plan #1):** done. Per-app
+      CNPs and the cluster-wide floor (#530) were validated with Hubble; see
+      `completed/cluster-default-deny-floor.md`.
 - [ ] **(Optional) Restrict UI access to a Pocket ID group** via the `groups`
       claim instead of any authenticated user.
 
