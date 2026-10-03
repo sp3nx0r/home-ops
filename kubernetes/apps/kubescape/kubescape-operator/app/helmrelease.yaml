@@ -111,7 +111,7 @@ spec:
     operator:
       image:
         repository: quay.io/kubescape/operator
-        tag: v0.2.169@sha256:01b2694425e935018daf5d2aee1fb6f7fa110160ea99f22ac98c1786a645dd3b
+        tag: v0.2.172@sha256:1ddcd2788e1ef1ce4c688920b48b4b9be35af549db19391bdb9be71bd42d1e26
     kubevuln:
       image:
         repository: quay.io/kubescape/kubevuln
