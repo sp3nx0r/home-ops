@@ -10,6 +10,12 @@
 #   lq  '<logql metric query>'        instant LogQL metric query, Loki
 #   lqr '<logql>' [minutes] [limit]   raw log lines (JSON per line) from Loki, oldest first
 #   am                                active Alertmanager alerts (name, state, labels)
+#
+#   o11y_cli_env                      export settings so logcli/promtool/amtool use the same proxy:
+#     logcli query --since=6h --limit=20000 --batch=5000 -o raw '{namespace="media"}'
+#     promtool query instant --http.config.file="$O11Y_HTTP_CONFIG" "$THANOS_URL" '<promql>'
+#     amtool --alertmanager.url="$ALERTMANAGER_URL" --http.config.file="$O11Y_HTTP_CONFIG" alert query
+#   o11y_cli_clean                    remove the extracted client cert and unset the variables
 
 _o11y_svc=/api/v1/namespaces/o11y/services
 _o11y_enc() { jq -rn --arg q "$1" '$q|@uri'; }
@@ -53,4 +59,41 @@ lqr() {
 am() {
   kubectl get --raw "$_o11y_svc/kube-prometheus-stack-alertmanager:9093/proxy/api/v2/alerts?active=true" |
     jq -r '.[] | "\(.labels.alertname)\t\(.status.state)\t\(.labels | del(.alertname, .prometheus) | tostring)"'
+}
+
+_o11y_cli_dir="${XDG_RUNTIME_DIR:-$HOME/.cache}/home-ops-o11y"
+
+_o11y_kc() { kubectl config view --minify --raw -o jsonpath="{$1}"; }
+
+# The CLIs can't use a kubeconfig, so the client cert is written (0600, in a
+# 0700 dir on tmpfs when XDG_RUNTIME_DIR is set) for them to present to the
+# apiserver proxy. It is the same credential the kubeconfig already holds.
+o11y_cli_env() {
+  local d=$_o11y_cli_dir base
+  base="$(_o11y_kc '.clusters[0].cluster.server')$_o11y_svc"
+  if [[ -z $(_o11y_kc '.users[0].user.client-certificate-data') ]]; then
+    echo "o11y_cli_env: kubeconfig has no embedded client certificate" >&2
+    return 1
+  fi
+  (
+    umask 077
+    mkdir -p "$d"
+    _o11y_kc '.users[0].user.client-certificate-data' | base64 -d >"$d/client.crt"
+    _o11y_kc '.users[0].user.client-key-data' | base64 -d >"$d/client.key"
+    _o11y_kc '.clusters[0].cluster.certificate-authority-data' | base64 -d >"$d/ca.crt"
+    printf 'tls_config:\n  cert_file: %s\n  key_file: %s\n  ca_file: %s\n' \
+      "$d/client.crt" "$d/client.key" "$d/ca.crt" >"$d/http.yaml"
+  ) || return 1
+  export LOKI_ADDR="$base/loki:3100/proxy" \
+    LOKI_CLIENT_CERT_PATH="$d/client.crt" LOKI_CLIENT_KEY_PATH="$d/client.key" LOKI_CA_CERT_PATH="$d/ca.crt" \
+    PROM_URL="$base/kube-prometheus-stack-prometheus:9090/proxy" \
+    THANOS_URL="$base/thanos-query-frontend:9090/proxy" \
+    ALERTMANAGER_URL="$base/kube-prometheus-stack-alertmanager:9093/proxy" \
+    O11Y_HTTP_CONFIG="$d/http.yaml"
+}
+
+o11y_cli_clean() {
+  rm -rf "$_o11y_cli_dir"
+  unset LOKI_ADDR LOKI_CLIENT_CERT_PATH LOKI_CLIENT_KEY_PATH LOKI_CA_CERT_PATH \
+    PROM_URL THANOS_URL ALERTMANAGER_URL O11Y_HTTP_CONFIG
 }
