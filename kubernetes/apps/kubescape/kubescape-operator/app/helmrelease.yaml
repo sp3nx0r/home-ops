@@ -144,7 +144,7 @@ spec:
     nodeAgent:
       image:
         repository: quay.io/kubescape/node-agent
-        tag: v0.3.219@sha256:2044ed750f5e20a7c5150479963e2b33108c304a40d526c0de7ed412495467c6
+        tag: v0.3.251@sha256:59e4ebfe3576beca7379f5fc185f25c9bbfc244afc1801ab2d3362299a249c6f
       resources:
         requests:
           cpu: 100m
