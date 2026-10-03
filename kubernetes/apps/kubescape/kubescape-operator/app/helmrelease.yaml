@@ -77,7 +77,7 @@ spec:
     kubescape:
       image:
         repository: quay.io/kubescape/kubescape
-        tag: v4.0.13@sha256:58651dce3376309cd9a064021c4b1f0655ab307631ee4259f5a531e7dcb44cc2
+        tag: v4.0.15@sha256:40bb0ace10b8f33fc187a45232d047d6765ed508778b55a52a683145f7c9c3dd
       skipUpdateCheck: true
     kubescapeScheduler:
       image:
