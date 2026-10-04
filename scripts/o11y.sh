@@ -9,6 +9,8 @@
 #   tqr '<promql>' [hours] [step_s]   range query, Thanos Query Frontend (splits per 24h)
 #   lq  '<logql metric query>'        instant LogQL metric query, Loki
 #   lqr '<logql>' [minutes] [limit]   raw log lines (JSON per line) from Loki, oldest first
+#   lqt '<logql>' [minutes] [limit]   newest first: UTC time, stream label values, message
+#   lpat '<selector>' [minutes]       Loki pattern templates with counts (pattern data covers ~3h)
 #   am                                active Alertmanager alerts (name, state, labels)
 #
 #   o11y_cli_env                      export settings so logcli/promtool/amtool use the same proxy:
@@ -54,6 +56,21 @@ lqr() {
   now=$(date +%s)
   kubectl get --raw "$_o11y_svc/loki:3100/proxy/loki/api/v1/query_range?query=$(_o11y_enc "$1")&start=$((now - mins * 60))000000000&end=${now}000000000&limit=$limit&direction=forward" |
     jq -r '.data.result[]?.values[]?[1]'
+}
+
+lqt() {
+  local mins=${2:-60} limit=${3:-200} now
+  now=$(date +%s)
+  kubectl get --raw "$_o11y_svc/loki:3100/proxy/loki/api/v1/query_range?query=$(_o11y_enc "$1")&start=$((now - mins * 60))000000000&end=${now}000000000&limit=$limit&direction=backward" |
+    jq -r '(.error // empty), ([.data.result[]? | .stream as $s | .values[] | {t: .[0], s: $s, l: .[1]}] | sort_by(.t) | reverse | .[]
+      | "\(.t[:10] | tonumber | strftime("%m-%dT%H:%M:%SZ"))  \(.s | del(.source, .service_name, .detected_level) | [.[]] | join("/"))  \((.l | fromjson? | .message) // .l)")'
+}
+
+lpat() {
+  local mins=${2:-180} now
+  now=$(date +%s)
+  kubectl get --raw "$_o11y_svc/loki:3100/proxy/loki/api/v1/patterns?query=$(_o11y_enc "$1")&start=$((now - mins * 60))000000000&end=${now}000000000&step=300s" |
+    jq -r '(.error // empty), ([.data[]? | {n: ([.samples[][1]] | add), p: .pattern}] | sort_by(-.n) | .[] | "\(.n)\t\(.p)")'
 }
 
 am() {

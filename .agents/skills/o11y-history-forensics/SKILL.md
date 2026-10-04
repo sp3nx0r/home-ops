@@ -11,7 +11,7 @@ Answer "what happened, and why" from metrics and logs, with the coverage and con
 
 ## Prerequisites
 
-- Run inside the repo (or a worktree with the kubeconfig symlinked) so mise sets `KUBECONFIG`, then `source scripts/o11y.sh`. [o11y.sh](../../../scripts/o11y.sh) defines `q`/`qr` (Prometheus), `tq`/`tqr` (Thanos Query / Query Frontend, `partial_response=false`), `lq`/`lqr` (Loki metric / raw lines), and `am` (active alerts). All go through `kubectl get --raw /api/v1/namespaces/o11y/services/<svc>:<port>/proxy/...`.
+- Run inside the repo (or a worktree with the kubeconfig symlinked) so mise sets `KUBECONFIG`, then `source scripts/o11y.sh`. [o11y.sh](../../../scripts/o11y.sh) defines `q`/`qr` (Prometheus), `tq`/`tqr` (Thanos Query / Query Frontend, `partial_response=false`), `lq`/`lqr` (Loki metric / raw lines), `lqt` (newest-first lines with time and labels), `lpat` (Loki patterns, last ~3h) and `am` (active alerts). Log sources beyond pod logs (NAS syslog, audit, Hubble): `homelab-log-triage`. All go through `kubectl get --raw /api/v1/namespaces/o11y/services/<svc>:<port>/proxy/...`.
 - **CLIs** (mise installs `logcli`, `promtool`, `amtool`): run `o11y_cli_env` once per shell. It writes the kubeconfig client cert to `$XDG_RUNTIME_DIR/home-ops-o11y` and exports `LOKI_*`, `PROM_URL`, `THANOS_URL` (Query Frontend), `ALERTMANAGER_URL` and `O11Y_HTTP_CONFIG`. Run `o11y_cli_clean` when done. Use the CLIs for big pulls the helpers handle badly:
     ```sh
     logcli query --since=24h --limit=50000 --batch=5000 -o raw '{namespace="<ns>", pod=~"<app>.*"} |= "error"' > /tmp/logs.jsonl
@@ -67,6 +67,7 @@ Answer "what happened, and why" from metrics and logs, with the coverage and con
 
 ## Gotchas & Edge Cases
 
+- **Loki `namespace` labels before 2026-10-04 15:22Z lie for JSON-logging pods** (Flux controllers, Kubescape), which were labelled with the namespace of the object they logged about. For older windows select by `pod=~"<name>.*"`. Newer lines carry the app's value as `log_namespace`.
 - **Partial data posed as fact.** Every query once returned ≈51h, and the agent reported "Thanos has no history". In fact the store gateway had been OOM-killed by a `[60d:5m]` query, and Query served only sidecar data. Server-side `--no-query.partial-response` now makes this an error. Still read `.warnings`, and state coverage in every answer.
 - **Broad queries crash Thanos.** `{__name__=~".+"}` and long fine-step subqueries OOM'd query/store. Store limits (`request-series=100000`, `request-samples=50000000`) now reject them; narrow the query rather than raising the limits. If you did cause a restart, tell the user.
 - Instant subqueries via `tq` skip Query Frontend's 24h splitting. Use `tqr` for long ranges.

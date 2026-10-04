@@ -35,7 +35,7 @@ Ship one focused change from a fresh worktree to a reviewable PR without touchin
     cd <wt> && mise env | rg 'KUBECONFIG|SOPS_AGE_KEY_FILE|TALOSCONFIG'
     kubectl get nodes -o name && git status --short    # nodes listed; status must be empty
     ```
-    If the links are missing, the project hook wasn't approved (the owner runs `wt config approvals add` once) or the worktree wasn't made by `wt`. Create them by hand: `ln -s /opt/home-ops/<f> <f>` for each file, then `mise trust -q .`. Don't pass `--yes` to get past an approval prompt without telling the user.
+    **Unapproved hook**: until the owner runs `wt config approvals add` once, `wt switch --create` in a non-interactive shell fails with `Cannot prompt for approval in non-interactive environment` and creates nothing. Don't pass `--yes` to get past it; re-run with `--no-hooks` and create the links by hand: `ln -s /opt/home-ops/<f> <f>` for each file, then `mise trust -q .`. Same for worktrees not made by `wt`.
 4. **Pin every Shell call to the worktree** with `working_directory: <wt>`. A `cd /tmp/...` persists into later calls and silently drops mise env. For files outside the workspace root, use `rg` in Shell rather than the Grep/Glob tools, which have returned main-checkout results.
 5. **Read docs the user mentions from `/opt/home-ops/docs/`.** Untracked owner docs (e.g. `docs/sre-and-security-evaluation.md`, `docs/hardening-outstanding.md`) don't exist in worktrees. Don't edit or commit them; the repo is public.
 6. **Check overlapping open PRs before editing a hot file.** These are edited by most branches:

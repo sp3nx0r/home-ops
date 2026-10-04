@@ -13,7 +13,7 @@ Run N independent implementation agents without them clobbering the owner's chec
 
 - Each agent follows `home-ops-worktree-pr`. That skill owns the per-agent rules (worktree setup, hot files, commits, stacking, cleanup). This skill covers only the orchestrator's job.
 - Task tool with `subagent_type: generalPurpose`, `run_in_background: true`; `resume: <agent-id>` to continue one. Prefer `generalPurpose` with the agent creating its own worktree via `wt switch --create` (credential symlinks come from the `.config/wt.toml` hook). `best-of-n-runner` creates its own worktree outside `wt`, so that agent must symlink credentials at its own toplevel by hand.
-- Check the owner has approved the project hook (`wt config approvals add`), or every agent's worktree comes up without credentials.
+- Check the owner has approved the project hook (`wt config approvals add`). Otherwise every agent's `wt switch --create` fails non-interactively, and agents must fall back to `--no-hooks` plus manual symlinks.
 - Subagents don't load skills reliably, so paste the prompt block below into every prompt.
 
 ## Workflow
@@ -36,7 +36,8 @@ Run N independent implementation agents without them clobbering the owner's chec
        cd /opt/home-ops && git fetch -q origin
        wt switch --create <type>/<slug> --base origin/main --no-cd --format json   # prints the path
      A hook symlinks kubeconfig/age.key/talosconfig and runs mise trust; confirm `kubectl get nodes` works
-     there. If the links are missing: ln -s /opt/home-ops/<f> <f> for each, then mise trust -q .
+     there. If wt says "Cannot prompt for approval", re-run with --no-hooks (never --yes), then
+     ln -s /opt/home-ops/<f> <f> for each and mise trust -q .
      Set working_directory on every Shell call; use rg in Shell, not Grep/Glob, for worktree files.
     - Never use `wt merge`, `wt step commit` or `wt step copy-ignored`.
     - Read AGENTS.md and docs by absolute path under /opt/home-ops/docs/. Don't edit untracked owner docs.
