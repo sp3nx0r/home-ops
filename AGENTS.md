@@ -2,6 +2,20 @@
 
 This is a GitOps mono-repo for a bare-metal Kubernetes homelab ("Securimancy Homelab").
 
+## Agent Development Workflow
+
+Agents work in their own git worktree, never in the primary checkout `/opt/home-ops` (the owner's; edits and `git switch` there have clobbered uncommitted work). Use [Worktrunk](https://worktrunk.dev/) (`wt`):
+
+```sh
+git fetch origin && wt switch --create <type>/<name> --base origin/main --no-cd   # → /opt/home-ops.<type>-<name>
+wt list                                                                         # status, ahead/behind, per worktree
+wt remove <type>/<name>                                                         # after the PR merges
+```
+
+- `.config/wt.toml` symlinks `kubeconfig`, `age.key` and `talosconfig` into new worktrees and runs `mise trust`. Approve it once with `wt config approvals add`.
+- Never use `wt merge` or `wt step commit`: changes land via PR (squash-merged on GitHub) with Conventional Commits.
+- Workflow details: `.agents/skills/home-ops-worktree-pr` (one agent) and `home-ops-parallel-agents` (several).
+
 ## Documentation
 
 The `docs/` directory contains architecture decisions, implementation plans, and operational runbooks authored by the repo owner. Always check `docs/` for prior context before proposing changes — a plan or runbook may already exist for what you're about to do.
@@ -177,6 +191,7 @@ Tools are version-pinned in `.mise/config.toml` (with a checksum lockfile at `.m
 - `logcli` / `promtool` / `amtool` — Loki, Prometheus/Thanos and Alertmanager CLIs, pinned to the versions running in-cluster. `promtool` also covers Thanos Query (Prometheus HTTP API) and offline rule checks; `amtool` covers Alertmanager config checks
 - `gum` — Shell UI used by just recipes for structured logging (`gum log`)
 - `gh` — GitHub CLI for issues, PRs, checks, and releases
+- `wt` — Worktrunk, git worktree manager for agent work (see Agent Development Workflow)
 
 Run `just` (no args) to list available recipes. Recipes are grouped into modules
 invoked as `just <module> <recipe>`. Common commands:
