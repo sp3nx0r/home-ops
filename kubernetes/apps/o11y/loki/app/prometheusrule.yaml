@@ -51,3 +51,37 @@ spec:
               Loki has recorded {{ $value }} panic(s) in the last 10 minutes.
           labels:
             severity: warning
+    # The compactor logs its errors and retries, so request-path alerts stay
+    # green while retention stops and Garage fills with expired chunks. The
+    # last-success timestamps reset to 0 on restart, hence the uptime guard.
+    - name: loki-compactor.rules
+      rules:
+        - alert: LokiCompactionStale
+          expr: |-
+            (time() - max by (job) (loki_boltdb_shipper_compact_tables_operation_last_successful_run_timestamp_seconds{job="o11y/loki"}) > 3 * 3600)
+            and on (job)
+            (time() - max by (job) (process_start_time_seconds{job="o11y/loki"}) > 3 * 3600)
+          for: 15m
+          annotations:
+            summary: >-
+              Loki index compaction has not succeeded in 3 hours
+            description: >-
+              The compactor runs every 30m but has not completed a compaction in
+              over 3 hours. Check loki-0 logs for "failed to compact files"; an
+              unreadable index object in loki-chunks blocks every later run.
+          labels:
+            severity: warning
+        - alert: LokiRetentionStale
+          expr: |-
+            (time() - max by (job) (loki_compactor_apply_retention_last_successful_run_timestamp_seconds{job="o11y/loki"}) > 6 * 3600)
+            and on (job)
+            (time() - max by (job) (process_start_time_seconds{job="o11y/loki"}) > 6 * 3600)
+          for: 15m
+          annotations:
+            summary: >-
+              Loki retention has not succeeded in 6 hours
+            description: >-
+              Expired chunks are not being deleted, so loki-chunks in Garage keeps
+              growing. Check loki-0 logs for "failed to apply retention".
+          labels:
+            severity: warning
