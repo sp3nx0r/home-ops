@@ -39,7 +39,7 @@ Ship alerts that can fire, don't duplicate what charts already ship, fit the obj
     Flux postBuild substitutes only braced `${VAR}`, so `{{ $labels.x }}`, `$value` and `$1` are safe (see `backblaze-exporter`). A braced `${1}` in a `label_replace` replacement, or any other `${...}`, gets blanked when the app's `ks.yaml` has `postBuild`; write `$1`, or escape it as `$${1}`.
 6. **Dashboards**: `curl -s -o /dev/null -w '%{http_code}' -L <url>` must be 200; the Grafana init container uses `curl -f`, so one bad URL fails the pod. Replace stale dashboards rather than stacking new ones (a statsd-era Envoy `gnetId: 11022` was once kept next to its replacement).
 7. **Alertmanager edits**: follow [alertmanager.md](alertmanager.md): render the config Secret, `amtool check-config`, one route test per intended path, CNP `toFQDNs` for new receivers, `sops set` for receiver secrets.
-8. **One PR per component**, cut from a freshly fetched `origin/main` (a stale base missed a rule group merged an hour earlier). Match the annotation style (folded `summary`/`description` + `severity`). Comments terse.
+8. **One PR per component**, cut from a freshly fetched `origin/main` (a stale base missed a rule group merged an hour earlier). Match the annotation style (folded `summary`/`description` + `severity`).
 9. **Post-merge**:
     ```sh
     kubectl get prometheusrule -A | rg <name>
