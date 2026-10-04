@@ -75,6 +75,44 @@ spec:
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
 metadata:
+  name: envoy-gateway-certgen
+spec:
+  # The pre-install/pre-upgrade `certgen` Helm hook Job. It generates the
+  # admission webhook TLS cert and writes it to a Secret via the apiserver.
+  # Its pods only carry `app: certgen` / `job-name: ...` labels (none of the
+  # app.kubernetes.io/* labels the control-plane CNP selects), so without this
+  # rule they hit default-deny and the hook fails, stalling every chart upgrade.
+  endpointSelector:
+    matchLabels:
+      io.kubernetes.pod.namespace: network
+      app: certgen
+  egress:
+    # DNS resolution (L7 so lookups are visible to Cilium's DNS proxy)
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    # Create/patch the webhook TLS Secret via the apiserver
+    - toEntities:
+        - kube-apiserver
+      toPorts:
+        - ports:
+            - port: "6443"
+              protocol: TCP
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/cilium.io/ciliumnetworkpolicy_v2.json
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
   name: envoy-proxy
 spec:
   # The Envoy data-plane proxies (envoy-internal 192.168.5.10 + envoy-external
