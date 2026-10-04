@@ -211,6 +211,7 @@ When automating or investigating from this repo, prefer local CLI and cluster ac
 - Renovate manages dependency updates (`.renovaterc.json5`).
 - Keep HelmRelease values minimal — only override what differs from chart defaults.
 - Security contexts: prefer `runAsNonRoot`, `readOnlyRootFilesystem`, and drop all capabilities.
+- Comments: terse, usually one line. State the non-obvious why or constraint, not what the next line does. No multi-paragraph blocks in YAML, scripts or AGENTS.md.
 
 ## Commit Conventions
 
