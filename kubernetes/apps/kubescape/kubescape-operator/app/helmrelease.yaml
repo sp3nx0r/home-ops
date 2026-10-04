@@ -192,3 +192,47 @@ spec:
                   options:
                     - name: ndots
                       value: "1"
+          # Read-only rules the chart omits (each was a recurring 403 in the
+          # audit log). Secrets stay denied via enableClusterWideSecretAccess.
+          - target:
+              kind: ClusterRole
+              name: operator
+            patch: |
+              - op: add
+                path: /rules/-
+                value:
+                  apiGroups: [""]
+                  resources: ["serviceaccounts"]
+                  verbs: ["get"]
+          - target:
+              kind: ClusterRole
+              name: kubescape
+            patch: |
+              - op: add
+                path: /rules/-
+                value:
+                  apiGroups: ["admissionregistration.k8s.io"]
+                  resources: ["validatingadmissionpolicies", "validatingadmissionpolicybindings"]
+                  verbs: ["get", "list", "watch"]
+              - op: add
+                path: /rules/-
+                value:
+                  apiGroups: ["kubescape.io"]
+                  resources: ["controlinputs", "securityexceptions", "clustersecurityexceptions"]
+                  verbs: ["get", "list", "watch"]
+              - op: add
+                path: /rules/-
+                value:
+                  apiGroups: ["talos.dev"]
+                  resources: ["serviceaccounts"]
+                  verbs: ["get", "list", "watch"]
+          - target:
+              kind: ClusterRole
+              name: storage
+            patch: |
+              - op: add
+                path: /rules/-
+                value:
+                  apiGroups: [""]
+                  resources: ["nodes"]
+                  verbs: ["get", "list", "watch"]
