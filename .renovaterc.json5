@@ -56,6 +56,18 @@
       minimumGroupSize: 3,
     },
     {
+      // The HelmRelease pins every component image to the chart's defaults
+      // (plus digests). Components release independently every few days while
+      // the chart only rolls their tags forward every few weeks, often with
+      // RBAC/config changes the new images need, so ship them as one bundle.
+      description: "Kubescape Group",
+      groupName: "kubescape",
+      matchPackageNames: ["/^quay\\.io/kubescape//", "kubescape-operator"],
+      group: {
+        commitMessageTopic: "{{{groupName}}} group",
+      },
+    },
+    {
       // Group tool bumps and keep .mise/mise.lock fresh. We don't re-lock on
       // pre-commit, so lockFileMaintenance catches drift for tools that aren't
       // otherwise updated (version bumps re-lock in their own PRs).
