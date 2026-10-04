@@ -1,6 +1,6 @@
 ---
 name: home-ops-worktree-pr
-description: Takes one agent-led change in home-ops from an isolated git worktree to a pushed branch and PR, or a direct push to main only when the user explicitly asks. Covers credential wiring so kubectl/sops/talosctl work, overlapping-PR checks, lefthook-safe commits, stacked PRs, CI watch and cleanup. Use at the start of any implementation task, when kubectl fails inside a worktree (localhost:8080, x509 expired), or when asked to "open a PR", "push to main" or "commit just my changes".
+description: Takes one agent-led change in home-ops from an isolated git worktree (created with Worktrunk `wt`) to a pushed branch and PR, or a direct push to main only when the user explicitly asks. Covers credential wiring so kubectl/sops/talosctl work, overlapping-PR checks, lefthook-safe commits, stacked PRs, CI watch and cleanup. Use at the start of any implementation task, when kubectl fails inside a worktree (localhost:8080, x509 expired), or when asked to "open a PR", "push to main" or "commit just my changes".
 ---
 
 # home-ops: worktree → PR
@@ -22,21 +22,20 @@ Ship one focused change from a fresh worktree to a reviewable PR without touchin
     pwd; git rev-parse --show-toplevel; git status -sb | head -3
     git -C /opt/home-ops fetch -q origin && git -C /opt/home-ops worktree list
     ```
-    If the toplevel is `/opt/home-ops`, you're in the owner's checkout. 30+ worktrees exist; pick an unused slug and check whether one already covers your area.
-2. **Create the worktree off `origin/main`** as a sibling, `/opt/home-ops-<slug>`. If `just --list worktree` works (PR [#491](https://github.com/sp3nx0r/home-ops/pull/491)), use `just worktree new <slug> [feat|fix]`. Otherwise:
+    If the toplevel is `/opt/home-ops`, you're in the owner's checkout. Run `wt list` (from `/opt/home-ops`) to see existing worktrees with their ahead/behind and change status; pick an unused branch name and check whether one already covers your area.
+2. **Create the worktree off `origin/main` with Worktrunk** (`wt`, pinned in mise). Always pass `--base origin/main`: the default base is local `main`, which is often behind in the owner's checkout. `--no-cd` because agents have no shell integration; `--format json` returns the path.
     ```sh
-    git -C /opt/home-ops worktree add -b <type>/<slug> /opt/home-ops-<slug> origin/main
+    cd /opt/home-ops && git fetch -q origin
+    wt switch --create <type>/<slug> --base origin/main --no-cd --format json   # {"path":"/opt/home-ops.<type>-<slug>",...}
     ```
+    Without `wt`: `git -C /opt/home-ops worktree add -b <type>/<slug> /opt/home-ops.<type>-<slug> origin/main`, then create the symlinks in step 3 by hand.
     If a tool already created the worktree elsewhere (`/tmp/wt-*`, a subagent runner), keep it and use `git rev-parse --show-toplevel` as `<wt>` below.
-3. **Wire the gitignored credentials with symlinks** (the #491 recipe doesn't). Symlinks make mise resolve correctly; an exported `KUBECONFIG` can be reset by mise's directory hook.
+3. **Confirm the credential symlinks.** The `pre-start` hook in `.config/wt.toml` symlinks `kubeconfig`, `age.key` and `talos/clusterconfig/talosconfig` from `/opt/home-ops` and runs `mise trust`. Symlinks, not copies or an exported `KUBECONFIG`: mise resolves those env vars from `{{config_root}}` (the worktree) and its directory hook resets exports.
     ```sh
-    cd <wt>
-    ln -s /opt/home-ops/kubeconfig kubeconfig
-    ln -s /opt/home-ops/age.key age.key
-    ln -s /opt/home-ops/talos/clusterconfig/talosconfig talos/clusterconfig/talosconfig   # if talosctl is needed
-    mise trust -q . && mise env | rg 'KUBECONFIG|SOPS_AGE_KEY_FILE|TALOSCONFIG'
+    cd <wt> && mise env | rg 'KUBECONFIG|SOPS_AGE_KEY_FILE|TALOSCONFIG'
     kubectl get nodes -o name && git status --short    # nodes listed; status must be empty
     ```
+    If the links are missing, the project hook wasn't approved (the owner runs `wt config approvals add` once) or the worktree wasn't made by `wt`. Create them by hand: `ln -s /opt/home-ops/<f> <f>` for each file, then `mise trust -q .`. Don't pass `--yes` to get past an approval prompt without telling the user.
 4. **Pin every Shell call to the worktree** with `working_directory: <wt>`. A `cd /tmp/...` persists into later calls and silently drops mise env. For files outside the workspace root, use `rg` in Shell rather than the Grep/Glob tools, which have returned main-checkout results.
 5. **Read docs the user mentions from `/opt/home-ops/docs/`.** Untracked owner docs (e.g. `docs/sre-and-security-evaluation.md`, `docs/hardening-outstanding.md`) don't exist in worktrees. Don't edit or commit them; the repo is public.
 6. **Check overlapping open PRs before editing a hot file.** These are edited by most branches:
@@ -80,7 +79,7 @@ Ship one focused change from a fresh worktree to a reviewable PR without touchin
     timeout 900 gh pr checks <n> --watch --interval 20 > /tmp/checks-<n>.txt 2>&1; tail -15 /tmp/checks-<n>.txt
     ```
     Flux Local runs only on `pull_request` and only meaningfully for `kubernetes/**`. A red check may come from `main`; see `flux-rollout-watch` ("Red Flux Local").
-11. **Clean up only what you started**: your port-forwards by PID and `/tmp` files with decrypted data. Remove **your own** worktree once its PR has merged (`just worktree remove <slug>`, or `git -C /opt/home-ops worktree remove <wt>`). While the PR is open, leave it. Never remove other worktrees; list stale ones for the user (`just worktree nuke` is the owner's call).
+11. **Clean up only what you started**: your port-forwards by PID and `/tmp` files with decrypted data. Remove **your own** worktree once its PR has merged: `wt remove <type>/<slug>`. It deletes the branch only if its changes are already on `main` (squash merges included), and otherwise keeps it. While the PR is open, leave it. Never remove other worktrees; point the user at `wt list` for stale ones.
 
 ## Direct push to main (only when the user asks)
 
@@ -106,6 +105,8 @@ Ship one focused change from a fresh worktree to a reviewable PR without touchin
 - **Picking a LoadBalancer IP**: check live `.status.loadBalancer.ingress` and grep all worktrees (`git worktree list`) for `lbipam.cilium.io/ips`; an open branch may already claim it.
 - **Pushes can hang on SSH prompts**: `GIT_SSH_COMMAND='ssh -o BatchMode=yes' timeout 60 git push ...`.
 - **`git checkout main` fails inside a worktree** (main is checked out elsewhere). Branch from `origin/main` instead.
+- **Worktrunk commands to avoid**: `wt merge` (squash-merges into local `main`, bypassing PR and CI), `wt step commit`/`squash` (LLM-written messages, not Conventional Commits with a rationale), `wt step copy-ignored` (copies `age.key` instead of linking it).
+- **Worktree paths**: `wt` creates `/opt/home-ops.<type>-<slug>`. Older worktrees use `/opt/home-ops-<slug>`, `/tmp/wt-*` or `~/.config/superpowers/worktrees/`; `wt list` and `wt remove` handle them all.
 - **Read-only cluster by default**: `get`, `logs`, `--dry-run=server`, `auth can-i`, proxy queries. No apply/patch/delete/`flux reconcile` unless asked. Your own `kubectl exec` shows up in the audit log as an admin exec.
 
 ## Output Template

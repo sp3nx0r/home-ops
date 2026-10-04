@@ -12,7 +12,8 @@ Run N independent implementation agents without them clobbering the owner's chec
 ## Prerequisites
 
 - Each agent follows `home-ops-worktree-pr`. That skill owns the per-agent rules (worktree setup, hot files, commits, stacking, cleanup). This skill covers only the orchestrator's job.
-- Task tool with `subagent_type: generalPurpose`, `run_in_background: true`; `resume: <agent-id>` to continue one. Prefer `generalPurpose` with an explicit `/opt/home-ops-<slug>` worktree. `best-of-n-runner` creates its own worktree outside that convention, so the agent must still symlink credentials at its own toplevel.
+- Task tool with `subagent_type: generalPurpose`, `run_in_background: true`; `resume: <agent-id>` to continue one. Prefer `generalPurpose` with the agent creating its own worktree via `wt switch --create` (credential symlinks come from the `.config/wt.toml` hook). `best-of-n-runner` creates its own worktree outside `wt`, so that agent must symlink credentials at its own toplevel by hand.
+- Check the owner has approved the project hook (`wt config approvals add`), or every agent's worktree comes up without credentials.
 - Subagents don't load skills reliably, so paste the prompt block below into every prompt.
 
 ## Workflow
@@ -20,7 +21,7 @@ Run N independent implementation agents without them clobbering the owner's chec
 1. **Pre-flight (orchestrator, read-only):**
     ```sh
     git -C /opt/home-ops fetch -q && git -C /opt/home-ops status -sb   # owner checkout: often behind, holds untracked docs
-    git -C /opt/home-ops worktree list                                 # 30+ exist; choose unique slugs and branches
+    (cd /opt/home-ops && wt list)                                      # existing worktrees; choose unique branch names
     gh pr list --state open --json number,headRefName,title -q '.[]|"\(.number) \(.headRefName) \(.title)"'
     ```
 2. **Assign hot files.** Take the list in `home-ops-worktree-pr` step 6 and give each hot file to one agent, or tell the others to touch it minimally and expect a rebase. Orchestrator-level additions:
@@ -31,11 +32,13 @@ Run N independent implementation agents without them clobbering the owner's chec
 4. **Paste this block into every prompt**, then add the task, the agent's slug, its hot-file assignments and any contracts:
     ```text
     Repo rules (home-ops; condensed from .agents/skills/home-ops-worktree-pr — read it if you can):
-    - Work only in your own worktree: git -C /opt/home-ops worktree add -b <type>/<slug> /opt/home-ops-<slug> origin/main
-      (or `just worktree new <slug> <type>` if it exists). Never edit or `git switch` in /opt/home-ops.
-    - In the worktree: ln -s /opt/home-ops/kubeconfig kubeconfig; ln -s /opt/home-ops/age.key age.key
-      (Talos work: also talos/clusterconfig/talosconfig); mise trust -q .; confirm `kubectl get nodes` works.
-      Set working_directory on every Shell call; use rg in Shell, not Grep/Glob, for worktree files.
+    - Work only in your own worktree. Never edit or `git switch` in /opt/home-ops.
+       cd /opt/home-ops && git fetch -q origin
+       wt switch --create <type>/<slug> --base origin/main --no-cd --format json   # prints the path
+     A hook symlinks kubeconfig/age.key/talosconfig and runs mise trust; confirm `kubectl get nodes` works
+     there. If the links are missing: ln -s /opt/home-ops/<f> <f> for each, then mise trust -q .
+     Set working_directory on every Shell call; use rg in Shell, not Grep/Glob, for worktree files.
+    - Never use `wt merge`, `wt step commit` or `wt step copy-ignored`.
     - Read AGENTS.md and docs by absolute path under /opt/home-ops/docs/. Don't edit untracked owner docs.
     - Cluster is READ-ONLY: get/logs/--dry-run=server/auth can-i/apiserver-proxy queries (source scripts/o11y.sh).
       No apply/patch/delete/flux reconcile/talosctl apply; no B2, Pocket ID or UniFi changes. Write those as
@@ -70,7 +73,7 @@ Run N independent implementation agents without them clobbering the owner's chec
 - In-repo linters may reject paths outside their repo. Copy into a temp dir inside that worktree, lint, delete, and check `git status --porcelain`.
 - Amending another agent's unmerged branch: `--force-with-lease`, and say so.
 - Closing a superseded PR is fine after the user decides. Comment the reason and keep the branch.
-- Don't remove other agents' worktrees; list them for the user. Each agent removes its own after merge.
+- Don't remove other agents' worktrees; list them for the user (`wt list`). Each agent removes its own after merge with `wt remove <branch>`.
 
 ## Output Template
 
