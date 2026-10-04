@@ -10,7 +10,8 @@
 # needs rules here nor is filtered by them. Pod -> node traffic is NOT
 # masqueraded (native routing), so in-cluster clients such as Prometheus arrive
 # from 10.42.0.0/16. The node /32s must be extended when a node is added.
-# Apply with `just talos apply-node <node> try`; a mistake can lock out apid.
+# A mistake can lock out apid. Roll out with `talosctl apply-config --mode try
+# --timeout 10m` per the plan doc, not `just talos apply-node <node> try` (1m).
 ---
 apiVersion: v1alpha1
 kind: NetworkDefaultActionConfig
