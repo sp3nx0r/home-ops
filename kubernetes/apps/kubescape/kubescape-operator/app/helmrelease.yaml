@@ -77,7 +77,7 @@ spec:
     kubescape:
       image:
         repository: quay.io/kubescape/kubescape
-        tag: v4.0.13@sha256:58651dce3376309cd9a064021c4b1f0655ab307631ee4259f5a531e7dcb44cc2
+        tag: v4.0.15@sha256:40bb0ace10b8f33fc187a45232d047d6765ed508778b55a52a683145f7c9c3dd
       skipUpdateCheck: true
     kubescapeScheduler:
       image:
@@ -111,11 +111,11 @@ spec:
     operator:
       image:
         repository: quay.io/kubescape/operator
-        tag: v0.2.169@sha256:01b2694425e935018daf5d2aee1fb6f7fa110160ea99f22ac98c1786a645dd3b
+        tag: v0.2.172@sha256:1ddcd2788e1ef1ce4c688920b48b4b9be35af549db19391bdb9be71bd42d1e26
     kubevuln:
       image:
         repository: quay.io/kubescape/kubevuln
-        tag: v0.3.430@sha256:9bed2f723ea09807ea31d656018feca35c8cb49eb4707006ae890b01f8830e28
+        tag: v0.3.501@sha256:8b810f2598861f7120047e2d6a090125200d628ba8e50e2b9b94a8dd5031d098
       config:
         grypeDbPersistence: true
       resources:
@@ -129,7 +129,7 @@ spec:
     storage:
       image:
         repository: quay.io/kubescape/storage
-        tag: v0.0.331@sha256:01f2b053ace1f276a1f46fcf41eaee58cf0f43d59e667c0d6a27b2920fd44ba1
+        tag: v0.0.348@sha256:6333d78455896ae3f32d6a8a6a743b2c976ec1253dc6049187943d22363367bd
       resources:
         requests:
           cpu: 200m
@@ -144,7 +144,7 @@ spec:
     nodeAgent:
       image:
         repository: quay.io/kubescape/node-agent
-        tag: v0.3.219@sha256:2044ed750f5e20a7c5150479963e2b33108c304a40d526c0de7ed412495467c6
+        tag: v0.3.251@sha256:59e4ebfe3576beca7379f5fc185f25c9bbfc244afc1801ab2d3362299a249c6f
       resources:
         requests:
           cpu: 100m
