@@ -5,6 +5,7 @@ kind: Kustomization
 resources:
   - ./ciliumnetworkpolicy.yaml
   - ./clusterrole.yaml
+  - ./clusterrole-gaps.yaml
   - ./helmrelease.yaml
   - ./helmrepository.yaml
   - ./prometheusrule.yaml
