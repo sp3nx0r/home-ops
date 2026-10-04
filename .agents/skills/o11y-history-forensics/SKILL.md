@@ -67,7 +67,7 @@ Answer "what happened, and why" from metrics and logs, with the coverage and con
 
 ## Gotchas & Edge Cases
 
-- **The Loki `namespace` label lies for JSON-logging pods.** Vector merges the app's JSON over the Kubernetes metadata, so Flux controllers and Kubescape pods carry the `namespace` of whatever object they logged about. Select those by `pod=~"<name>.*"`, not `namespace`.
+- **Loki `namespace` labels before 2026-10-04 15:22Z lie for JSON-logging pods** (Flux controllers, Kubescape), which were labelled with the namespace of the object they logged about. For older windows select by `pod=~"<name>.*"`. Newer lines carry the app's value as `log_namespace`.
 - **Partial data posed as fact.** Every query once returned ≈51h, and the agent reported "Thanos has no history". In fact the store gateway had been OOM-killed by a `[60d:5m]` query, and Query served only sidecar data. Server-side `--no-query.partial-response` now makes this an error. Still read `.warnings`, and state coverage in every answer.
 - **Broad queries crash Thanos.** `{__name__=~".+"}` and long fine-step subqueries OOM'd query/store. Store limits (`request-series=100000`, `request-samples=50000000`) now reject them; narrow the query rather than raising the limits. If you did cause a restart, tell the user.
 - Instant subqueries via `tq` skip Query Frontend's 24h splitting. Use `tqr` for long ranges.

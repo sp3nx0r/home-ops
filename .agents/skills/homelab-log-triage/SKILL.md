@@ -88,7 +88,7 @@ On the Kubernetes side, democratic-csi logs live in `kube-system` (`democratic-c
 
 ## Gotchas & Edge Cases
 
-- **The Kubernetes `namespace` (and possibly `pod`) label lies for JSON-logging apps.** Vector's `kube_parse` sets them from pod metadata, then `merge!`s the app's JSON over them. Flux controllers and Kubescape pods show up under up to 15 namespaces. Select them by `pod=~"<name>.*"`.
+- **Before 2026-10-04 15:22Z, the `namespace`/`pod` labels lie for JSON-logging apps.** Vector merged the app's JSON over the pod metadata, so Flux controllers and Kubescape pods show up under up to 15 namespaces. For windows before then, select them by `pod=~"<name>.*"`. Since then the labels are the pod's, and the app's own keys are in the line as `log_namespace`/`log_pod` (e.g. `| json | log_namespace="media"` for Flux objects).
 - **UniFi timestamps are ~5h behind**: the gateway sends local time without a timezone. Its hostname `Schloss von Koch` gets split, so `host="Schloss"` and `von Koch` leaks into the message. NAS timestamps are correct.
 - `lqt` labels are values only (`app/facility/host/severity`); use `lqr | jq` when you need the keys.
 - Syslog `severity` is the sender's; `detected_level` is Loki's guess from the text. TrueNAS logs INFO-level middleware lines as `warning`.
