@@ -37,14 +37,17 @@ kubernetes/apps/security/
         # from the shared KOPIA_PASSWORD in cluster-secrets (no per-app file)
 ```
 
-SecurityPolicy resources live alongside the apps they protect:
+SecurityPolicy resources live alongside the apps they protect, each with an `<app>-oidc-secret` holding the client secret:
 
 ```
-kubernetes/apps/media/qui/app/securitypolicy.yaml
-kubernetes/apps/media/qui/app/oidc-secret.sops.yaml
+kubernetes/apps/kube-system/cilium/app/securitypolicy.yaml                      # hubble-ui
+kubernetes/apps/o11y/kube-prometheus-stack/app/securitypolicy-prometheus.yaml
+kubernetes/apps/o11y/kube-prometheus-stack/app/securitypolicy-alertmanager.yaml
+kubernetes/apps/o11y/thanos/app/securitypolicy.yaml
+kubernetes/apps/volsync-system/kopia/app/securitypolicy.yaml
 ```
 
-Grafana uses native OIDC — no SecurityPolicy. Its client secret is in `grafana-secret`.
+Grafana, Headlamp, OpenWebUI and qui use native OIDC — no SecurityPolicy. See [Apps Currently Using OIDC](#apps-currently-using-oidc) for where each keeps its client secret.
 
 ---
 
@@ -58,9 +61,9 @@ Grafana uses native OIDC — no SecurityPolicy. Its client secret is in `grafana
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: security
-  annotations:
-    kustomize.toolkit.fluxcd.io/prune: disabled
+    name: security
+    annotations:
+        kustomize.toolkit.fluxcd.io/prune: disabled
 ```
 
 ```yaml
@@ -72,11 +75,11 @@ kind: Kustomization
 namespace: security
 
 components:
-  - ../../components/sops
+    - ../../components/sops
 
 resources:
-  - ./namespace.yaml
-  - ./pocket-id/ks.yaml
+    - ./namespace.yaml
+    - ./pocket-id/ks.yaml
 ```
 
 ### Flux Kustomization
@@ -88,32 +91,33 @@ resources:
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
 metadata:
-  name: pocket-id
+    name: pocket-id
 spec:
-  interval: 1h
-  path: ./kubernetes/apps/security/pocket-id/app
-  postBuild:
-    substitute:
-      APP: pocket-id
-      VOLSYNC_CAPACITY: "2Gi"
-    substituteFrom:
-      - name: cluster-secrets
-        kind: Secret
-  prune: true
-  sourceRef:
-    kind: GitRepository
-    name: flux-system
-    namespace: flux-system
-  targetNamespace: security
-  wait: true
-  dependsOn:
-    - name: volsync
-      namespace: volsync-system
-    - name: garage
-      namespace: storage
+    interval: 1h
+    path: ./kubernetes/apps/security/pocket-id/app
+    postBuild:
+        substitute:
+            APP: pocket-id
+            VOLSYNC_CAPACITY: "2Gi"
+        substituteFrom:
+            - name: cluster-secrets
+              kind: Secret
+    prune: true
+    sourceRef:
+        kind: GitRepository
+        name: flux-system
+        namespace: flux-system
+    targetNamespace: security
+    wait: true
+    dependsOn:
+        - name: volsync
+          namespace: volsync-system
+        - name: garage
+          namespace: storage
 ```
 
 Dependencies:
+
 - **volsync** — VolSync operator must be running for Kopia backups
 - **garage** — Garage S3 must be running for file backend storage
 
@@ -126,15 +130,15 @@ Dependencies:
 apiVersion: source.toolkit.fluxcd.io/v1
 kind: OCIRepository
 metadata:
-  name: pocket-id
+    name: pocket-id
 spec:
-  interval: 15m
-  layerSelector:
-    mediaType: application/vnd.cncf.helm.chart.content.v1.tar+gzip
-    operation: copy
-  ref:
-    tag: <current-app-template-version>
-  url: oci://ghcr.io/bjw-s-labs/helm/app-template
+    interval: 15m
+    layerSelector:
+        mediaType: application/vnd.cncf.helm.chart.content.v1.tar+gzip
+        operation: copy
+    ref:
+        tag: <current-app-template-version>
+    url: oci://ghcr.io/bjw-s-labs/helm/app-template
 ```
 
 Uses explicit `ref.tag` (managed by Renovate), not `semver: "*"`.
@@ -147,14 +151,14 @@ Uses explicit `ref.tag` (managed by Renovate), not `semver: "*"`.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: pocket-id
+    name: pocket-id
 spec:
-  accessModes:
-    - ReadWriteOnce
-  storageClassName: iscsi
-  resources:
-    requests:
-      storage: 2Gi
+    accessModes:
+        - ReadWriteOnce
+    storageClassName: iscsi
+    resources:
+        requests:
+            storage: 2Gi
 ```
 
 2Gi covers SQLite + GeoLite2 DB. File uploads go to Garage S3, not the PVC.
@@ -167,10 +171,10 @@ spec:
 apiVersion: v1
 kind: Secret
 metadata:
-  name: pocket-id-secret
+    name: pocket-id-secret
 stringData:
-  ENCRYPTION_KEY: "<32-char-hex>"
-  MAXMIND_LICENSE_KEY: "<maxmind-key>"
+    ENCRYPTION_KEY: "<32-char-hex>"
+    MAXMIND_LICENSE_KEY: "<maxmind-key>"
 ```
 
 - `ENCRYPTION_KEY` — minimum 16 bytes hex, used for internal encryption. Generate with `openssl rand -hex 16`.
@@ -187,108 +191,109 @@ Encrypt with: `sops --encrypt --in-place kubernetes/apps/security/pocket-id/app/
 apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:
-  name: pocket-id
-spec:
-  chartRef:
-    kind: OCIRepository
     name: pocket-id
-  interval: 1h
-  values:
-    controllers:
-      pocket-id:
-        annotations:
-          reloader.stakater.com/auto: "true"
-        containers:
-          app:
-            image:
-              repository: ghcr.io/pocket-id/pocket-id
-              tag: <current-version>
-            env:
-              APP_URL: "https://id.${SECRET_DOMAIN}"
-              TRUST_PROXY: "true"
-              DB_CONNECTION_STRING: "/app/data/pocket-id.db"
-              ANALYTICS_DISABLED: "true"
-              VERSION_CHECK_DISABLED: "true"
-              METRICS_ENABLED: "true"
-              OTEL_METRICS_EXPORTER: "prometheus"
-              OTEL_EXPORTER_PROMETHEUS_HOST: "0.0.0.0"
-              OTEL_EXPORTER_PROMETHEUS_PORT: "9464"
-              FILE_BACKEND: "s3"
-              S3_BUCKET: "pocket-id"
-              S3_REGION: "garage"
-              S3_ENDPOINT: "http://garage.storage.svc.cluster.local:3900"
-              S3_ACCESS_KEY_ID: "${POCKET_ID_S3_KEY_ID}"
-              S3_SECRET_ACCESS_KEY: "${POCKET_ID_S3_SECRET_KEY}"
-              S3_FORCE_PATH_STYLE: "true"
-            envFrom:
-              - secretRef:
-                  name: pocket-id-secret
-            probes:
-              liveness: &probes
-                enabled: true
-                custom: true
-                spec:
-                  httpGet:
-                    path: /healthz
-                    port: &port 1411
-                  initialDelaySeconds: 5
-                  periodSeconds: 10
-                  timeoutSeconds: 3
-                  failureThreshold: 3
-              readiness: *probes
-            resources:
-              requests:
-                cpu: 10m
-                memory: 64Mi
-              limits:
-                memory: 256Mi
+spec:
+    chartRef:
+        kind: OCIRepository
+        name: pocket-id
+    interval: 1h
+    values:
+        controllers:
+            pocket-id:
+                annotations:
+                    reloader.stakater.com/auto: "true"
+                containers:
+                    app:
+                        image:
+                            repository: ghcr.io/pocket-id/pocket-id
+                            tag: <current-version>
+                        env:
+                            APP_URL: "https://id.${SECRET_DOMAIN}"
+                            TRUST_PROXY: "true"
+                            DB_CONNECTION_STRING: "/app/data/pocket-id.db"
+                            ANALYTICS_DISABLED: "true"
+                            VERSION_CHECK_DISABLED: "true"
+                            METRICS_ENABLED: "true"
+                            OTEL_METRICS_EXPORTER: "prometheus"
+                            OTEL_EXPORTER_PROMETHEUS_HOST: "0.0.0.0"
+                            OTEL_EXPORTER_PROMETHEUS_PORT: "9464"
+                            FILE_BACKEND: "s3"
+                            S3_BUCKET: "pocket-id"
+                            S3_REGION: "garage"
+                            S3_ENDPOINT: "http://garage.storage.svc.cluster.local:3900"
+                            S3_ACCESS_KEY_ID: "${POCKET_ID_S3_KEY_ID}"
+                            S3_SECRET_ACCESS_KEY: "${POCKET_ID_S3_SECRET_KEY}"
+                            S3_FORCE_PATH_STYLE: "true"
+                        envFrom:
+                            - secretRef:
+                                  name: pocket-id-secret
+                        probes:
+                            liveness: &probes
+                                enabled: true
+                                custom: true
+                                spec:
+                                    httpGet:
+                                        path: /healthz
+                                        port: &port 1411
+                                    initialDelaySeconds: 5
+                                    periodSeconds: 10
+                                    timeoutSeconds: 3
+                                    failureThreshold: 3
+                            readiness: *probes
+                        resources:
+                            requests:
+                                cpu: 10m
+                                memory: 64Mi
+                            limits:
+                                memory: 256Mi
+                        securityContext:
+                            allowPrivilegeEscalation: false
+                            readOnlyRootFilesystem: false
+                            capabilities: { drop: ["ALL"] }
+        defaultPodOptions:
             securityContext:
-              allowPrivilegeEscalation: false
-              readOnlyRootFilesystem: false
-              capabilities: {drop: ["ALL"]}
-    defaultPodOptions:
-      securityContext:
-        runAsNonRoot: true
-        runAsUser: 1000
-        runAsGroup: 1000
-        fsGroup: 1000
-        fsGroupChangePolicy: OnRootMismatch
-    service:
-      app:
-        ports:
-          http:
-            port: *port
-          metrics:
-            port: 9464
-    route:
-      app:
-        hostnames:
-          - "id.${SECRET_DOMAIN}"
-        parentRefs:
-          - name: envoy-internal
-            namespace: network
-            sectionName: https
-        rules:
-          - backendRefs:
-              - identifier: app
-                port: *port
-    serviceMonitor:
-      app:
-        serviceName: pocket-id
-        endpoints:
-          - port: metrics
-            scheme: http
-            path: /metrics
-            interval: 1m
-            scrapeTimeout: 10s
-    persistence:
-      data:
-        existingClaim: pocket-id
-        globalMounts:
-          - path: /app/data
+                runAsNonRoot: true
+                runAsUser: 1000
+                runAsGroup: 1000
+                fsGroup: 1000
+                fsGroupChangePolicy: OnRootMismatch
+        service:
+            app:
+                ports:
+                    http:
+                        port: *port
+                    metrics:
+                        port: 9464
+        route:
+            app:
+                hostnames:
+                    - "id.${SECRET_DOMAIN}"
+                parentRefs:
+                    - name: envoy-internal
+                      namespace: network
+                      sectionName: https
+                rules:
+                    - backendRefs:
+                          - identifier: app
+                            port: *port
+        serviceMonitor:
+            app:
+                serviceName: pocket-id
+                endpoints:
+                    - port: metrics
+                      scheme: http
+                      path: /metrics
+                      interval: 1m
+                      scrapeTimeout: 10s
+        persistence:
+            data:
+                existingClaim: pocket-id
+                globalMounts:
+                    - path: /app/data
 ```
 
 Key configuration notes:
+
 - `TRUST_PROXY: "true"` — required behind Envoy Gateway
 - `readOnlyRootFilesystem: false` — Pocket ID writes to the mounted PVC and may need temp files
 - `runAsUser/runAsGroup: 1000` — confirmed working UID/GID for this image
@@ -304,12 +309,12 @@ Key configuration notes:
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 components:
-  - ../../../../components/volsync
+    - ../../../../components/volsync
 resources:
-  - ./helmrelease.yaml
-  - ./ocirepository.yaml
-  - ./pvc.yaml
-  - ./secret.sops.yaml
+    - ./helmrelease.yaml
+    - ./ocirepository.yaml
+    - ./pvc.yaml
+    - ./secret.sops.yaml
 ```
 
 ### VolSync Backup
@@ -338,6 +343,7 @@ After deploying Pocket ID:
 For apps without native OIDC support. Envoy handles the full OIDC code flow at the gateway level.
 
 **Per-app requirements:**
+
 1. Register an OIDC client in the Pocket ID admin UI
 2. Create an OIDC client secret (SOPS-encrypted)
 3. Create a SecurityPolicy targeting the app's HTTPRoute
@@ -352,9 +358,9 @@ For apps without native OIDC support. Envoy handles the full OIDC code flow at t
 apiVersion: v1
 kind: Secret
 metadata:
-  name: <app>-oidc-secret
+    name: <app>-oidc-secret
 stringData:
-  client-secret: "<client-secret-from-pocket-id>"
+    client-secret: "<client-secret-from-pocket-id>"
 ```
 
 **SecurityPolicy:**
@@ -366,33 +372,34 @@ stringData:
 apiVersion: gateway.envoyproxy.io/v1alpha1
 kind: SecurityPolicy
 metadata:
-  name: <app>-oidc
+    name: <app>-oidc
 spec:
-  targetRefs:
-    - group: gateway.networking.k8s.io
-      kind: HTTPRoute
-      name: <httproute-name>
-  oidc:
-    provider:
-      issuer: "https://id.${SECRET_DOMAIN}"
-    clientID: "<client-id-from-pocket-id>"
-    clientSecret:
-      name: <app>-oidc-secret
-    redirectURL: "https://<app-hostname>.${SECRET_DOMAIN}/oauth2/callback"
-    logoutPath: "/logout"
-    cookieDomain: "${SECRET_DOMAIN}"
-    cookieNames:
-      idToken: <app>-id-token
-      accessToken: <app>-access-token
-    forwardAccessToken: true
-    scopes:
-      - openid
-      - profile
-      - email
-      - groups
+    targetRefs:
+        - group: gateway.networking.k8s.io
+          kind: HTTPRoute
+          name: <httproute-name>
+    oidc:
+        provider:
+            issuer: "https://id.${SECRET_DOMAIN}"
+        clientID: "<client-id-from-pocket-id>"
+        clientSecret:
+            name: <app>-oidc-secret
+        redirectURL: "https://<app-hostname>.${SECRET_DOMAIN}/oauth2/callback"
+        logoutPath: "/logout"
+        cookieDomain: "${SECRET_DOMAIN}"
+        cookieNames:
+            idToken: <app>-id-token
+            accessToken: <app>-access-token
+        forwardAccessToken: true
+        scopes:
+            - openid
+            - profile
+            - email
+            - groups
 ```
 
 Key fields:
+
 - `targetRefs.name` — must match the actual HTTPRoute name. Verify with `kubectl get httproute -n <namespace>`.
 - `cookieDomain: "${SECRET_DOMAIN}"` — enables SSO across all subdomains
 - `cookieNames` — unique per app to prevent cookie collisions across shared domain
@@ -402,9 +409,9 @@ Key fields:
 
 ```yaml
 resources:
-  # ...existing resources...
-  - ./oidc-secret.sops.yaml
-  - ./securitypolicy.yaml
+    # ...existing resources...
+    - ./oidc-secret.sops.yaml
+    - ./securitypolicy.yaml
 ```
 
 ### Pattern 2: Native OIDC (Grafana)
@@ -412,24 +419,25 @@ resources:
 Grafana uses its built-in `auth.generic_oauth` for OIDC, which enables role mapping from Pocket ID groups to Grafana roles.
 
 In `grafana-secret` (SOPS-encrypted):
+
 - `GRAFANA_OIDC_CLIENT_SECRET` — the OIDC client secret from Pocket ID
 
 In the Grafana HelmRelease `grafana.ini`:
 
 ```yaml
 auth.generic_oauth:
-  enabled: true
-  name: PocketID
-  client_id: <client-id-from-pocket-id>
-  client_secret: $__env{GRAFANA_OIDC_CLIENT_SECRET}
-  scopes: openid profile email groups
-  auth_url: https://id.securimancy.com/authorize
-  token_url: https://id.securimancy.com/api/oidc/token
-  api_url: https://id.securimancy.com/api/oidc/userinfo
-  use_pkce: false
-  allow_sign_up: true
-  auto_login: true
-  role_attribute_path: contains(groups[*], 'grafana_admin') && 'GrafanaAdmin' || 'Viewer'
+    enabled: true
+    name: PocketID
+    client_id: <client-id-from-pocket-id>
+    client_secret: $__env{GRAFANA_OIDC_CLIENT_SECRET}
+    scopes: openid profile email groups
+    auth_url: https://id.securimancy.com/authorize
+    token_url: https://id.securimancy.com/api/oidc/token
+    api_url: https://id.securimancy.com/api/oidc/userinfo
+    use_pkce: false
+    allow_sign_up: true
+    auto_login: true
+    role_attribute_path: contains(groups[*], 'grafana_admin') && 'GrafanaAdmin' || 'Viewer'
 ```
 
 - `auto_login: true` — skips the Grafana login page, redirects straight to Pocket ID
@@ -440,18 +448,26 @@ auth.generic_oauth:
 
 ## Apps Currently Using OIDC
 
-| App | Namespace | Pattern | Notes |
-|-----------|-----------|-------------------------|-------------------------------------------|
-| Grafana | o11y | Native `generic_oauth` | Role mapping via `grafana_admin` group |
-| Qui | media | Envoy SecurityPolicy | Gateway-level OIDC |
+| App          | Namespace      | Pattern                  | Notes                                                              |
+| ------------ | -------------- | ------------------------ | ------------------------------------------------------------------ |
+| Grafana      | o11y           | Native `generic_oauth`   | Role mapping via `grafana_admin` group; secret in `grafana-secret` |
+| Headlamp     | o11y           | Native (chart `oidc`)    | Client config in `headlamp-oidc` (`secret.sops.yaml`)              |
+| OpenWebUI    | default        | Native `OAUTH_*` env     | Client ID/secret in `openwebui-secret`; local signup disabled      |
+| qui          | media          | Native `QUI__OIDC_*` env | Built-in login disabled; secret in `qui-oidc-secret`               |
+| Hubble UI    | kube-system    | Envoy SecurityPolicy     | `hubble.${SECRET_DOMAIN}`                                          |
+| Prometheus   | o11y           | Envoy SecurityPolicy     | `prometheus.${SECRET_DOMAIN}`                                      |
+| Alertmanager | o11y           | Envoy SecurityPolicy     | `alertmanager.${SECRET_DOMAIN}`                                    |
+| Thanos Query | o11y           | Envoy SecurityPolicy     | `thanos.${SECRET_DOMAIN}`                                          |
+| Kopia        | volsync-system | Envoy SecurityPolicy     | `kopia.${SECRET_DOMAIN}`                                           |
 
-Apps without SecurityPolicies (e.g., Plex, Headlamp, OpenWebUI) remain accessible without authentication.
+Apps in neither list (e.g., Plex) rely on their own authentication or none.
 
 ---
 
 ## Observability
 
 Pocket ID exports Prometheus metrics via OpenTelemetry:
+
 - Metrics endpoint: port `9464`, path `/metrics`
 - ServiceMonitor scrapes every 1m
 - Dashboards: accessible in Grafana via the Prometheus datasource
@@ -461,18 +477,21 @@ Pocket ID exports Prometheus metrics via OpenTelemetry:
 ## Troubleshooting
 
 ### OIDC redirect failures
+
 1. Verify the SecurityPolicy is accepted: `kubectl get securitypolicy -n <namespace> <name> -o yaml`
-2. Check Envoy Gateway logs: `kubectl logs -n envoy-gateway-system -l app.kubernetes.io/name=envoy-gateway`
+2. Check Envoy Gateway controller logs: `kubectl logs -n network deploy/envoy-gateway`
 3. Confirm the Pocket ID callback URL matches `redirectURL` exactly
 4. Confirm the HTTPRoute name in `targetRefs` matches: `kubectl get httproute -n <namespace>`
 
 ### Pocket ID pod issues
+
 ```bash
 kubectl get pods -n security -l app.kubernetes.io/name=pocket-id
 kubectl logs -n security -l app.kubernetes.io/name=pocket-id -f
 ```
 
 ### VolSync backup verification
+
 ```bash
 kubectl get replicationsource -n security
 ```
@@ -484,4 +503,4 @@ kubectl get replicationsource -n security
 - **SQLite → PostgreSQL migration:** Use `pocket-id export`, switch `DB_CONNECTION_STRING` to `postgres://...`, `pocket-id import`. See [Discussion #980](https://github.com/pocket-id/pocket-id/discussions/980).
 - **External gateway protection:** Add SecurityPolicies for externally-exposed apps that should require auth.
 - **LDAP sync:** Pocket ID supports LDAP user/group sync if a directory service is added.
-- **Additional app protection:** Headlamp, OpenWebUI, and other internal apps can be protected by adding SecurityPolicies following the template above.
+- **Additional app protection:** Other internal apps without native OIDC can be protected by adding SecurityPolicies following the template above.
