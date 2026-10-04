@@ -243,11 +243,17 @@ spec:
         - ports:
             - port: "9292"
               protocol: TCP
-    # Events posted by the other Flux controllers :9090
+    # Events posted by the other Flux controllers :9090. flux-operator is listed
+    # separately: it emits reconcile events too but is deployed by its own Helm
+    # chart and carries app.kubernetes.io/name=flux-operator, not the
+    # app.kubernetes.io/part-of=flux label the controllers share.
     - fromEndpoints:
         - matchLabels:
             io.kubernetes.pod.namespace: flux-system
             app.kubernetes.io/part-of: flux
+        - matchLabels:
+            io.kubernetes.pod.namespace: flux-system
+            app.kubernetes.io/name: flux-operator
       toPorts:
         - ports:
             - port: "9090"
