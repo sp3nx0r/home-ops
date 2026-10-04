@@ -42,7 +42,7 @@ Ship CNPs that don't silently break traffic. Schema checks pass easily; the outa
     - A CIDR rule without `toPorts` allows every port. Quote ports as strings: `port: "9090"`.
     - `world` includes the LAN. Classify each world rule: public-only (use the AGENTS.md `toCIDRSet` + full except-list), needs a LAN host (scope to `/32`), or inherently broad (Flux sources on 443; document why).
     - For cross-namespace Services, use `toEndpoints` with `io.kubernetes.pod.namespace` + the backend pod label, never a ClusterIP CIDR.
-    - Comments: one terse line per rule. The owner rejected verbose policy comments twice.
+    - Comments: one line per rule, matching existing CNPs (AGENTS.md comment style).
 5. **Validate**:
     ```sh
     kustomize build kubernetes/apps/<ns>/<app>/app > /dev/null
