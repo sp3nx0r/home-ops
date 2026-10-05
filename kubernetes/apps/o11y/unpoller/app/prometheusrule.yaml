@@ -1,0 +1,61 @@
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/monitoring.coreos.com/prometheusrule_v1.json
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: unpoller
+spec:
+  groups:
+    # The UniFi gateway (UDM) wedged with its Network application API hung for
+    # hours; unpoller_controller_up stayed 1 the whole time (it serves the last
+    # good snapshot on upstream failure), so nothing alerted. These rules watch
+    # the actual scraped device telemetry instead of the exporter self-report.
+    - name: unpoller-gateway.rules
+      rules:
+        # Leading indicator: the UDM was CPU-pegged at ~90% with load avg 5-10
+        # for ~3h before its API stopped responding (healthy baseline is ~20%).
+        - alert: UnifiGatewayCPUSaturated
+          expr: |-
+            avg_over_time(unpoller_device_cpu_utilization_ratio{type="udm"}[30m]) > 0.85
+          for: 10m
+          annotations:
+            summary: >-
+              UniFi gateway {{ $labels.name }} CPU is saturated
+            description: >-
+              {{ $labels.name }} has averaged {{ $value | humanizePercentage }} CPU
+              over 30 minutes. Sustained saturation preceded the Network application
+              API hanging; check for a runaway process or firmware issue on the UDM.
+          labels:
+            severity: warning
+        # The UDM runs Linux with high cache usage, so memory util idles ~80%.
+        # Only a sustained climb above 93% signals real pressure.
+        - alert: UnifiGatewayMemorySaturated
+          expr: |-
+            avg_over_time(unpoller_device_memory_utilization_ratio{type="udm"}[30m]) > 0.93
+          for: 15m
+          annotations:
+            summary: >-
+              UniFi gateway {{ $labels.name }} memory is under pressure
+            description: >-
+              {{ $labels.name }} has averaged {{ $value | humanizePercentage }} memory
+              over 30 minutes (normal baseline is ~80%). Investigate before the
+              controller becomes unresponsive.
+          labels:
+            severity: warning
+        # Lagging catch-all based on the actual scrape, not unpoller_controller_up:
+        # when the controller hangs, unpoller can no longer read the gateway and its
+        # device series go absent entirely (as seen during the 18:13-18:45 gap).
+        - alert: UnifiGatewayMetricsAbsent
+          expr: |-
+            absent_over_time(unpoller_device_uptime_seconds{type="udm"}[10m])
+          for: 5m
+          annotations:
+            summary: >-
+              UniFi gateway telemetry is missing from unpoller
+            description: >-
+              No UDM device metrics have been scraped for 10 minutes while the unpoller
+              exporter is still up. The UniFi Network application is likely hung or the
+              gateway rebooted; UniFi private-DNS sync (external-dns) will fail until it
+              recovers.
+          labels:
+            severity: critical
