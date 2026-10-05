@@ -10,6 +10,7 @@ Operational notes for authoring Kyverno `ValidatingPolicy` resources and rolling
 | Policy                                | Actions         | Scope                                                                                                          |
 | ------------------------------------- | --------------- | -------------------------------------------------------------------------------------------------------------- |
 | `require-namespace-psa-enforce-label` | `[Deny, Audit]` | Namespaces, except `kube-system`, `kube-public`, `kube-node-lease`, `flux-system`, `kyverno`, `cilium-secrets` |
+| `require-lb-no-nodeports`             | `[Deny, Audit]` | `type: LoadBalancer` Services in every namespace; requires `allocateLoadBalancerNodePorts: false`              |
 
 ## Rollout: Audit → Deny
 
@@ -53,4 +54,4 @@ kubectl get policyreports -A -o json \
 
 ## Availability risk
 
-The resource webhooks use `failurePolicy: Fail`, and `kyverno-admission-controller` runs one replica with no PDB. While it's down, every write that a policy matches is rejected, in Audit mode as well as Deny. Today that only covers Namespace create and update. Before adding policies that match Pods or other high-churn resources, either run 2–3 admission-controller replicas with a PDB, or set `failurePolicy: Ignore` on hygiene-only policies.
+The resource webhooks use `failurePolicy: Fail`, and `kyverno-admission-controller` runs one replica with no PDB. While it's down, every write that a policy matches is rejected, in Audit mode as well as Deny. Today that only covers Namespace create and update, plus create and update of `type: LoadBalancer` Services (other Services don't match the policy's `matchConditions`, so they never reach the webhook). Before adding policies that match Pods or other high-churn resources, either run 2–3 admission-controller replicas with a PDB, or set `failurePolicy: Ignore` on hygiene-only policies.
