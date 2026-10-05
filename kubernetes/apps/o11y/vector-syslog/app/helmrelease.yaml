@@ -33,9 +33,16 @@ spec:
         address: 0.0.0.0:8686
       sources:
         syslog:
-          type: syslog
+          # UniFi/UDM OS emits a non-standard RFC3164 header with a DOUBLED
+          # hostname (`<PRI>TS HOST HOST TAG`) that the built-in `syslog`
+          # source rejects and silently drops over UDP. Decode raw bytes and
+          # parse syslog in VRL after collapsing the duplicate hostname.
+          type: socket
           address: 0.0.0.0:5140
           mode: udp
+          host_key: source_ip
+          decoding:
+            codec: bytes
         internal_metrics:
           type: internal_metrics
       transforms:
@@ -43,6 +50,21 @@ spec:
           type: remap
           inputs: ["syslog"]
           source: |
+            # The `socket` source hands us the raw datagram in .message. UniFi/UDM
+            # OS doubles the hostname (`<PRI>TS HOST HOST TAG`), which the built-in
+            # syslog parser rejects; VRL regex has no backreferences, so match both
+            # hostname tokens and compare, then collapse before parsing.
+            raw = to_string(.message) ?? ""
+            dh, dherr = parse_regex(raw, r'^(?P<pri><\d+>\w{3}\s+\d+\s[0-9:]+\s)(?P<h1>\S+)\s+(?P<h2>\S+)\s(?P<rest>.*)$')
+            if dherr == null && dh.h1 == dh.h2 {
+              raw = string!(dh.pri) + string!(dh.h1) + " " + string!(dh.rest)
+            }
+            parsed, perr = parse_syslog(raw)
+            if perr == null {
+              . = merge(., parsed)
+            } else {
+              .message = raw
+            }
             .host = del(.hostname)
             .severity = del(.severity)
             .facility = del(.facility)
@@ -52,7 +74,7 @@ spec:
             del(.version)
             # UniFi CEF: the RFC3164 parser splits a spaced device name across
             # hostname/appname/message, and the syslog header is local time.
-            msg_str = to_string(.message) ?? ""
+            msg_str = to_string(.message)
             if contains(msg_str, "CEF:") {
               cef_split, err = parse_regex(msg_str, r'^(?P<prefix>.*?)\s*(?P<cef>CEF:.*)$')
               if err == null {
