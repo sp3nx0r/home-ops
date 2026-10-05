@@ -208,13 +208,14 @@ timeout flag, and Talos' default rollback timeout is 1 minute, which is too
 short for the checks. So render with topf and use `talosctl` directly for the
 try step.
 
-Order: **palarandusk (.51)** first (no VIP, no Prometheus, no cilium-operator),
-then **aurinax (.52)** (cilium-operator), then **miirym (.50)** (VIP holder,
-Prometheus) last.
+Order: do the node holding the **active VIP** (`192.168.5.254`) **last**. The
+VIP moves between control-plane nodes, so check which node has it at rollout
+time (pre-flight below); the other two nodes can go in either order.
 
 ```sh
 # Pre-flight (from an admin host on 192.168.5.0/24)
 ip -4 addr | grep 192.168.5.             # apid and 6443 are allowed from this subnet only
+talosctl -n 192.168.5.50,192.168.5.51,192.168.5.52 get addresses | grep 192.168.5.254   # VIP holder: do it last
 talosctl -n 192.168.5.50,192.168.5.51,192.168.5.52 etcd status
 kubectl get nodes; kubectl -n kube-system exec ds/cilium -c cilium-agent -- cilium-dbg status | grep 'Cluster health'
 just talos diff                          # expect only the 9 new documents per node
@@ -222,7 +223,7 @@ just talos diff                          # expect only the 9 new documents per n
 umask 077; just talos render             # -> talos/rendered/<node>.yaml (gitignored, contains secrets)
 ```
 
-For each node (`NODE=palarandusk IP=192.168.5.51`, and so on):
+For each node (for example `NODE=aurinax IP=192.168.5.52`):
 
 ```sh
 talosctl -n $IP apply-config -f talos/rendered/$NODE.yaml --mode try --timeout 10m
@@ -250,7 +251,7 @@ Existing sessions survive because `ct established` is accepted.
    `curl -s localhost:9090/api/v1/query --data-urlencode "query=up{instance=~\"$IP:.*\"}" | jq '.data.result[]|[.metric.job,.value[1]]'`.
    Every job should be `1`: kubelet (plus cadvisor/probes), node-exporter,
    kube-etcd, kube-controller-manager, kube-scheduler, apiserver,
-   cilium-agent, hubble, and cilium-operator when checking aurinax. Also
+   cilium-agent, hubble, and cilium-operator on whichever node runs it. Also
    check `up{instance=~"192.168.5.70:.*"}`, which exercises the BPF-masquerade
    reply path.
 6. **Cilium.** Run
