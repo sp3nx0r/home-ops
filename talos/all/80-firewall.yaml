@@ -3,7 +3,7 @@
 # exceptions (lo, established/related, rate-limited ICMP, pod/service-CIDR <->
 # pod/service-CIDR, pod -> host DNS) are accepted. Control-plane-only services
 # live in control-plane/80-firewall.yaml. Plan, port matrix and rollout:
-# docs/talos-host-firewall-plan.md.
+# docs/completed/talos-host-firewall-plan.md.
 #
 # Traffic Cilium handles in eBPF at tc ingress (LoadBalancer IPs, NodePorts,
 # hostPorts) is translated to a pod IP before netfilter sees it, so it neither

@@ -91,7 +91,7 @@ Known facts (re-verify): lockdown `[none]` despite Secure Boot; SELinux permissi
 
 ## Host firewall
 
-Design and rules are on [#558](https://github.com/sp3nx0r/home-ops/pull/558) (`talos/all/80-firewall.yaml`, `docs/talos-host-firewall-plan.md`), not yet on main.
+Live on all nodes since 2026-10-05 ([#558](https://github.com/sp3nx0r/home-ops/pull/558)). It is default-block: rules are in `talos/all/80-firewall.yaml` and `talos/control-plane/80-firewall.yaml`, and the design, port matrix and rollout record are in `docs/completed/talos-host-firewall-plan.md`. Anything new listening on a host socket (a `hostNetwork` pod, a scrape of a node IP) needs a rule, or it is silently dropped. Talos doesn't log drops. NodePorts and hostPorts bypass it (Cilium eBPF), which is why `docs/completed/nodeport-hostport-exposure.md` and the Kyverno policy `require-lb-no-nodeports` exist. Roll out rule changes one node at a time with `talosctl apply-config --mode try --timeout 10m`, doing the VIP holder last.
 
 Map real host sockets first:
 

@@ -1,5 +1,10 @@
 # Talos Host Ingress Firewall
 
+> **Status: COMPLETE (applied to all three nodes 2026-10-05, #558).** Every
+> node runs the default-block `ingress` chain, `topf apply --dry-run` shows no
+> pending diff, and the NodePort/hostPort residual was closed by #562 (see
+> `nodeport-hostport-exposure.md`). See [Rollout record](#rollout-record-2026-10-05).
+
 Closes finding **S1** in `sre-and-security-evaluation.md` and the residual **#10**
 item in `security-review-and-hardening-plan.md` (etcd / controller-manager /
 scheduler metric listeners bound to `0.0.0.0`).
@@ -125,8 +130,8 @@ the firewall").
 - **BPF masquerade replies.** Replies to pod→external connections come back to
   the node IP. `bpf_host` reverse-SNATs them to the pod IP before netfilter.
   The kernel conntrack never saw these flows, so this relies on Cilium handling
-  them first. It's checked explicitly during rollout (Prometheus target
-  `192.168.5.70`, Flux source fetches).
+  them first. It's checked explicitly during rollout (no off-cluster
+  Prometheus target down, Flux source fetches).
 - **DNS proxy (the case that needed checking).** All ~90 policies with
   `rules.dns` send pod DNS through Cilium's transparent DNS proxy. L7
   redirection uses iptables `TPROXY` ([Cilium requirements][cilium-fw]), so
@@ -146,13 +151,17 @@ the firewall").
 
 ### Residual exposure the host firewall cannot close
 
-For the same eBPF reason, **NodePorts and hostPorts on node IPs and on the VIP
-stay reachable from the LAN**. That covers every LoadBalancer Service's
-auto-allocated NodePort, `spegel-registry` 30021, and Spegel hostPort 29999.
-These are unauthenticated registry mirrors of images already in the cache.
-This is the same exposure as today and isn't made worse. It's a candidate for a
-follow-up: `allocateLoadBalancerNodePorts: false` on LB Services, and/or making
-`spegel-registry` a `ClusterIP`.
+For the same eBPF reason, **NodePorts and hostPorts on node IPs stay reachable
+from the LAN** (the VIP turned out not to answer on them). That covers every
+LoadBalancer Service's auto-allocated NodePort, `spegel-registry` 30021, and
+Spegel hostPort 29999. The Spegel ports are unauthenticated registry mirrors of
+images already in the cache.
+
+**Closed by #562 and #616 (2026-10-05):** every LoadBalancer Service sets
+`allocateLoadBalancerNodePorts: false` and the old NodePorts were released, a
+`kube-system/spegel` CiliumNetworkPolicy denies LAN clients on 29999/30021, and
+the Kyverno policy `require-lb-no-nodeports` denies new LoadBalancers that
+allocate NodePorts. Details in `nodeport-hostport-exposure.md`.
 
 ### Why not narrow the `0.0.0.0` metric binds instead
 
@@ -252,8 +261,9 @@ Existing sessions survive because `ct established` is accepted.
    Every job should be `1`: kubelet (plus cadvisor/probes), node-exporter,
    kube-etcd, kube-controller-manager, kube-scheduler, apiserver,
    cilium-agent, hubble, and cilium-operator on whichever node runs it. Also
-   check `up{instance=~"192.168.5.70:.*"}`, which exercises the BPF-masquerade
-   reply path.
+   check that `up == 0` is empty cluster-wide; off-cluster targets exercise the
+   BPF-masquerade reply path. (No target carries an `instance` label of
+   `192.168.5.70:*`, so filtering on that returns nothing.)
 6. **Cilium.** Run
    `kubectl -n kube-system exec ds/cilium -c cilium-agent -- cilium-dbg status --verbose | sed -n '/Cluster health/,/Modules/p'`
    from an agent on a _different_ node. It should show `3/3 reachable`, with
@@ -301,6 +311,43 @@ Letting the try window expire before the permanent apply is deliberate.
 During `try`, the running config already contains the rules, so
 `topf`'s diff would be empty. Waiting for the revert keeps the permanent step
 the same reviewed diff.
+
+`topf apply` prompts for confirmation, so the recipe needs an interactive
+terminal. From a non-interactive shell, review the per-node
+`topf apply --nodes-filter "^$NODE$" --dry-run` output, then run
+`topf apply --nodes-filter "^$NODE$" --mode no-reboot --confirm=false`.
+
+## Rollout record (2026-10-05)
+
+- **Order:** aurinax (.52), miirym (.50, cilium-operator), then palarandusk
+  (.51), which held the VIP and ran Prometheus, hubble-relay and
+  metrics-server.
+- **Per node:** `--mode try --timeout 10m`. All ten checks passed while the
+  rules were active, and Cilium host probes taken after the apply were `OK`.
+  Each node reverted cleanly (no chains). The permanent apply was the same
+  9-document, additive-only diff with no reboot, followed by a re-check and a
+  30-minute soak.
+- **From the workstation on every node:** 2381, 10250, 10257, 4240, 9100 and
+  111 are blocked, and 6443 and 50000 are open. Plex's `healthCheckNodePort`
+  30577 is closed.
+- **Unaffected:**
+    - etcd (3 members), kubectl through the VIP, `kubectl logs` and `top`.
+    - Every node-IP Prometheus scrape.
+    - DNS from pods.
+    - The LoadBalancer IPs, including Minecraft over UDP, the tor ports and
+      syslog delivery to Loki.
+    - Spegel and tuppr.
+- **VIP traffic:** connections sourced from the VIP only go to the holder's own
+  API server over loopback. No peer rule needs `192.168.5.254`.
+- **Soak noise, unrelated to the firewall:**
+    - Loki rollouts from #554 and its follow-up fix (ruler notification
+      errors, and Hubble drops to old Loki pod IPs).
+    - The new Sigma break-glass and secrets-enumeration alerts, which fired on
+      the operator's own `kubectl exec`, port-forward and secret reads.
+    - The unifi-external-dns crash-loop on UniFi API timeouts, which predates
+      the firewall and was addressed in #614.
+- **Closed out:** `topf apply --dry-run` shows no diff on any node, and
+  `talos/rendered/` was deleted.
 
 ## Rollback and break-glass
 
@@ -356,7 +403,7 @@ egress rule, so it's left out of this change.
   affects monitoring; the datapath isn't touched.
 - IPv6 is disabled cluster-wide. With block mode, all IPv6 except ICMPv6 is
   dropped.
-- NodePort and hostPort exposure (see [Residual exposure](#residual-exposure-the-host-firewall-cannot-close)).
+- NodePort and hostPort exposure: closed by #562 and #616 (see [Residual exposure](#residual-exposure-the-host-firewall-cannot-close)).
 
 [talos-fw]: https://docs.siderolabs.com/talos/v1.14/networking/ingress-firewall
 [talos-src]: https://github.com/siderolabs/talos/blob/v1.14.1/internal/app/machined/pkg/controllers/network/nftables_chain_config.go
