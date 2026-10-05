@@ -53,7 +53,7 @@
       failed_when: false
       tags: [bun, tools]
 
-    - name: Install Bun runtime  # noqa: command-instead-of-module risky-shell-pipe
+    - name: Install Bun runtime # noqa: command-instead-of-module risky-shell-pipe
       ansible.builtin.shell:
         cmd: set -o pipefail && curl -fsSL https://bun.sh/install | BUN_INSTALL=/usr/local bash -s "{{ bun_version }}"
         executable: /bin/bash
@@ -240,7 +240,7 @@
     - name: Configure GRUB cmdline
       ansible.builtin.lineinfile:
         path: /etc/default/grub
-        regexp: '^GRUB_CMDLINE_LINUX_DEFAULT='
+        regexp: "^GRUB_CMDLINE_LINUX_DEFAULT="
         line: 'GRUB_CMDLINE_LINUX_DEFAULT="{{ ms_s1_grub_cmdline }}"'
       notify: update grub
       tags: [grub]
@@ -264,7 +264,7 @@
     - name: Ensure hostname resolves in /etc/hosts
       ansible.builtin.lineinfile:
         path: /etc/hosts
-        regexp: '.*sardior.*'
+        regexp: ".*sardior.*"
         line: "{{ ms_s1_host_ip }} sardior.{{ ms_s1_domain }} sardior"
         insertafter: '^127\.0\.0\.1'
         state: present
@@ -287,6 +287,27 @@
           SystemKeepFree=50G
       notify: restart journald
       tags: [system]
+
+    # ===== Remote syslog (forward to cluster Vector -> Loki) ==================
+    # rsyslog is installed via ms_s1_packages; journald forwards to it by
+    # default on Ubuntu, so it sees every unit's output and ships it onward.
+
+    - name: Forward host logs to the cluster syslog aggregator
+      ansible.builtin.copy:
+        dest: /etc/rsyslog.d/60-remote.conf
+        mode: "0644"
+        content: |
+          # Managed by Ansible (ms-s1-configure.yml). Forward all logs to the
+          # in-cluster Vector syslog aggregator. RFC5424 (SyslogProtocol23)
+          # carries a zoned timestamp, so the collector need not infer the
+          # sender's timezone.
+          *.* action(type="omfwd"
+                     target="{{ ms_s1_syslog_remote }}"
+                     port="{{ ms_s1_syslog_port }}"
+                     protocol="udp"
+                     template="RSYSLOG_SyslogProtocol23Format")
+      notify: restart rsyslog
+      tags: [syslog]
 
     # ===== GPU — ROCm =========================================================
     # Ubuntu 26.04 ships ROCm in official repos. Just install and verify.
@@ -903,7 +924,7 @@
         append: true
       tags: [stt, speaches]
 
-    - name: Install uv package manager  # noqa: command-instead-of-module risky-shell-pipe
+    - name: Install uv package manager # noqa: command-instead-of-module risky-shell-pipe
       ansible.builtin.shell:
         cmd: set -o pipefail && curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/local/bin sh
         creates: /usr/local/bin/uv
@@ -934,7 +955,7 @@
       notify: restart speaches
       tags: [stt, speaches]
 
-    - name: Remove uv required-version pin from Speaches  # upstream pins ~=0.8.14 which is overly restrictive
+    - name: Remove uv required-version pin from Speaches # upstream pins ~=0.8.14 which is overly restrictive
       ansible.builtin.lineinfile:
         path: "{{ speaches_install_path }}/src/pyproject.toml"
         regexp: '^required-version\s*='
@@ -955,7 +976,7 @@
       notify: restart speaches
       tags: [stt, speaches]
 
-    - name: Fix ctranslate2 execstack for kernel 6.x  # library ships with RWE GNU_STACK, blocked by modern kernels
+    - name: Fix ctranslate2 execstack for kernel 6.x # library ships with RWE GNU_STACK, blocked by modern kernels
       ansible.builtin.shell:
         cmd: find {{ speaches_install_path }}/src/.venv -name 'libctranslate2*.so*' -exec patchelf --clear-execstack {} \;
       changed_when: false
@@ -1052,7 +1073,7 @@
       register: _whisper_cpp_bin
       tags: [stt, whisper-cpp]
 
-    - name: Build whisper.cpp from source (AVX-512 native + Vulkan GPU)  # noqa: no-handler
+    - name: Build whisper.cpp from source (AVX-512 native + Vulkan GPU) # noqa: no-handler
       ansible.builtin.shell:
         cmd: |
           rm -f {{ whisper_cpp_bin_path }}/whisper-server
@@ -1427,6 +1448,12 @@
         name: systemd-journald
         state: restarted
       listen: restart journald
+
+    - name: Restart rsyslog
+      ansible.builtin.systemd:
+        name: rsyslog
+        state: restarted
+      listen: restart rsyslog
 
     - name: Apply netplan
       ansible.builtin.command:
