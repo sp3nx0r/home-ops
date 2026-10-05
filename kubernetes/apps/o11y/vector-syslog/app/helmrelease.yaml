@@ -76,6 +76,7 @@ spec:
             del(.procid)
             del(.msgid)
             del(.version)
+            del(.port) # socket source adds the sender's ephemeral port; drop noise
             # UniFi CEF: the RFC3164 parser splits a spaced device name across
             # hostname/appname/message, and the syslog header is local time.
             msg_str = to_string(.message)
