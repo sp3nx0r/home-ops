@@ -5,10 +5,11 @@ Follow-up to the Talos host firewall plan (`talos-host-firewall-plan.md`, PR
 kube-proxy replacement serves NodePorts and hostPorts in eBPF at tc ingress,
 **before netfilter**, so the Talos firewall cannot filter them
 ([siderolabs/talos#12955](https://github.com/siderolabs/talos/issues/12955)).
-Before this change, every node IP and the `192.168.5.254` VIP exposed the
-following to the whole LAN:
+Before this change, with the Talos firewall applied, every node IP still
+exposed the following to the whole LAN. The `192.168.5.254` VIP does not
+answer on these ports.
 
-- An auto-allocated NodePort for each of the 8 LoadBalancer Services (17
+- An auto-allocated NodePort for each of the 8 LoadBalancer Services (14
   ports).
 - Spegel's unauthenticated registry mirror on hostPort `29999` and NodePort
   `30021`.
