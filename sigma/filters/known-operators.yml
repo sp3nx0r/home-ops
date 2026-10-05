@@ -28,6 +28,15 @@ filter:
       - system:serviceaccount:cert-manager:cert-manager-cainjector
       - system:serviceaccount:o11y:kube-prometheus-stack-admission
       - system:serviceaccount:system-upgrade:tuppr
+  # Kyverno's admission and cleanup controllers continuously reconcile their own
+  # webhook configurations (rule set + caBundle) as policies change.
+  op_kyverno_webhooks:
+    objectRef.resource:
+      - mutatingwebhookconfigurations
+      - validatingwebhookconfigurations
+    user.username:
+      - system:serviceaccount:kyverno:kyverno-admission-controller
+      - system:serviceaccount:kyverno:kyverno-cleanup-controller
   # Volsync creates mover Jobs plus their ServiceAccount/Role/RoleBinding per ReplicationSource.
   op_volsync_movers:
     objectRef.resource:
