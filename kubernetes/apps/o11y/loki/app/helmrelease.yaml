@@ -72,8 +72,10 @@ spec:
           local:
             directory: /rules
         # SRV discovery on the headless Service so every Alertmanager replica
-        # receives each alert (HA peers dedupe notifications, not alerts).
-        alertmanager_url: dnssrvnoa+http://_http-web._tcp.alertmanager-operated.o11y.svc.cluster.local
+        # receives each alert (HA peers dedupe notifications, not alerts). The
+        # ruler does its own SRV lookup on this host; it is not a Thanos-style
+        # `dnssrv+` URL (that scheme reaches the POST unresolved and 400s).
+        alertmanager_url: http://_http-web._tcp.alertmanager-operated.o11y.svc.cluster.local
         enable_alertmanager_discovery: true
         external_labels:
           source: loki-ruler
