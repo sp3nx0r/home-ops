@@ -9,6 +9,18 @@ spec:
     kind: OCIRepository
     name: vector-syslog
   interval: 1h
+  # The chart has no allocateLoadBalancerNodePorts value; Cilium serves the LB IP
+  # directly, so auto-allocated NodePorts would only add LAN exposure.
+  postRenderers:
+    - kustomize:
+        patches:
+          - target:
+              kind: Service
+              name: vector-syslog
+            patch: |
+              - op: add
+                path: /spec/allocateLoadBalancerNodePorts
+                value: false
   values:
     role: Stateless-Aggregator
 

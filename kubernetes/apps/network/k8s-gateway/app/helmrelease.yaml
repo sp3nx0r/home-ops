@@ -9,6 +9,18 @@ spec:
     kind: OCIRepository
     name: k8s-gateway
   interval: 1h
+  # The chart has no allocateLoadBalancerNodePorts value; Cilium serves the LB IP
+  # directly, so auto-allocated NodePorts would only add LAN exposure.
+  postRenderers:
+    - kustomize:
+        patches:
+          - target:
+              kind: Service
+              name: k8s-gateway
+            patch: |
+              - op: add
+                path: /spec/allocateLoadBalancerNodePorts
+                value: false
   values:
     fullnameOverride: k8s-gateway
     domain: "${SECRET_DOMAIN}"
