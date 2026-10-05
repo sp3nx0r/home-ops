@@ -1,0 +1,18 @@
+title: Exclude Routine Break-Glass Job Handling
+id: 3f1e722e-a7c7-4b32-970a-23b69d8d3087
+description: >-
+  The owner routinely deletes finished/failed Jobs and triggers CronJobs by hand
+  (`kubectl create job --from=cronjob/...`) with the break-glass admin kubeconfig -- about 30
+  events a week. Only plain Jobs by `admin` are excluded; CronJob changes by admin, and Job
+  changes by any other principal, still alert.
+date: 2026-09-30
+logsource:
+  product: kubernetes
+  service: audit
+filter:
+  rules:
+    - 0c9b3bda-41a6-4442-9345-356ae86343dc # kubernetes_audit_cronjob_modification
+  admin_jobs:
+    user.username: admin
+    objectRef.resource: jobs
+  condition: not admin_jobs

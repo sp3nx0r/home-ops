@@ -7,3 +7,18 @@ resources:
   - ./helmrelease.yaml
   - ./ocirepository.yaml
   - ./prometheusrule.yaml
+# Loki ruler rule groups, picked up by the loki-sc-rules sidecar via the
+# loki_rule label. sigma-kube-audit.yaml is generated (`just sigma generate`).
+configMapGenerator:
+  - name: loki-rules-sigma-kube-audit
+    files:
+      - ./rules/sigma-kube-audit.yaml
+  - name: loki-rules-loki-ruler-health
+    files:
+      - ./rules/loki-ruler-health.yaml
+generatorOptions:
+  disableNameSuffixHash: true
+  labels:
+    loki_rule: "true"
+  annotations:
+    kustomize.toolkit.fluxcd.io/substitute: disabled

@@ -77,6 +77,21 @@ spec:
                     -# recovered {{ .EndsAt.Format "Jan 02 15:04 MST" }}
                   {{- end }}
                   {{- end }}
+          # Security detections (category=security, mostly Loki ruler audit-log
+          # rules). They are point-in-time events that auto-resolve once their
+          # lookback window passes, so "resolved" carries no signal and is not
+          # sent. The rule's summary annotation already names who did what.
+          - name: discord-security
+            discord_configs:
+              - webhook_url: ${DISCORD_WEBHOOK_URL}
+                send_resolved: false
+                title: >-
+                  🛡️ [{{ .Alerts.Firing | len }}] {{ .CommonLabels.alertname }}{{ if .CommonLabels.severity }} · {{ .CommonLabels.severity }}{{ end }}
+                message: |-
+                  {{- range .Alerts.Firing }}
+                  - {{ if eq .Labels.severity "critical" }}🚨{{ else }}⚠️{{ end }} {{ if .Annotations.summary }}{{ .Annotations.summary }}{{ else }}{{ .Labels.alertname }}{{ end }}
+                    -# since {{ .StartsAt.Format "Jan 02 15:04 MST" }}{{ if .Annotations.runbook_url }} · [runbook]({{ .Annotations.runbook_url }}){{ end }}{{ if .Annotations.sigma_rule }} · [rule]({{ .Annotations.sigma_rule }}){{ end }}
+                  {{- end }}
           # Uncomment with kube-agent deployment:
           # - name: kube-agent
           #   webhook_configs:
@@ -109,6 +124,18 @@ spec:
                 - node
               group_wait: 30s
               repeat_interval: 1h
+            # Security detections: one message per detection and principal, so a
+            # burst of activity by one user is a single notification. `info`
+            # detections fall through to the default blackhole (visible in the
+            # Alertmanager UI / Grafana only).
+            - receiver: discord-security
+              matchers:
+                - category = security
+                - severity =~ critical|warning
+              group_by:
+                - alertname
+                - user
+              group_wait: 30s
             - receiver: discord
               matchers:
                 - severity =~ critical|warning

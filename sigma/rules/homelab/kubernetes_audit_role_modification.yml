@@ -1,0 +1,34 @@
+title: Kubernetes Role Or ClusterRole Modification
+id: aa7b2df4-a77e-4c8a-a280-85ad14f47bfb
+status: experimental
+description: >-
+  Detects create, update, patch, or delete of a Role or ClusterRole. Complements the upstream SigmaHQ
+  rolebinding rule; GitOps and control-plane principals are excluded by the shared filter, so a match
+  means RBAC changed outside Flux.
+references:
+  - https://kubernetes.io/docs/reference/access-authn-authz/rbac/
+author: securimancer
+date: 2026-09-30
+tags:
+  - attack.privilege-escalation
+  - attack.persistence
+  - attack.t1098
+logsource:
+  product: kubernetes
+  service: audit
+detection:
+  selection:
+    objectRef.apiGroup: rbac.authorization.k8s.io
+    objectRef.resource:
+      - roles
+      - clusterroles
+    verb:
+      - create
+      - update
+      - patch
+      - delete
+      - deletecollection
+  condition: selection
+falsepositives:
+  - Manual RBAC changes by the cluster owner while debugging
+level: medium
