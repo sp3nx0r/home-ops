@@ -1,0 +1,46 @@
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/policies.kyverno.io/validatingpolicy_v1.json
+apiVersion: policies.kyverno.io/v1
+kind: ValidatingPolicy
+metadata:
+  name: require-lb-no-nodeports
+  annotations:
+    policies.kyverno.io/title: Disallow NodePort allocation on LoadBalancer Services
+    policies.kyverno.io/category: Network Exposure
+    policies.kyverno.io/severity: medium
+    policies.kyverno.io/subject: Service
+    policies.kyverno.io/description: >-
+      LoadBalancer Services must set spec.allocateLoadBalancerNodePorts to
+      false. Cilium serves LB IPs directly, so auto-allocated NodePorts only
+      expose the backend on every node IP, and Cilium's eBPF datapath answers
+      them ahead of the Talos host firewall.
+spec:
+  validationActions:
+    - Deny
+    - Audit
+  evaluation:
+    background:
+      enabled: true
+  matchConstraints:
+    resourceRules:
+      - apiGroups:
+          - ""
+        apiVersions:
+          - v1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - services
+  matchConditions:
+    - name: loadbalancer-only
+      expression: >-
+        object.spec.?type.orValue('ClusterIP') == 'LoadBalancer'
+  validations:
+    - expression: >-
+        object.spec.?allocateLoadBalancerNodePorts.orValue(true) == false
+      message: >-
+        LoadBalancer Services must set spec.allocateLoadBalancerNodePorts: false.
+        For charts without a value for it, add a Flux postRenderers JSON patch
+        (see network/k8s-gateway). Already-allocated nodePorts must also be
+        removed from spec.ports (docs/nodeport-hostport-exposure.md).

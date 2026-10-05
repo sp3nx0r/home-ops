@@ -82,8 +82,9 @@ answer on these ports.
 - **SNAT caveat.** If Cilium ever moves off DSR (`loadBalancer.mode: snat`),
   LAN → `nodeX:30021` → Spegel on `nodeY` would arrive as `remote-node` and be
   allowed. The hostPort path stays local and is unaffected.
-- **Follow-up:** a Kyverno policy (finding S7) requiring
-  `allocateLoadBalancerNodePorts: false` on new LoadBalancer Services.
+- **Enforced for new Services:** the Kyverno `ValidatingPolicy`
+  `require-lb-no-nodeports` (finding S7) denies any LoadBalancer Service
+  without `allocateLoadBalancerNodePorts: false`.
 
 ## Rollout
 
