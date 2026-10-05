@@ -117,9 +117,7 @@
         "justifyMode": "auto",
         "orientation": "auto",
         "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
+          "calcs": ["lastNotNull"],
           "fields": "",
           "values": false
         },
@@ -1765,7 +1763,7 @@
             "uid": "${DS_MIMIR}"
           },
           "editorMode": "code",
-          "expr": "vector_buffer_events { component_id =~ \"$component_id\", component_type =~ \"$component_type\", component_kind =~ \"$component_kind\", host =~ \"$host\", pid =~ \"$pid\", job =~ \"$job\", instance =~ \"$instance\" }",
+          "expr": "vector_buffer_size_events { component_id =~ \"$component_id\", component_type =~ \"$component_type\", component_kind =~ \"$component_kind\", host =~ \"$host\", pid =~ \"$pid\", job =~ \"$job\", instance =~ \"$instance\" }",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -1857,7 +1855,7 @@
             "uid": "${DS_MIMIR}"
           },
           "editorMode": "code",
-          "expr": "vector_buffer_byte_size { component_id =~ \"$component_id\", component_type =~ \"$component_type\", component_kind =~ \"$component_kind\", host =~ \"$host\", pid =~ \"$pid\", job =~ \"$job\", instance =~ \"$instance\" }",
+          "expr": "vector_buffer_size_bytes { component_id =~ \"$component_id\", component_type =~ \"$component_type\", component_kind =~ \"$component_kind\", host =~ \"$host\", pid =~ \"$pid\", job =~ \"$job\", instance =~ \"$instance\" }",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -2744,10 +2742,7 @@
   "revision": 1,
   "schemaVersion": 38,
   "style": "dark",
-  "tags": [
-    "agent",
-    "vector"
-  ],
+  "tags": ["agent", "vector"],
   "templating": {
     "list": [
       {
