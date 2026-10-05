@@ -168,6 +168,11 @@ Garage does not use the reusable volsync component. It defines **explicit**
 via `substituteFrom: cluster-secrets`. Any new bucket added to Garage is covered
 automatically — no additional backup config is required.
 
+Garage has no standing `ReplicationDestination`. The two volumes have to be
+restored together, with the metadata no newer than the data, so restores use
+one-off destinations from
+[runbook-restore-garage.md](runbook-restore-garage.md).
+
 ### Level 4: Kubernetes VolumeSnapshots (iSCSI point-in-time recovery)
 
 - **What it protects against**: Bad deployments, data migration failures, pre-upgrade safety nets
