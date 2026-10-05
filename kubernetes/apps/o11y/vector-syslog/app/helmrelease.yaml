@@ -50,15 +50,19 @@ spec:
           type: remap
           inputs: ["syslog"]
           source: |
-            # The `socket` source hands us the raw datagram in .message. UniFi/UDM
-            # OS doubles the hostname (`<PRI>TS HOST HOST TAG`), which the built-in
-            # syslog parser rejects; VRL regex has no backreferences, so match both
-            # hostname tokens and compare, then collapse before parsing.
-            raw = to_string(.message) ?? ""
+            # The `socket` source hands us the raw datagram in .message, including
+            # any trailing newline -- strip it so the anchored regexes below match.
+            raw = strip_whitespace(to_string(.message) ?? "")
+            # UniFi/UDM OS doubles the hostname (`<PRI>TS HOST HOST TAG`), which the
+            # built-in syslog parser rejects; VRL regex has no backreferences, so
+            # match both hostname tokens and compare, then collapse before parsing.
             dh, dherr = parse_regex(raw, r'^(?P<pri><\d+>\w{3}\s+\d+\s[0-9:]+\s)(?P<h1>\S+)\s+(?P<h2>\S+)\s(?P<rest>.*)$')
             if dherr == null && dh.h1 == dh.h2 {
               raw = string!(dh.pri) + string!(dh.h1) + " " + string!(dh.rest)
             }
+            # BSD/RFC3164 headers (UniFi/UDM) carry local wall-clock with no zone, so
+            # parse_syslog reads them as UTC; re-zoned to local time further below.
+            bsd = match(raw, r'^<\d+>\w{3}\s+\d+\s[0-9:]+\s')
             parsed, perr = parse_syslog(raw)
             if perr == null {
               . = merge(., parsed)
@@ -98,6 +102,11 @@ spec:
               if err == null {
                 .host = device_name.name
               }
+            }
+            # Zone-less BSD syslog (UniFi/UDM) is parsed as UTC; re-interpret as local.
+            if bsd && !contains(msg_str, "CEF:") && is_timestamp(.timestamp) {
+              local = format_timestamp!(.timestamp, "%Y-%m-%dT%H:%M:%S")
+              .timestamp = parse_timestamp(local, "%Y-%m-%dT%H:%M:%S", timezone: "America/Chicago") ?? .timestamp
             }
             # TrueNAS forwards multi-line middleware logs (e.g. pydantic
             # serialization errors) as separate UDP frames whose continuation
