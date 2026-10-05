@@ -17,8 +17,9 @@ apiVersion: v1alpha1
 kind: NetworkDefaultActionConfig
 ingress: block
 ---
-# apid: admin workstation, other nodes (apid proxies between members) and pods
-# using kubernetesTalosAPIAccess (tuppr, via the default/talos Service).
+# apid: LAN admin hosts and other nodes (apid proxies between members), plus
+# pods using kubernetesTalosAPIAccess (tuppr, via the default/talos Service).
+# The LAN-wide source relies on apid's mTLS; it avoids pinning a workstation IP.
 apiVersion: v1alpha1
 kind: NetworkRuleConfig
 name: apid-ingress
@@ -27,10 +28,7 @@ portSelector:
     - 50000
   protocol: tcp
 ingress:
-  - subnet: 192.168.5.181/32
-  - subnet: 192.168.5.50/32
-  - subnet: 192.168.5.51/32
-  - subnet: 192.168.5.52/32
+  - subnet: 192.168.5.0/24
   - subnet: 10.42.0.0/16
 ---
 # kubelet: kube-apiserver (from node IPs), Prometheus and metrics-server (pods).

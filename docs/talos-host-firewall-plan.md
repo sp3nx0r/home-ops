@@ -168,10 +168,11 @@ also need per-node templating (`.tpl`), and other branches edit that file.
 
 ## Decisions
 
-- **apid admin source: `192.168.5.181/32` only.** This is the sole admin
-  workstation, and it has a DHCP reservation/static address. No other VLAN or
-  VPN client needs apid. The reservation is a rollout prerequisite (see
-  pre-flight).
+- **apid is open to all of `192.168.5.0/24`**, plus the pod CIDR. apid
+  requires mTLS client certificates from the talosconfig, so an open port
+  grants nothing without them. Pinning the admin workstation (`192.168.5.181`
+  today) would risk a lockout whenever its IP changes or a new workstation
+  replaces it. Other VLANs and VPN clients stay blocked.
 - **kube-apiserver 6443 stays open to all of `192.168.5.0/24`**, plus the pod
   CIDR. It's authenticated (certs/OIDC), and LAN kubectl clients shouldn't
   need firewall edits.
@@ -182,7 +183,7 @@ Node set = `192.168.5.50/32`, `.51/32`, `.52/32`. Pods = `10.42.0.0/16`.
 
 | Port(s)/proto                                                                                                                      | Service                                           | Who needs it                                                                 | Allowed sources                               | Rule                                 |
 | ---------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- | ---------------------------------------------------------------------------- | --------------------------------------------- | ------------------------------------ |
-| 50000/tcp                                                                                                                          | apid                                              | admin workstation, apid proxying between nodes, tuppr (in-cluster Talos API) | `192.168.5.181`, nodes, pods                  | `apid-ingress`                       |
+| 50000/tcp                                                                                                                          | apid                                              | admin workstation, apid proxying between nodes, tuppr (in-cluster Talos API) | `192.168.5.0/24`, pods                        | `apid-ingress`                       |
 | 50001/tcp                                                                                                                          | trustd                                            | nodes joining or renewing certs                                              | nodes                                         | `trustd-ingress` (CP)                |
 | 6443/tcp                                                                                                                           | kube-apiserver                                    | workstation and LAN kubectl, nodes, VIP, pods via `kubernetes` Service       | `192.168.5.0/24`, pods                        | `kube-apiserver-ingress` (CP)        |
 | 2379-2380, 2383/tcp                                                                                                                | etcd client, peer, client-HTTP                    | control-plane nodes                                                          | nodes                                         | `etcd-ingress` (CP)                  |
@@ -212,10 +213,8 @@ then **aurinax (.52)** (cilium-operator), then **miirym (.50)** (VIP holder,
 Prometheus) last.
 
 ```sh
-# Pre-flight (from the admin workstation, 192.168.5.181)
-ip -4 addr | grep 192.168.5.181          # rules assume this source IP
-# Confirm the UniFi DHCP reservation (or static config) for the workstation
-# still pins 192.168.5.181 before applying; apid is allowed from it only.
+# Pre-flight (from an admin host on 192.168.5.0/24)
+ip -4 addr | grep 192.168.5.             # apid and 6443 are allowed from this subnet only
 talosctl -n 192.168.5.50,192.168.5.51,192.168.5.52 etcd status
 kubectl get nodes; kubectl -n kube-system exec ds/cilium -c cilium-agent -- cilium-dbg status | grep 'Cluster health'
 just talos diff                          # expect only the 9 new documents per node
@@ -311,10 +310,9 @@ the same reviewed diff.
   `talosctl -e 192.168.5.50 -n 192.168.5.51 apply-config -f <fixed>.yaml --mode no-reboot`
   works. To remove the firewall entirely, delete or rename both `80-firewall.yaml`
   files, run `just talos render`, and apply that config the same way.
-- **Workstation IP changed** (the rules pin `192.168.5.181`): set the
-  workstation, or any laptop, to `192.168.5.181` statically on the
-  `192.168.5.0/24` LAN. It's normally pinned by a DHCP reservation, so this
-  only happens if the reservation is lost or the NIC changes.
+- **Admin host off the LAN** (another VLAN, VPN): connect any machine that has
+  the talosconfig to the `192.168.5.0/24` LAN. apid and 6443 accept the whole
+  subnet, so no particular IP is required.
 - **Kube API works but no apid path works:** the in-cluster Talos API
   (`kubernetesTalosAPIAccess`, `os:admin`, `system-upgrade` namespace) is
   allowed from the pod CIDR. Run a `talosctl` pod there with a
@@ -348,8 +346,8 @@ egress rule, so it's left out of this change.
 
 ## Follow-ups and caveats
 
-- Node `/32`s and the workstation IP are hardcoded. Update both files when
-  adding a node or admin host.
+- Node `/32`s are hardcoded. Update both files when adding a node. Admin hosts
+  need no change as long as they are on `192.168.5.0/24`.
 - Switching Cilium to tunnel mode would need UDP 8472 from the nodes. Enabling
   WireGuard (finding S8) would need UDP 51871 from the nodes.
 - The ICMP allowance is a global 5 pkt/s ([#11546][t11546]). A LAN ping flood
