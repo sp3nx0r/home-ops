@@ -43,4 +43,4 @@ spec:
         LoadBalancer Services must set spec.allocateLoadBalancerNodePorts: false.
         For charts without a value for it, add a Flux postRenderers JSON patch
         (see network/k8s-gateway). Already-allocated nodePorts must also be
-        removed from spec.ports (docs/nodeport-hostport-exposure.md).
+        removed from spec.ports (docs/completed/nodeport-hostport-exposure.md).

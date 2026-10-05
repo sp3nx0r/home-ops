@@ -1,6 +1,12 @@
 # NodePort / hostPort LAN Exposure
 
-Follow-up to the Talos host firewall plan (`talos-host-firewall-plan.md`, PR
+> **Status: COMPLETE (rolled out 2026-10-05, #562; enforced by #616).** No
+> LoadBalancer Service holds a NodePort, Spegel's 29999/30021 deny LAN
+> clients, and the Kyverno policy `require-lb-no-nodeports` rejects new
+> LoadBalancers that would allocate NodePorts. See
+> [Rollout record](#rollout-record-2026-10-05).
+
+Follow-up to the Talos host firewall plan (`completed/talos-host-firewall-plan.md`, PR
 [#558](https://github.com/sp3nx0r/home-ops/pull/558)). Cilium's
 kube-proxy replacement serves NodePorts and hostPorts in eBPF at tc ingress,
 **before netfilter**, so the Talos firewall cannot filter them
@@ -152,7 +158,37 @@ Gateway both server-side-apply these Services, and no field manager owns
 
 **Rollback:** revert the commit. With the flag back to `true`, the next apply
 re-allocates NodePorts. Deleting the `spegel` CNP restores open ingress
-immediately.
+immediately. The Kyverno policy `require-lb-no-nodeports` (#616) denies a
+LoadBalancer with the flag `true` or missing, so remove that policy (or revert
+#616) first, or Flux's apply will be rejected.
+
+## Rollout record (2026-10-05)
+
+- **Pre-check:** all four UniFi port forwards target LB IPs (Plex `.21`, tor
+  `.22` ×2, qBittorrent `.23`); none target a NodePort. CI was re-run against
+  current `main`, and server-side dry-runs passed on the merged result.
+- **Release:** after Flux applied the flag to all 8 Services, the step 3 loop
+  (dry-run, then for real) released all 14 NodePorts. They stayed released
+  through forced HelmRelease reconciles, Flux drift detection (warn mode)
+  reported nothing, and Plex kept only `healthCheckNodePort` 30577.
+- **From the LAN:** every old NodePort is closed on all three nodes. Spegel
+  29999/30021 time out, and Hubble shows them `DROPPED` as `reserved:world`.
+- **LB IPs:** all of these still answer:
+    - envoy-internal and envoy-external, plus a public request through
+      Cloudflare.
+    - Plex, k8s-gateway DNS, tor (both ports) and qBittorrent.
+    - Minecraft Bedrock over UDP.
+    - Syslog on `.24`, with the test line reaching Loki.
+- **Spegel:** all three `up` targets are 1, and node containerd (`host` /
+  `kube-apiserver`), peer Spegel and Prometheus flows are all `FORWARDED`. A
+  busybox digest cached only on aurinax was pulled onto miirym in 131 ms with 5
+  mirror hits on miirym's Spegel. Check the node's full cache with
+  `talosctl image list --namespace cri`, because `node.status.images` only
+  lists the 50 largest images.
+- **Enforcement (#616):** server-side dry-runs give the expected results. A
+  LoadBalancer with the flag missing or `true` is denied, one with `false` is
+  created, a ClusterIP is created, and an update to an existing LoadBalancer is
+  allowed. Background scanning reports 8/8 pass.
 
 [cilium-kpr]: https://docs.cilium.io/en/stable/network/kubernetes/kubeproxy-free/
 [k8s-svc]: https://kubernetes.io/docs/concepts/services-networking/service/#load-balancer-nodeport-allocation

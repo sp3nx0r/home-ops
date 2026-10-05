@@ -91,7 +91,7 @@ Known facts (re-verify): lockdown `[none]` despite Secure Boot; SELinux permissi
 
 ## Host firewall
 
-Design and rules are on [#558](https://github.com/sp3nx0r/home-ops/pull/558) (`talos/all/80-firewall.yaml`, `docs/talos-host-firewall-plan.md`), not yet on main.
+Default-block ingress, live. Rules: `talos/{all,control-plane}/80-firewall.yaml`; design/ports: `docs/completed/talos-host-firewall-plan.md`. New host sockets (hostNetwork, node-IP scrapes) need a rule or are silently dropped. NodePorts/hostPorts bypass it (Cilium eBPF); see Kyverno `require-lb-no-nodeports`. Roll out per node with `--mode try --timeout 10m`, VIP holder last.
 
 Map real host sockets first:
 
