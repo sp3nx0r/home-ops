@@ -1,0 +1,18 @@
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/kustomize.toolkit.fluxcd.io/kustomization_v1.json
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: kyverno-policies
+spec:
+  interval: 1h
+  path: ./kubernetes/apps/kyverno/policies/app
+  prune: true
+  # Policies reference CRDs installed by the kyverno HelmRelease, so wait for
+  # it to be Ready before applying them.
+  dependsOn:
+    - name: kyverno
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+    namespace: flux-system

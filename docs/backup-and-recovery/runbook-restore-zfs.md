@@ -4,22 +4,22 @@
 
 - Quick local recovery of files deleted or corrupted within the snapshot retention window
 - NFS dataset: within 24 hours (hourly snapshots) or 14 days (daily snapshots for k8s-exports)
-- iSCSI dataset: within 24 hours (hourly snapshots)
 - No need to go to B2 — faster RTO (seconds vs hours)
+
+iSCSI PVCs (`tank/homelab/k8s-iscsi`) have no periodic ZFS snapshots; restore them from Kopia with [runbook-restore-pvc.md](runbook-restore-pvc.md). See [backup-strategy.md](backup-strategy.md) Level 2 for why.
 
 ## Snapshot retention summary
 
-| Dataset | Schedule | Retention |
-|---------|----------|-----------|
-| `tank/backups` | Hourly, recursive | 24h |
-| `tank/backups/workstations` | Hourly, inherited from `tank/backups` | 24h |
-| `tank/backups/git-bundles` | Hourly, inherited from `tank/backups` | 24h |
-| `tank/backups/archive` | Hourly, inherited from `tank/backups` | 24h |
-| `tank/backups/truenas-config` | Hourly, inherited from `tank/backups` | 24h |
-| `tank/homelab/k8s-exports` | Hourly | 24h |
-| `tank/homelab/k8s-exports` | Daily (2am) | 14d |
-| `tank/homelab/k8s-iscsi` | Hourly | 24h |
-| `tank/media` | Daily (3am) | 7d |
+| Dataset                       | Schedule                              | Retention |
+| ----------------------------- | ------------------------------------- | --------- |
+| `tank/backups`                | Hourly, recursive                     | 24h       |
+| `tank/backups/workstations`   | Hourly, inherited from `tank/backups` | 24h       |
+| `tank/backups/git-bundles`    | Hourly, inherited from `tank/backups` | 24h       |
+| `tank/backups/archive`        | Hourly, inherited from `tank/backups` | 24h       |
+| `tank/backups/truenas-config` | Hourly, inherited from `tank/backups` | 24h       |
+| `tank/homelab/k8s-exports`    | Hourly                                | 24h       |
+| `tank/homelab/k8s-exports`    | Daily (2am)                           | 14d       |
+| `tank/media`                  | Daily (3am)                           | 7d        |
 
 ## Procedure: Restore files from an NFS dataset snapshot
 
@@ -70,6 +70,8 @@ ssh nas 'zfs destroy tank/scratch/restore-temp'
 
 ## Procedure: Restore an iSCSI zvol snapshot
 
+This only applies to a snapshot you took by hand (for example `zfs snapshot tank/homelab/k8s-iscsi/<zvol-name>@pre-upgrade` before a risky change); nothing creates them on a schedule. Destroy the snapshot once you no longer need it — a lingering snapshot blocks democratic-csi from deleting the PV.
+
 iSCSI zvol snapshots are block-level and require more care since the zvol may be actively attached to a Kubernetes node.
 
 ### 1. List available zvol snapshots
@@ -101,7 +103,7 @@ ssh nas 'midclt call iscsi.target.query' | jq '.[] | select(.name | contains("<p
 
 ```bash
 # Rollback to a specific snapshot
-ssh nas 'zfs rollback tank/homelab/k8s-iscsi/<zvol-name>@hourly-2026-05-01_08:00'
+ssh nas 'zfs rollback tank/homelab/k8s-iscsi/<zvol-name>@pre-upgrade'
 ```
 
 ### 4. Reattach and verify

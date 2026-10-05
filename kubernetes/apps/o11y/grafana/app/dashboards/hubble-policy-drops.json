@@ -206,7 +206,7 @@
         {
           "refId": "A",
           "datasource": { "type": "loki", "uid": "${loki}" },
-          "expr": "sum by (dst_namespace) (count_over_time({source=\"hubble\"} |~ \"$filter\" [$__interval]))",
+          "expr": "sum by (dst_namespace) (count_over_time({source=\"hubble\"} |~ \"$filter\" | json | protocol!=\"ICMPv4\" or dst!=\"media/qbittorrent\" [$__interval]))",
           "legendFormat": "{{dst_namespace}}"
         }
       ],
@@ -233,7 +233,7 @@
         {
           "refId": "A",
           "datasource": { "type": "loki", "uid": "${loki}" },
-          "expr": "{source=\"hubble\"} |~ \"$filter\" | json | line_format \"{{.message}}\""
+          "expr": "{source=\"hubble\"} |~ \"$filter\" | json | protocol!=\"ICMPv4\" or dst!=\"media/qbittorrent\" | line_format \"{{.message}}\""
         }
       ],
       "options": {

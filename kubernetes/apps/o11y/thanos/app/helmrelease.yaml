@@ -35,6 +35,10 @@ spec:
       replicaCount: 1
       replicaLabels:
         - __replica__
+      # Fail queries when a store is unreachable instead of silently returning
+      # sidecar-only (recent) data.
+      extraArgs:
+        - --no-query.partial-response
       endpoints:
         autogen:
           enabled: true
@@ -54,7 +58,7 @@ spec:
           cpu: 50m
           memory: 128Mi
         limits:
-          memory: 512Mi
+          memory: 1Gi
 
     queryFrontend:
       enabled: true
@@ -75,14 +79,19 @@ spec:
         enabled: true
         size: 5Gi
         storageClass: iscsi
+      # Reject oversized Series calls with an error rather than OOMing on
+      # long-range, high-cardinality queries (~450k head series).
+      extraArgs:
+        - --store.limits.request-series=100000
+        - --store.limits.request-samples=50000000
       serviceMonitor:
         enabled: true
       resources:
         requests:
           cpu: 50m
-          memory: 128Mi
+          memory: 256Mi
         limits:
-          memory: 512Mi
+          memory: 1Gi
 
     compactor:
       enabled: true

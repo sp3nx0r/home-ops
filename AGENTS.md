@@ -2,6 +2,20 @@
 
 This is a GitOps mono-repo for a bare-metal Kubernetes homelab ("Securimancy Homelab").
 
+## Agent Development Workflow
+
+Agents work in their own git worktree, never in the primary checkout `/opt/home-ops` (the owner's; edits and `git switch` there have clobbered uncommitted work). Use [Worktrunk](https://worktrunk.dev/) (`wt`):
+
+```sh
+git fetch origin && wt switch --create <type>/<name> --base origin/main --no-cd   # → /opt/home-ops.<type>-<name>
+wt list                                                                         # status, ahead/behind, per worktree
+wt remove <type>/<name>                                                         # after the PR merges
+```
+
+- `.config/wt.toml` symlinks `kubeconfig`, `age.key` and `talosconfig` into new worktrees and runs `mise trust`. Approve it once with `wt config approvals add`.
+- Never use `wt merge` or `wt step commit`: changes land via PR (squash-merged on GitHub) with Conventional Commits.
+- Workflow details: `.agents/skills/home-ops-worktree-pr` (one agent) and `home-ops-parallel-agents` (several).
+
 ## Documentation
 
 The `docs/` directory contains architecture decisions, implementation plans, and operational runbooks authored by the repo owner. Always check `docs/` for prior context before proposing changes — a plan or runbook may already exist for what you're about to do.
@@ -21,7 +35,8 @@ kubernetes/           Flux GitOps manifests (the primary workload)
   flux/               Flux system bootstrap (cluster Kustomization)
 ansible/              Ansible playbooks and inventory (TrueNAS, infrastructure)
 talos/                Talos Linux node configs (topf)
-scripts/              Helper scripts (SOPS pre-commit hook)
+sigma/                Sigma detections -> Loki ruler rules (`just sigma ...`, docs/loki-ruler-detections.md)
+scripts/              Helper scripts (SOPS pre-commit hook, o11y.sh query helpers, sigma-to-loki.py)
 justfile              Task runner entrypoint; per-area recipes live in <area>/mod.just
 .github/workflows/    CI — flux-local validation, label sync
 docs/                 Plans, runbooks, and architecture docs
@@ -43,6 +58,7 @@ kubernetes/apps/<namespace>/<app-name>/
     secret.sops.yaml         SOPS-encrypted Secret (optional)
     volsync-secret.sops.yaml Volsync repo credentials (optional, for apps with backups)
     pvc.yaml                 PersistentVolumeClaim (optional)
+    ciliumnetworkpolicy.yaml CiliumNetworkPolicy allow-list (required — see Network Policy)
 ```
 
 ### Key conventions
@@ -51,6 +67,7 @@ kubernetes/apps/<namespace>/<app-name>/
 - **Schema comments**: YAML files include `# yaml-language-server: $schema=...` on the first line for editor validation. Preserve these.
 - **Variable substitution**: `ks.yaml` files use `spec.postBuild.substitute` and `substituteFrom` to inject variables like `${APP}`, `${VOLSYNC_CAPACITY}`, and cluster secrets (`${SECRET_DOMAIN}`, etc.) from the `cluster-secrets` Secret.
 - **Namespace scoping**: Each namespace directory has a `namespace.yaml` and a `kustomization.yaml` that lists all app `ks.yaml` files and includes `../../components/sops`.
+- **Pod Security labels**: every `namespace.yaml` must set `pod-security.kubernetes.io/enforce` (`baseline` by default; `privileged` only where required, e.g. `kube-system`, `download`, `kubescape`, `system-upgrade`). A Kyverno `ValidatingPolicy` in `Deny` mode rejects namespaces without it (exempt: `kube-*`, `flux-system`, `kyverno`, `cilium-secrets`).
 - **Dependencies**: Apps declare `dependsOn` in their `ks.yaml` when they need another app running first (e.g., volsync).
 - **YAML anchors**: HelmRelease files use YAML anchors (e.g., `&port 32400` / `*port`) to avoid repeating port numbers.
 
@@ -59,10 +76,14 @@ kubernetes/apps/<namespace>/<app-name>/
 | Namespace          | Purpose                                                                                 |
 | ------------------ | --------------------------------------------------------------------------------------- |
 | `media`            | Media stack — Plex, Sonarr, Radarr, qBittorrent, etc.                                   |
+| `download`         | VPN torrent client — qbittorrent-gluetun (PSA `privileged` for the gluetun sidecar)     |
+| `archive`          | ArchiveTeam Warrior                                                                     |
+| `system-upgrade`   | Tuppr — Talos/Kubernetes upgrades (PSA `privileged`, Talos `os:admin` API access)       |
 | `network`          | Ingress, DNS, tunnels — Envoy Gateway, Cloudflare, CoreDNS                              |
 | `o11y`             | Observability — Grafana, Loki, Prometheus, Kromgo, Vector                               |
 | `security`         | Auth — Pocket ID (OIDC)                                                                 |
 | `kubescape`        | Posture + vulnerability scanning — Kubescape Operator (PSA `privileged` for node-agent) |
+| `kyverno`          | Admission policy — Kyverno controllers + CEL `ValidatingPolicy` set (`policies/`)       |
 | `storage`          | Distributed storage — Garage (S3)                                                       |
 | `cert-manager`     | TLS certificate automation                                                              |
 | `external-secrets` | External secret management                                                              |
@@ -85,6 +106,45 @@ kubernetes/apps/<namespace>/<app-name>/
 - Gatus health checks are configured via annotations: `gatus.home-operations.com/endpoint`.
 - **`envoy-external` + Gatus**: Cloudflare external-dns publishes public records automatically, but UniFi private DNS only syncs `envoy-internal` routes. Gatus probes from inside the cluster, so each new external hostname also needs a UniFi CNAME in `kubernetes/apps/network/unifi-dns/app/dnsendpoint.yaml` (typically to `external.${SECRET_DOMAIN}`).
 - LoadBalancer IPs are assigned via Cilium L2 announcements: `lbipam.cilium.io/ips` annotation.
+
+### Network Policy (Cilium default-deny)
+
+The cluster is **default-deny**. Two `CiliumClusterwideNetworkPolicy` (CCNP) resources, `default-deny-ingress` and `default-deny-egress` in `kubernetes/apps/kube-system/network-policies/`, select every pod outside `kube-system`. They allow only:
+
+- **egress**: cluster DNS (kube-dns `:53`, L7 DNS rule);
+- **ingress**: from the `host`, `remote-node`, `kube-apiserver` and `health` entities on all ports (kubelet probes, cilium-health, apiserver → webhooks).
+
+Everything else must be allowed by a per-app `CiliumNetworkPolicy` (CNP) in `app/ciliumnetworkpolicy.yaml`. History and design: `docs/completed/cluster-default-deny-floor.md`.
+
+Rules when adding or changing an app:
+
+- **Ship the CNP in the same PR as the app or namespace.** A pod without one comes up isolated. It typically hangs at API-client init, fails its startup probes, or times out a Helm install with no obvious error in its logs (this is what happened to Kyverno, #524 → #563).
+- **Common allow rules** (copy from existing CNPs, e.g. `system-upgrade/tuppr`, `kyverno/kyverno`):
+    - Kubernetes API: `toEntities: [kube-apiserver]` on `6443`. Not in the floor; every operator/controller/Job that talks to Kubernetes needs it.
+    - Prometheus scrape: `fromEndpoints` `io.kubernetes.pod.namespace: o11y` + `app.kubernetes.io/name: prometheus` on the metrics port.
+    - Gateway traffic: `fromEndpoints` `io.kubernetes.pod.namespace: network` + `gateway.envoyproxy.io/owning-gateway-name: envoy-internal` (or `envoy-external`) on the container port, matching the route's `parentRefs`.
+    - Admission webhooks: covered by the floor's ingress, but restate `fromEntities: [kube-apiserver, host, remote-node]` on the webhook port. The apiserver is host-networked, so it shows up as `host`/`remote-node`, not only `kube-apiserver`.
+    - Internet egress: prefer `toFQDNs` for known hosts. Otherwise use `toCIDRSet: 0.0.0.0/0` with `except` for `10/8`, `172.16/12`, `192.168/16`, `169.254/16`, `100.64/10` rather than `toEntities: world` (which includes the LAN).
+- **`toFQDNs` needs `ndots: 1`** on the pod (`dnsConfig.options`, or a postRenderer if the chart lacks it). CoreDNS `autopath` otherwise makes the FQDN never match, and traffic drops to a bare `world` IP.
+- Namespace-wide CNPs (`endpointSelector` on `io.kubernetes.pod.namespace`) are fine for single-purpose namespaces whose Jobs/hooks share the same needs (e.g. `kyverno`, `system-upgrade`).
+- `kube-system` is outside the floor; host-networked pods there (cilium, node-exporter, vector agent, spegel) aren't governed by CNPs.
+
+Troubleshooting a pod that can't connect (check policy first, before app config):
+
+```sh
+# Live drops cluster-wide via Hubble Relay
+cilium hubble port-forward &
+hubble observe --verdict DROPPED --namespace <ns> --follow
+# Without the CLI: exec into each cilium agent (each one only sees its own node)
+for p in $(kubectl -n kube-system get pod -l k8s-app=cilium -o name); do
+  kubectl -n kube-system exec "$p" -c cilium-agent -- hubble observe --verdict DROPPED --namespace <ns> --last 20 -o compact
+done
+```
+
+- Historical drops: Loki `{source="hubble"}` (labels `src_namespace`, `dst_namespace`, `direction`) and the Grafana **Network → Hubble Policy Drops** dashboard.
+- Alert `HubblePolicyDenied` fires on a sustained non-ICMP drop. Known exclusions and expected drops (qbittorrent ICMP, Plex NAT-PMP, kubescape egress) are listed in the floor runbook.
+- Confirm a pod is policy-enforced: `kubectl -n kube-system exec <cilium-pod> -c cilium-agent -- cilium-dbg endpoint list`.
+- Emergency rollback of one direction: `kubectl delete ccnp default-deny-egress` (or `-ingress`). Flux restores it on the next reconcile.
 
 ## Secrets and Encryption
 
@@ -125,12 +185,14 @@ Tools are version-pinned in `.mise/config.toml` (with a checksum lockfile at `.m
 - `just` — Task runner (root `justfile` + per-area `<area>/mod.just` modules)
 - `lefthook` — Git hook manager (`.lefthook.toml`); `mise` installs the hooks on `postinstall`
 - `flux` — Flux CLI for GitOps operations
-- `kubectl` / `helm` / `kustomize` — Kubernetes management
+- `kubectl` / `helm` / `kustomize` — Kubernetes management. mise sets `KUBECONFIG` to `./kubeconfig` (repo root), so run cluster commands from inside the repo. Outside it, `kubectl` falls back to a different, stale kubeconfig and fails with misleading x509 "certificate has expired" errors.
 - `talosctl` / `topf` — Talos node management
 - `sops` / `age` — Secret encryption
 - `kubeconform` — YAML schema validation
+- `logcli` / `promtool` / `amtool` — Loki, Prometheus/Thanos and Alertmanager CLIs, pinned to the versions running in-cluster. `promtool` also covers Thanos Query (Prometheus HTTP API) and offline rule checks; `amtool` covers Alertmanager config checks
 - `gum` — Shell UI used by just recipes for structured logging (`gum log`)
 - `gh` — GitHub CLI for issues, PRs, checks, and releases
+- `wt` — Worktrunk, git worktree manager for agent work (see Agent Development Workflow)
 
 Run `just` (no args) to list available recipes. Recipes are grouped into modules
 invoked as `just <module> <recipe>`. Common commands:
@@ -165,6 +227,7 @@ When automating or investigating from this repo, prefer local CLI and cluster ac
 - Renovate manages dependency updates (`.renovaterc.json5`).
 - Keep HelmRelease values minimal — only override what differs from chart defaults.
 - Security contexts: prefer `runAsNonRoot`, `readOnlyRootFilesystem`, and drop all capabilities.
+- Comments: terse, usually one line. State the non-obvious why or constraint, not what the next line does. No multi-paragraph blocks in YAML, scripts or AGENTS.md.
 
 ## Commit Conventions
 

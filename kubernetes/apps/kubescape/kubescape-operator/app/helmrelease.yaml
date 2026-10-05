@@ -17,7 +17,12 @@ spec:
     clusterName: homelab
     # Scan kube-system too: it holds the most privileged workloads.
     excludeNamespaces: kubescape,kube-public,kube-node-lease
-    # Frameworks for the startup scan and exception-triggered rescans; the daily
+    # Hourly Volsync movers and daily cache scrubs would each get a fresh SBOM,
+    # container profile and CVE scan per run. node-agent matches values exactly.
+    excludeLabels:
+      app.kubernetes.io/created-by: ["volsync"]
+      app.kubernetes.io/component: ["cache-scrub"]
+    # Frameworks for the startup scan and exception-triggered rescans; the weekly
     # CronJob below names the same set explicitly.
     defaultFrameworks:
       - nsa
@@ -53,7 +58,7 @@ spec:
       runtimeDetection: disable
       seccompProfileService: disable
     # An empty watch set keeps continuousScan from rescanning on every resource
-    # event; the daily scheduled scan still persists detailed results.
+    # event; the weekly scheduled scan still persists detailed results.
     continuousScanning:
       matchingRules:
         match: []
@@ -72,15 +77,15 @@ spec:
     kubescape:
       image:
         repository: quay.io/kubescape/kubescape
-        tag: v4.0.13@sha256:58651dce3376309cd9a064021c4b1f0655ab307631ee4259f5a531e7dcb44cc2
+        tag: v4.0.15@sha256:40bb0ace10b8f33fc187a45232d047d6765ed508778b55a52a683145f7c9c3dd
       skipUpdateCheck: true
     kubescapeScheduler:
       image:
         repository: quay.io/kubescape/http-request
         tag: v0.2.23@sha256:4ff502a33423cd362b7fd70e98b0ac2121799fb7df22d7def326e528cbec5685
-      # Posture and vulnerability scans are staggered: both write heavily to the
-      # storage component's single-writer SQLite database.
-      scanSchedule: "0 5 * * *"
+      # Weekly, and staggered after the vulnerability scan: both write heavily to
+      # the storage component's single-writer SQLite database on HDD-backed iSCSI.
+      scanSchedule: "0 5 * * 0"
       requestBody:
         commands:
           - CommandName: kubescapeScan
@@ -97,7 +102,7 @@ spec:
       image:
         repository: quay.io/kubescape/http-request
         tag: v0.2.23@sha256:4ff502a33423cd362b7fd70e98b0ac2121799fb7df22d7def326e528cbec5685
-      scanSchedule: "0 1 * * *"
+      scanSchedule: "0 1 * * 0"
     # Template for operator-created registry-scan CronJobs (unused, pinned anyway).
     registryScanScheduler:
       image:
@@ -106,11 +111,11 @@ spec:
     operator:
       image:
         repository: quay.io/kubescape/operator
-        tag: v0.2.169@sha256:01b2694425e935018daf5d2aee1fb6f7fa110160ea99f22ac98c1786a645dd3b
+        tag: v0.2.172@sha256:1ddcd2788e1ef1ce4c688920b48b4b9be35af549db19391bdb9be71bd42d1e26
     kubevuln:
       image:
         repository: quay.io/kubescape/kubevuln
-        tag: v0.3.430@sha256:9bed2f723ea09807ea31d656018feca35c8cb49eb4707006ae890b01f8830e28
+        tag: v0.3.501@sha256:8b810f2598861f7120047e2d6a090125200d628ba8e50e2b9b94a8dd5031d098
       config:
         grypeDbPersistence: true
       resources:
@@ -124,23 +129,35 @@ spec:
     storage:
       image:
         repository: quay.io/kubescape/storage
-        tag: v0.0.331@sha256:01f2b053ace1f276a1f46fcf41eaee58cf0f43d59e667c0d6a27b2920fd44ba1
+        tag: v0.0.348@sha256:6333d78455896ae3f32d6a8a6a743b2c976ec1253dc6049187943d22363367bd
       resources:
         requests:
           cpu: 200m
           memory: 400Mi
         limits:
           memory: 1500Mi
+      kindQueues:
+        # The 500KB default rejects (413) VEX documents for images with large
+        # package sets; Helm merges this key into the chart's other defaults.
+        openvulnerabilityexchangecontainers:
+          maxObjectSize: 5000000
     nodeAgent:
       image:
         repository: quay.io/kubescape/node-agent
-        tag: v0.3.219@sha256:2044ed750f5e20a7c5150479963e2b33108c304a40d526c0de7ed412495467c6
+        tag: v0.3.251@sha256:59e4ebfe3576beca7379f5fc185f25c9bbfc244afc1801ab2d3362299a249c6f
       resources:
         requests:
           cpu: 100m
           memory: 600Mi
         limits:
           memory: 1400Mi
+      config:
+        extra:
+          # Containers already running when node-agent starts get a "partial"
+          # profile that kubevuln refuses to scan, yet node-agent still rewrites
+          # it every updatePeriod for maxLearningPeriod. With runtimeDetection
+          # off they have no other use, so skip them.
+          partialProfileGenerationEnabled: false
     prometheusExporter:
       image:
         repository: quay.io/kubescape/prometheus-exporter
@@ -175,3 +192,47 @@ spec:
                   options:
                     - name: ndots
                       value: "1"
+          # Read-only rules the chart omits (each was a recurring 403 in the
+          # audit log). Secrets stay denied via enableClusterWideSecretAccess.
+          - target:
+              kind: ClusterRole
+              name: operator
+            patch: |
+              - op: add
+                path: /rules/-
+                value:
+                  apiGroups: [""]
+                  resources: ["serviceaccounts"]
+                  verbs: ["get"]
+          - target:
+              kind: ClusterRole
+              name: kubescape
+            patch: |
+              - op: add
+                path: /rules/-
+                value:
+                  apiGroups: ["admissionregistration.k8s.io"]
+                  resources: ["validatingadmissionpolicies", "validatingadmissionpolicybindings"]
+                  verbs: ["get", "list", "watch"]
+              - op: add
+                path: /rules/-
+                value:
+                  apiGroups: ["kubescape.io"]
+                  resources: ["controlinputs", "securityexceptions", "clustersecurityexceptions"]
+                  verbs: ["get", "list", "watch"]
+              - op: add
+                path: /rules/-
+                value:
+                  apiGroups: ["talos.dev"]
+                  resources: ["serviceaccounts"]
+                  verbs: ["get", "list", "watch"]
+          - target:
+              kind: ClusterRole
+              name: storage
+            patch: |
+              - op: add
+                path: /rules/-
+                value:
+                  apiGroups: [""]
+                  resources: ["nodes"]
+                  verbs: ["get", "list", "watch"]

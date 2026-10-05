@@ -59,7 +59,13 @@ spec:
             parsed, err = parse_json(.message)
             if err == null && is_object(parsed) {
               raw = del(.message)
-              . = merge!(., parsed)
+              parsed = object!(parsed)
+              # Apps like Flux log their own namespace/pod keys; keep them without clobbering the labels.
+              if exists(parsed.namespace) { parsed.log_namespace = del(parsed.namespace) }
+              if exists(parsed.pod) { parsed.log_pod = del(parsed.pod) }
+              if exists(parsed.container) { parsed.log_container = del(parsed.container) }
+              if exists(parsed.node) { parsed.log_node = del(parsed.node) }
+              . = merge(., parsed)
               if exists(.msg) && !exists(.message) {
                 .message = del(.msg)
               }

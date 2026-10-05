@@ -128,7 +128,9 @@ spec:
     numRetries: 2
     retryOn:
       triggers:
-        - reset
+        # reset-before-request only retries resets before any byte is sent upstream,
+        # so non-idempotent POSTs (*arr, qBittorrent) can't be silently double-submitted.
+        - reset-before-request
   targetSelectors:
     - group: gateway.networking.k8s.io
       kind: Gateway

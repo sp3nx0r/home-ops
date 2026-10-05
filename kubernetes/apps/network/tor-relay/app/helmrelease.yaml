@@ -18,7 +18,7 @@ spec:
           fix-perms:
             image:
               repository: busybox
-              tag: 1.38.0@sha256:1cfa4e2b09e127b9c4ed43578d3f3c18e7d44ea47b9ea98475c0cbe9086525f8
+              tag: 1.38.0@sha256:f97baa533a26513c453a362be331a43eb60214302f449c16571b23cea141dce4
             command: ["/bin/sh", "-c"]
             args:
               - chown -R 101:101 /var/lib/tor
@@ -35,6 +35,36 @@ spec:
                 IP=$(curl -4 -sf --retry 3 --retry-delay 5 https://ipv4.icanhazip.com)
                 echo "$IP" > /shared/external-ip
                 echo "Resolved external IP: $IP"
+          # Overlay the latest stable tor from the Tor Project repo onto the shared
+          # volume; the upstream obfs4-bridge image lags releases. Debian trixie base
+          # matches the app image, so the binary links against its existing libs.
+          update-tor:
+            image:
+              repository: debian
+              tag: trixie-slim@sha256:a99cfc517144bc59b1978475ec53b46ecabec7e43635402ee5b77cc54cd1b20a
+            command: ["/bin/bash", "-c"]
+            args:
+              - |
+                set -eu
+                export DEBIAN_FRONTEND=noninteractive
+                apt-get update -qq
+                apt-get install -y -qq --no-install-recommends ca-certificates curl
+                BASE="https://deb.torproject.org/torproject.org"
+                STANZA="$(curl -sfL --retry 3 --retry-delay 5 "$BASE/dists/trixie/main/binary-amd64/Packages" \
+                  | awk 'BEGIN{RS="";FS="\n"} $1=="Package: tor"{print; exit}')"
+                FILE="$(printf '%s\n' "$STANZA" | sed -n 's/^Filename: //p')"
+                SHA="$(printf '%s\n' "$STANZA" | sed -n 's/^SHA256: //p')"
+                VER="$(printf '%s\n' "$STANZA" | sed -n 's/^Version: //p')"
+                [ -n "$FILE" ] && [ -n "$SHA" ] || { echo "could not resolve tor package"; exit 1; }
+                echo "Installing latest tor from Tor Project repo: $VER"
+                curl -sfLo /tmp/tor.deb --retry 3 --retry-delay 5 "$BASE/$FILE"
+                echo "$SHA  /tmp/tor.deb" | sha256sum -c -
+                dpkg-deb -x /tmp/tor.deb /tmp/tor
+                install -D -m 0755 /tmp/tor/usr/bin/tor /shared/bin/tor
+                echo "Installed tor $VER to /shared/bin/tor"
+            securityContext:
+              runAsUser: 0
+              runAsNonRoot: false
         containers:
           app:
             image:
@@ -45,6 +75,9 @@ spec:
               - |
                 export OBFS4V_Address=$(cat /shared/external-ip)
                 echo "Using external IP: $OBFS4V_Address"
+                # Prefer the tor binary staged by the update-tor init container.
+                export PATH="/shared/bin:$PATH"
+                echo "Using tor: $(command -v tor) ($(tor --version | head -1))"
                 exec /usr/local/bin/start-tor.sh
             env:
               OR_PORT: "30932"
@@ -133,6 +166,8 @@ spec:
         advancedMounts:
           tor-relay:
             resolve-ip:
+              - path: /shared
+            update-tor:
               - path: /shared
             app:
               - path: /shared

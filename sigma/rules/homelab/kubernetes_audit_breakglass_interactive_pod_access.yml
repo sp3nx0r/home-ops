@@ -1,0 +1,31 @@
+title: Kubernetes Break-Glass Admin Interactive Pod Access
+id: f6c2cd70-8f0d-417c-892d-af7da684501c
+status: experimental
+description: >-
+  Records exec, attach, port-forward, proxy, or ephemeral-container access to a pod by the Talos
+  break-glass `admin` certificate. This is routine operator and automation activity (hundreds of
+  sessions a week), so it is info-level: visible in Alertmanager and Grafana for hunting, never paged.
+references:
+  - https://kubernetes.io/docs/reference/access-authn-authz/authorization/#determine-the-request-verb
+author: securimancer
+date: 2026-09-30
+tags:
+  - attack.execution
+  - attack.t1609
+logsource:
+  product: kubernetes
+  service: audit
+detection:
+  selection:
+    objectRef.resource: pods
+    objectRef.subresource:
+      - exec
+      - attach
+      - portforward
+      - proxy
+      - ephemeralcontainers
+    user.username: admin
+  condition: selection
+falsepositives:
+  - Routine operator debugging, just recipes, and coding agents using the admin kubeconfig
+level: low

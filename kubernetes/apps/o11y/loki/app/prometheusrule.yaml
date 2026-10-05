@@ -51,3 +51,103 @@ spec:
               Loki has recorded {{ $value }} panic(s) in the last 10 minutes.
           labels:
             severity: warning
+    # The compactor logs its errors and retries, so request-path alerts stay
+    # green while retention stops and Garage fills with expired chunks. The
+    # last-success timestamps reset to 0 on restart, hence the uptime guard.
+    - name: loki-compactor.rules
+      rules:
+        - alert: LokiCompactionStale
+          expr: |-
+            (time() - max by (job) (loki_boltdb_shipper_compact_tables_operation_last_successful_run_timestamp_seconds{job="o11y/loki"}) > 3 * 3600)
+            and on (job)
+            (time() - max by (job) (process_start_time_seconds{job="o11y/loki"}) > 3 * 3600)
+          for: 15m
+          annotations:
+            summary: >-
+              Loki index compaction has not succeeded in 3 hours
+            description: >-
+              The compactor runs every 30m but has not completed a compaction in
+              over 3 hours. Check loki-0 logs for "failed to compact files"; an
+              unreadable index object in loki-chunks blocks every later run.
+          labels:
+            severity: warning
+        - alert: LokiRetentionStale
+          expr: |-
+            (time() - max by (job) (loki_compactor_apply_retention_last_successful_run_timestamp_seconds{job="o11y/loki"}) > 6 * 3600)
+            and on (job)
+            (time() - max by (job) (process_start_time_seconds{job="o11y/loki"}) > 6 * 3600)
+          for: 15m
+          annotations:
+            summary: >-
+              Loki retention has not succeeded in 6 hours
+            description: >-
+              Expired chunks are not being deleted, so loki-chunks in Garage keeps
+              growing. Check loki-0 logs for "failed to apply retention".
+          labels:
+            severity: warning
+    # The Loki ruler evaluates the log-based detections (ConfigMaps labeled
+    # loki_rule="true"). A broken ruler fails silently -- detections just stop
+    # firing -- so its health is watched from Prometheus.
+    - name: loki-ruler.rules
+      rules:
+        # With local rule storage, one unparseable rule file makes every rule
+        # listing fail; after a restart the ruler then has no groups at all.
+        - alert: LokiRulerNoRuleGroups
+          expr: |-
+            absent(loki_prometheus_rule_group_rules{job="o11y/loki"})
+              and on () (up{job="o11y/loki"} == 1)
+          for: 15m
+          annotations:
+            summary: >-
+              Loki ruler has no rule groups loaded
+            description: >-
+              Loki is up but its ruler has loaded no rule groups for 15 minutes, so
+              no log-based detections are being evaluated. Check the loki container
+              logs for "unable to list rules" and the loki-sc-rules sidecar logs;
+              a single invalid loki_rule ConfigMap blocks all of them.
+          labels:
+            severity: critical
+        - alert: LokiRulerEvaluationFailures
+          expr: |-
+            sum by (rule_group) (
+              increase(loki_prometheus_rule_evaluation_failures_total{job="o11y/loki"}[15m])
+            ) > 0
+          for: 15m
+          annotations:
+            summary: >-
+              Loki rule group {{ $labels.rule_group }} is failing to evaluate
+            description: >-
+              {{ printf "%.0f" $value }} rule evaluation(s) in {{ $labels.rule_group }}
+              failed in the last 15 minutes; its detections are not firing.
+          labels:
+            severity: warning
+        - alert: LokiRulerMissedIterations
+          expr: |-
+            sum by (rule_group) (
+              increase(loki_prometheus_rule_group_iterations_missed_total{job="o11y/loki"}[30m])
+            ) > 0
+          for: 15m
+          annotations:
+            summary: >-
+              Loki rule group {{ $labels.rule_group }} is missing evaluations
+            description: >-
+              {{ $labels.rule_group }} took longer than its interval and skipped
+              {{ printf "%.0f" $value }} evaluation(s) in 30 minutes.
+          labels:
+            severity: warning
+        - alert: LokiRulerNotificationsFailing
+          expr: |-
+            sum(increase(loki_prometheus_notifications_errors_total{job="o11y/loki"}[15m])) > 0
+              or
+            sum(increase(loki_prometheus_notifications_dropped_total{job="o11y/loki"}[15m])) > 0
+              or
+            (sum(loki_prometheus_notifications_alertmanagers_discovered{job="o11y/loki"}) == 0)
+          for: 15m
+          annotations:
+            summary: >-
+              Loki ruler cannot deliver alerts to Alertmanager
+            description: >-
+              The Loki ruler is failing, dropping, or has no Alertmanager to send
+              notifications to, so log-based detections fire without notifying.
+          labels:
+            severity: critical

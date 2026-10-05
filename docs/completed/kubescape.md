@@ -10,10 +10,10 @@ Kubescape Operator runs in-cluster (no ARMO cloud account) to provide:
 
 Kubescape is used for evaluation only. Its runtime threat detection and
 admission webhook stay off: runtime detection is planned for Tetragon (P1 in
-`docs/sre-and-security-evaluation.md`) and admission enforcement for Kyverno
-(PR #524). Neither is deployed yet, so the cluster currently has **no** runtime
-detection and **no** admission enforcement. Network policy stays with the
-hand-authored CNPs.
+`docs/sre-and-security-evaluation.md`) and admission enforcement belongs to
+Kyverno. Kyverno is deployed (#524) but only enforces the PSA-label policy, and
+Tetragon isn't deployed yet, so the cluster has **no** runtime detection.
+Network policy stays with the hand-authored CNPs.
 
 > **Status:** Implemented in `kubernetes/apps/kubescape/` (chart
 > `kubescape-operator` 1.40.4). Post-merge verification steps are in
@@ -42,7 +42,7 @@ hand-authored CNPs.
 | `storage`             | Deployment | Aggregated API server `v1beta1.spdx.softwarecomposition.kubescape.io`, SQLite on a PVC.                | restricted-compliant                                                      |
 | `node-agent`          | DaemonSet  | eBPF sensor: SBOMs from container rootfs, runtime relevancy profiles, host sensing (kubelet/OS/ports). | **hostPID, hostPath `/`, SYS_ADMIN/SYS_PTRACE/NET_ADMIN/…, runs as root** |
 | `prometheus-exporter` | Deployment | Converts scan summaries into `kubescape_*` metrics.                                                    | restricted-compliant                                                      |
-| schedulers            | CronJobs   | Daily HTTP POST to the operator.                                                                       | restricted-compliant                                                      |
+| schedulers            | CronJobs   | Weekly HTTP POST to the operator.                                                                      | restricted-compliant                                                      |
 
 The node-agent is the only reason the namespace is `privileged`. It has no
 network access beyond the apiserver (see [Network policy](#network-policy)).
@@ -58,7 +58,7 @@ network access beyond the apiserver (see [Network policy](#network-policy)).
 | `vexGeneration`                                              | on      | Experimental. OpenVEX documents stored as `OpenVulnerabilityExchangeContainer`; advisory data only.                                                        |
 | `prometheusExporter`                                         | on      | Metrics + dashboard. `kubescape.serviceMonitor` stays off: every scrape of the scanner triggers a scan.                                                    |
 | `runtimeDetection`, `malwareDetection`, `httpDetection`      | off     | Runtime detection is planned for Tetragon (not yet deployed).                                                                                              |
-| `admissionController`                                        | off     | Detection-only webhook; enforcement is planned for Kyverno (PR #524, not yet merged).                                                                      |
+| `admissionController`                                        | off     | Detection-only webhook; enforcement belongs to Kyverno (deployed in #524).                                                                                 |
 | `networkPolicyService`                                       | off     | Emits vanilla NetworkPolicy (not CNP) and is the main storage CPU cost (~600m observed elsewhere).                                                         |
 | `seccompProfileService`                                      | off     | No path to ship generated profiles to Talos nodes.                                                                                                         |
 | `riskAcceptance`                                             | off     | No Git-managed `SecurityException`s yet; see [Expected Talos noise](#expected-talos-cis-noise).                                                            |
@@ -82,9 +82,23 @@ Other hardening:
 - `excludeNamespaces: kubescape,kube-public,kube-node-lease` — `kube-system`
   **is** scanned (the chart excludes it by default). The `kubescape` namespace
   itself is not scanned.
-- Frameworks: `nsa`, `mitre`, `cis-v1.12.0`, `security` (daily scan and
+- `excludeLabels` skips Volsync mover pods (`app.kubernetes.io/created-by:
+volsync`) and cache-scrub pods (`app.kubernetes.io/component: cache-scrub`).
+  Both run on a schedule, and node-agent would otherwise build a fresh SBOM,
+  container profile and CVE scan for every run. node-agent matches label values
+  exactly, so new short-lived job pods need a fixed label to be excluded.
+- `nodeAgent.config.extra.partialProfileGenerationEnabled: false`: node-agent
+  only profiles containers it saw start. Containers already running when
+  node-agent starts would get a "partial" profile, which kubevuln refuses to use
+  for relevancy, and node-agent rewrites it every `updatePeriod` (10m) for
+  `maxLearningPeriod` (24h). On every node-agent restart that was ~900 failed
+  scans per hour plus SQLite writes on HDD-backed iSCSI. Trade-off: a workload
+  has no relevancy split until it restarts after node-agent is up.
+- Frameworks: `nsa`, `mitre`, `cis-v1.12.0`, `security` (weekly scan and
   `defaultFrameworks` for the startup scan).
-- Posture `0 5 * * *`, vulnerabilities `0 1 * * *`. They are staggered because
+- Posture `0 5 * * 0`, vulnerabilities `0 1 * * 0` (Sundays, UTC). They are
+  weekly because storage's SQLite database sits on the HDD-backed iSCSI pool,
+  and sync-heavy load there slows every other zvol. They are staggered because
   both write heavily to storage's single-writer SQLite database.
 
 ## Viewing results
@@ -142,7 +156,7 @@ Notes on the FQDN rules:
   is not needed. The DB is cached on a PVC (`grypeDbPersistence`).
 - `kubescape` and `kubevuln` are post-rendered with `ndots: 1`, because CoreDNS
   autopath otherwise defeats `toFQDNs` (see
-  [the default-deny floor runbook](./cluster-default-deny-floor.md)).
+  [the default-deny floor runbook](./completed/cluster-default-deny-floor.md)).
 - Prometheus already egresses to `cluster`, and Headlamp reads results through
   the apiserver, so neither CNP needed changes.
 
@@ -207,7 +221,7 @@ the ones worth triaging. If the noise becomes a problem, enable
 
 - The cluster default-deny floor selects the `kubescape` namespace; the CNPs
   above are the allow-list.
-- Kyverno (PR #524, not yet merged): its PSA-label policy only requires an
+- Kyverno (deployed in #524, policy set to `Deny` in #564): its PSA-label policy only requires an
   explicit `enforce` label, which this namespace has. The planned S7 policy
   "disallow `hostPath` outside `kube-system`/`download`" must also allow
   `kubescape` (node-agent).

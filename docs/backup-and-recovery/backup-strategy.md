@@ -25,8 +25,8 @@
 │    tank/backups             → hourly, retain 24h              │
 │    tank/homelab/k8s-exports → hourly, retain 24h              │
 │    tank/homelab/k8s-exports → daily, retain 14d               │
-│    tank/homelab/k8s-iscsi   → hourly, retain 24h (recursive)  │
 │    tank/media               → daily, retain 7d                │
+│    (no periodic task on tank/homelab/k8s-iscsi — see Level 2) │
 │                                                               │
 │  Kopia Repository: tank/homelab/kopia (NFS-shared)            │
 │    Deduplication-aware backup target for Volsync              │
@@ -66,16 +66,16 @@
 
 - **What it protects against**: Accidental file deletion, application bugs, ransomware
 - **RPO**:
-  - `tank/backups`: 1 hour (retained 24h)
-  - `tank/backups/workstations`: 1 hour (retained 24h, inherited by recursive task)
-  - `tank/backups/git-bundles`: 1 hour (retained 24h, inherited by recursive task)
-  - `tank/backups/archive`: 1 hour (retained 24h, inherited by recursive task)
-  - `tank/backups/truenas-config`: 1 hour (retained 24h, inherited by recursive task)
-  - `tank/homelab/k8s-exports`: 1 hour (retained 24h) + daily (retained 14d)
-  - `tank/homelab/k8s-iscsi`: 1 hour (retained 24h, recursive across all zvols)
-  - `tank/media`: 1 day (retained 7d)
+    - `tank/backups`: 1 hour (retained 24h)
+    - `tank/backups/workstations`: 1 hour (retained 24h, inherited by recursive task)
+    - `tank/backups/git-bundles`: 1 hour (retained 24h, inherited by recursive task)
+    - `tank/backups/archive`: 1 hour (retained 24h, inherited by recursive task)
+    - `tank/backups/truenas-config`: 1 hour (retained 24h, inherited by recursive task)
+    - `tank/homelab/k8s-exports`: 1 hour (retained 24h) + daily (retained 14d)
+    - `tank/media`: 1 day (retained 7d)
 - **RTO**: Seconds (ZFS rollback or clone)
-- **Coverage**: NFS-backed Kubernetes PVCs, iSCSI zvols, backups, media
+- **Coverage**: NFS-backed Kubernetes PVCs, backups, media
+- **Not covered**: `tank/homelab/k8s-iscsi` has no periodic snapshot task. Snapshots on CSI-managed zvols stop democratic-csi from deleting Released PVs (31 PVs were orphaned before the task was removed in `160506eb`). iSCSI PVCs rely on Volsync + Kopia (Level 3) instead.
 
 ### Level 3: Volsync + Kopia (iSCSI PVC application-level backup)
 
@@ -86,21 +86,21 @@
 - **Retention**: 24 hourly + 7 daily snapshots (configurable per-app)
 - **Deduplication**: Kopia content-defined chunking with zstd-fastest compression across all PVCs sharing the repository
 - **How it works**:
-  1. Volsync creates a VolumeSnapshot of the source iSCSI PVC (via democratic-csi)
-  2. A temporary PVC is provisioned from the snapshot
-  3. A Kopia mover pod mounts the temporary PVC + NFS repository and runs `kopia snapshot create`
-  4. Temporary PVC and snapshot are cleaned up
-  5. Restore uses `ReplicationDestination` to pull data from Kopia back into a new PVC
+    1. Volsync creates a VolumeSnapshot of the source iSCSI PVC (via democratic-csi)
+    2. A temporary PVC is provisioned from the snapshot
+    3. A Kopia mover pod mounts the temporary PVC + NFS repository and runs `kopia snapshot create`
+    4. Temporary PVC and snapshot are cleaned up
+    5. Restore uses `ReplicationDestination` to pull data from Kopia back into a new PVC
 
 #### Components
 
-| Component | Namespace | Purpose |
-|-----------|-----------|---------|
-| Volsync controller (perfectra1n fork 0.18.5) | `volsync-system` | Orchestrates ReplicationSource/Destination lifecycle, CRDs include `kopia` mover |
-| Kopia server | `volsync-system` | Web UI for repository browsing/management, connects to NFS repo |
-| Kopia repository | NFS `192.168.5.40:/mnt/tank/homelab/kopia` | Shared filesystem-based Kopia repository, deduplicates across all backup sources |
-| Volsync component | `kubernetes/components/volsync/` | Reusable Kustomize component providing ReplicationSource + ReplicationDestination templates |
-| Kopia repo secret | `${APP}-volsync-secret` (rendered by the volsync component) | `KOPIA_PASSWORD` (injected from `cluster-secrets`) + `KOPIA_REPOSITORY` (`filesystem:///mnt/repository`) |
+| Component                                    | Namespace                                                   | Purpose                                                                                                  |
+| -------------------------------------------- | ----------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| Volsync controller (perfectra1n fork 0.18.5) | `volsync-system`                                            | Orchestrates ReplicationSource/Destination lifecycle, CRDs include `kopia` mover                         |
+| Kopia server                                 | `volsync-system`                                            | Web UI for repository browsing/management, connects to NFS repo                                          |
+| Kopia repository                             | NFS `192.168.5.40:/mnt/tank/homelab/kopia`                  | Shared filesystem-based Kopia repository, deduplicates across all backup sources                         |
+| Volsync component                            | `kubernetes/components/volsync/`                            | Reusable Kustomize component providing ReplicationSource + ReplicationDestination templates              |
+| Kopia repo secret                            | `${APP}-volsync-secret` (rendered by the volsync component) | `KOPIA_PASSWORD` (injected from `cluster-secrets`) + `KOPIA_REPOSITORY` (`filesystem:///mnt/repository`) |
 
 #### Adding Volsync to a new app
 
@@ -112,33 +112,36 @@
 > Flux `postBuild` substitution, so you never copy or encrypt a secret.
 
 1. Add the volsync Kustomize component to the app's `kustomization.yaml`:
-   ```yaml
-   components:
-     - ../../../../components/volsync
-   ```
+
+    ```yaml
+    components:
+        - ../../../../components/volsync
+    ```
 
 2. Set `postBuild` in the app's Flux Kustomization — `substitute` for the app
    variables, and `substituteFrom` `cluster-secrets` so `${KOPIA_PASSWORD}`
    resolves (**required**; without it the secret renders with a literal
    placeholder and backups fail auth):
-   ```yaml
-   postBuild:
-     substitute:
-       APP: my-app
-       VOLSYNC_CAPACITY: 5Gi   # match the PVC size
-       VOLSYNC_UID: "1000"     # optional, defaults to 1000
-       VOLSYNC_GID: "1000"     # optional, defaults to 1000
-     substituteFrom:
-       - name: cluster-secrets
-         kind: Secret
-   ```
+
+    ```yaml
+    postBuild:
+        substitute:
+            APP: my-app
+            VOLSYNC_CAPACITY: 5Gi # match the PVC size
+            VOLSYNC_UID: "1000" # optional, defaults to 1000
+            VOLSYNC_GID: "1000" # optional, defaults to 1000
+        substituteFrom:
+            - name: cluster-secrets
+              kind: Secret
+    ```
 
 3. Add `dependsOn` for volsync in the app's Flux Kustomization:
-   ```yaml
-   dependsOn:
-     - name: volsync
-       namespace: volsync-system
-   ```
+
+    ```yaml
+    dependsOn:
+        - name: volsync
+          namespace: volsync-system
+    ```
 
 4. Name the PVC `${APP}` so it matches the ReplicationSource's `sourcePVC` reference.
 
@@ -165,6 +168,11 @@ Garage does not use the reusable volsync component. It defines **explicit**
 via `substituteFrom: cluster-secrets`. Any new bucket added to Garage is covered
 automatically — no additional backup config is required.
 
+Garage has no standing `ReplicationDestination`. The two volumes have to be
+restored together, with the metadata no newer than the data, so restores use
+one-off destinations from
+[runbook-restore-garage.md](runbook-restore-garage.md).
+
 ### Level 4: Kubernetes VolumeSnapshots (iSCSI point-in-time recovery)
 
 - **What it protects against**: Bad deployments, data migration failures, pre-upgrade safety nets
@@ -180,15 +188,15 @@ automatically — no additional backup config is required.
 - **RPO**: 24 hours (nightly sync, staggered 22:45–05:30)
 - **RTO**: Hours to days (depending on bandwidth for full restore)
 - **Coverage**: Per-dataset cloud sync tasks with ZFS snapshot consistency. Ansible creates and updates these jobs with `enabled: true`.
-  | Task | Path | Bucket | Schedule | Snapshot |
-  |------|------|--------|----------|----------|
-  | B2 - backups-workstation | `/mnt/tank/backups/workstations` | `sp3nx0r-backups-workstation` | 04:15 | Yes |
-  | B2 - backups-git-bundles | `/mnt/tank/backups/git-bundles` | `sp3nx0r-backups-workstation` | 05:30 | Yes |
-  | B2 - backups-archive | `/mnt/tank/backups/archive` | `sp3nx0r-backups-archive` | 04:45 | Yes |
-  | B2 - backups-truenas-config | `/mnt/tank/backups/truenas-config` | `sp3nx0r-backups-truenas-config` | 23:55 | Yes |
-  | B2 - homelab-k8s-exports | `/mnt/tank/homelab/k8s-exports` | `sp3nx0r-homelab` | 22:45 | Yes |
-  | B2 - homelab-kopia | `/mnt/tank/homelab/kopia` | `sp3nx0r-homelab-kopia` | 00:45 | Yes |
-  | B2 - media | `/mnt/tank/media` | `sp3nx0r-media` | 02:45 | Yes; excludes `/mnt/tank/media/downloads/qbittorrent` and `/mnt/tank/media/isos` |
+    | Task                        | Path                               | Bucket                           | Schedule | Snapshot                                                                         |
+    | --------------------------- | ---------------------------------- | -------------------------------- | -------- | -------------------------------------------------------------------------------- |
+    | B2 - backups-workstation    | `/mnt/tank/backups/workstations`   | `sp3nx0r-backups-workstation`    | 04:15    | Yes                                                                              |
+    | B2 - backups-git-bundles    | `/mnt/tank/backups/git-bundles`    | `sp3nx0r-backups-workstation`    | 05:30    | Yes                                                                              |
+    | B2 - backups-archive        | `/mnt/tank/backups/archive`        | `sp3nx0r-backups-archive`        | 04:45    | Yes                                                                              |
+    | B2 - backups-truenas-config | `/mnt/tank/backups/truenas-config` | `sp3nx0r-backups-truenas-config` | 23:55    | Yes                                                                              |
+    | B2 - homelab-k8s-exports    | `/mnt/tank/homelab/k8s-exports`    | `sp3nx0r-homelab`                | 22:45    | Yes                                                                              |
+    | B2 - homelab-kopia          | `/mnt/tank/homelab/kopia`          | `sp3nx0r-homelab-kopia`          | 00:45    | Yes                                                                              |
+    | B2 - media                  | `/mnt/tank/media`                  | `sp3nx0r-media`                  | 02:45    | Yes; excludes `/mnt/tank/media/downloads/qbittorrent` and `/mnt/tank/media/isos` |
 - **Transfer mode**: SYNC (mirror, deletes removed files from B2)
 - **Versioning**: Enabled with bucket-specific noncurrent retention. High-churn buckets keep short noncurrent windows; critical config keeps longer history.
 - **Encryption**: Server-side encryption enabled on buckets; rclone crypt layer on all sync tasks
@@ -206,13 +214,13 @@ automatically — no additional backup config is required.
 
 ## What's NOT Covered
 
-| Gap | Risk | Mitigation |
-|-----|------|------------|
+| Gap                                                          | Risk                                                                                                                            | Mitigation                                                                                             |
+| ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
 | A few low-value iSCSI PVCs have no Volsync ReplicationSource | Reproducible data (e.g. `kokoro` model cache, `loki` local WAL — chunks already live in Garage) has no application-level backup | Intentional — these PVCs rebuild from source; all stateful apps holding irreplaceable data are covered |
-| RAIDZ1 can only tolerate 1 disk failure | Second disk failure during rebuild = total pool loss | Phase 2 migration to 2x RAIDZ2 (planned) |
-| No application-consistent snapshots | Database crash-consistency not guaranteed for iSCSI zvol snapshots | Use app-level backup tools (pg_dump, etc.) before snapshots |
-| Kopia repo is single-site (NFS on TrueNAS) | NAS loss = Kopia repo loss (until B2 sync restores it) | Kopia repo syncs to the `sp3nx0r-homelab-kopia` B2 bucket |
-| Kubernetes etcd/cluster state not backed up | Cluster rebuild requires full re-bootstrap | GitOps (Flux) reconstructs cluster state from git |
+| RAIDZ1 can only tolerate 1 disk failure                      | Second disk failure during rebuild = total pool loss                                                                            | Phase 2 migration to 2x RAIDZ2 (planned)                                                               |
+| No application-consistent snapshots                          | Database crash-consistency not guaranteed for iSCSI zvol snapshots                                                              | Use app-level backup tools (pg_dump, etc.) before snapshots                                            |
+| Kopia repo is single-site (NFS on TrueNAS)                   | NAS loss = Kopia repo loss (until B2 sync restores it)                                                                          | Kopia repo syncs to the `sp3nx0r-homelab-kopia` B2 bucket                                              |
+| Kubernetes etcd/cluster state not backed up                  | Cluster rebuild requires full re-bootstrap                                                                                      | GitOps (Flux) reconstructs cluster state from git                                                      |
 
 ## Key Weaknesses
 
@@ -222,8 +230,8 @@ automatically — no additional backup config is required.
 
 ## Recommendations
 
-| Priority | Action |
-|----------|--------|
-| Medium | Document and test restore procedures (see `docs/backup-and-recovery/`) |
-| Low | Consider app-level backup CronJobs for databases (pg_dump, etc.) before snapshots |
-| Low | Remove `volsync-test` app once real workloads are backed up by Volsync |
+| Priority | Action                                                                            |
+| -------- | --------------------------------------------------------------------------------- |
+| Medium   | Document and test restore procedures (see `docs/backup-and-recovery/`)            |
+| Low      | Consider app-level backup CronJobs for databases (pg_dump, etc.) before snapshots |
+| Low      | Remove `volsync-test` app once real workloads are backed up by Volsync            |

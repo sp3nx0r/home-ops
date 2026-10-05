@@ -8,9 +8,9 @@ spec:
   groups:
     # The Thanos chart already ships the full thanos-mixin PrometheusRule
     # (thanos-rules: compact/query/store/component-absent alerts), so we only
-    # add the one gap it does not cover: the sidecar that runs alongside the
-    # kube-prometheus-stack Prometheus. Dashboards for Thanos live in the grafana
-    # HelmRelease.
+    # add the gaps it does not cover: the sidecar that runs alongside the
+    # kube-prometheus-stack Prometheus, and a compactor that is stuck retrying.
+    # Dashboards for Thanos live in the grafana HelmRelease.
     - name: thanos-sidecar.rules
       rules:
         - alert: ThanosSidecarPrometheusDown
@@ -26,3 +26,35 @@ spec:
               recent data.
           labels:
             severity: critical
+    # The mixin's ThanosCompactHighCompactionFailures uses a 5m rate with
+    # for: 15m, so a failure every ~30m never fires, and ThanosCompactHalted
+    # stays 0 because the compactor retries instead of halting.
+    - name: thanos-compactor.rules
+      rules:
+        - alert: ThanosCompactNoProgress
+          expr: |-
+            sum by (job) (increase(thanos_compact_iterations_total{job=~".*thanos.*compact.*"}[12h])) == 0
+          for: 1h
+          annotations:
+            summary: >-
+              Thanos compactor has not finished an iteration in 12 hours
+            description: >-
+              Compaction, downsampling and retention all run at the end of an
+              iteration, so none of them are happening. Check thanos-compactor-0
+              logs; an unreadable block can be marked no-compact and for deletion
+              with `thanos tools bucket mark`.
+          labels:
+            severity: warning
+        - alert: ThanosCompactPersistentFailures
+          expr: |-
+            sum by (job) (increase(thanos_compact_group_compactions_failures_total{job=~".*thanos.*compact.*"}[1h])) > 0
+          for: 3h
+          annotations:
+            summary: >-
+              Thanos compactor has failed group compactions for 3 hours
+            description: >-
+              {{ printf "%.0f" $value }} group compaction(s) failed in the last
+              hour, and failures have persisted for 3 hours. Check
+              thanos-compactor-0 logs for the failing block.
+          labels:
+            severity: warning

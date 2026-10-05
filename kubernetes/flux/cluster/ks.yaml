@@ -35,6 +35,10 @@ spec:
                 metadata:
                   name: _
                 spec:
+                  # Report-only: hand edits to chart-rendered objects raise a
+                  # DriftDetected warning event instead of being reverted.
+                  driftDetection:
+                    mode: warn
                   install:
                     crds: CreateReplace
                     strategy:

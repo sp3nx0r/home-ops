@@ -1,0 +1,26 @@
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/monitoring.coreos.com/prometheusrule_v1.json
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: garage
+spec:
+  groups:
+    - name: garage.rules
+      rules:
+        # With replication factor 1 there is no second copy to resync from, so
+        # an errored block is lost data. Garage still answers GETs for it with
+        # 200 and an empty body, which clients report only as "unexpected EOF".
+        - alert: GarageBlockResyncErrors
+          expr: |-
+            max by (job) (block_resync_errored_blocks{job="garage-metrics"}) > 0
+          for: 1h
+          annotations:
+            summary: >-
+              Garage has {{ $value }} block(s) it cannot resync
+            description: >-
+              Blocks referenced by object metadata are missing or corrupt on
+              data-garage-0. Run `garage block list-errors` and
+              `garage block info <hash>` to find the owning bucket and object.
+          labels:
+            severity: warning

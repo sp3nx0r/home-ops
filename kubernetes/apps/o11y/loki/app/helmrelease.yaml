@@ -59,6 +59,36 @@ spec:
           insecure: true
       commonConfig:
         replication_factor: 1
+      # Rule groups come only from ConfigMaps labeled loki_rule="true" (any
+      # namespace), which the loki-sc-rules sidecar writes to /rules/fake --
+      # `fake` is the tenant ID while auth_enabled is false. The local store is
+      # read-only, so the ruler API cannot create rules; Git is the only source.
+      # One unparseable file blocks every reload for the tenant: the rules
+      # already loaded keep running, but a restart would start with none (see
+      # the LokiRuler* alerts and docs/loki-ruler-detections.md).
+      rulerConfig:
+        storage:
+          type: local
+          local:
+            directory: /rules
+        # SRV discovery on the headless Service so every Alertmanager replica
+        # receives each alert (HA peers dedupe notifications, not alerts). The
+        # ruler does its own SRV lookup on this host; it is not a Thanos-style
+        # `dnssrv+` URL (that scheme reaches the POST unresolved and 400s).
+        alertmanager_url: http://_http-web._tcp.alertmanager-operated.o11y.svc.cluster.local
+        enable_alertmanager_discovery: true
+        external_labels:
+          source: loki-ruler
+
+    sidecar:
+      # Namespace-prefixed file names so equal data keys in different
+      # ConfigMaps cannot overwrite each other.
+      enableUniqueFilenames: true
+      rules:
+        folder: /rules/fake
+        labelValue: "true"
+        searchNamespace: ALL
+        resource: configmap
 
     singleBinary:
       replicas: 1
@@ -74,6 +104,28 @@ spec:
 
     gateway:
       enabled: true
+      verboseLogging: false
+      image:
+        registry: docker.io
+        repository: nginxinc/nginx-unprivileged
+        tag: 1.31-alpine@sha256:26b0bf6fbf07297983cb341998d79c831508787de26627dd2a112321b9c3a4af
+      resources:
+        requests:
+          cpu: 10m
+          memory: 32Mi
+        limits:
+          memory: 64Mi
+      metrics:
+        image:
+          registry: ghcr.io
+          repository: jkroepke/access-log-exporter
+          tag: 0.4.21@sha256:3cb30dcc03071b3f35ff06b1ed426ae712acb351469dc6349ced68d4ba18c54a
+        resources:
+          requests:
+            cpu: 10m
+            memory: 48Mi
+          limits:
+            memory: 96Mi
 
     backend:
       replicas: 0
@@ -100,3 +152,20 @@ spec:
     monitoring:
       serviceMonitor:
         enabled: true
+
+  # The chart's ClusterRole lets the rules sidecar read configmaps AND secrets
+  # cluster-wide (for `resource: both`). Rules only come from ConfigMaps, so drop
+  # secrets. Patched in place because a ClusterRoleBinding's roleRef is immutable.
+  postRenderers:
+    - kustomize:
+        patches:
+          - target:
+              kind: ClusterRole
+              name: loki-clusterrole
+            patch: |
+              - op: replace
+                path: /rules
+                value:
+                  - apiGroups: [""]
+                    resources: ["configmaps"]
+                    verbs: ["get", "list", "watch"]

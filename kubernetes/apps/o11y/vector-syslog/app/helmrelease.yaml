@@ -50,9 +50,23 @@ spec:
             del(.procid)
             del(.msgid)
             del(.version)
-            # UniFi sends CEF with timestamp as hostname -- extract device name
+            # UniFi CEF: the RFC3164 parser splits a spaced device name across
+            # hostname/appname/message, and the syslog header is local time.
             msg_str = to_string(.message) ?? ""
             if contains(msg_str, "CEF:") {
+              cef_split, err = parse_regex(msg_str, r'^(?P<prefix>.*?)\s*(?P<cef>CEF:.*)$')
+              if err == null {
+                .host = join!(compact([.host, .app, cef_split.prefix]), " ")
+                msg_str = string!(cef_split.cef)
+                .message = msg_str
+              }
+              epoch, err = parse_regex(msg_str, r'\stimestamp=(?P<ms>\d{13})\b')
+              if err == null {
+                .timestamp = from_unix_timestamp!(to_int!(epoch.ms), unit: "milliseconds")
+              } else if is_timestamp(.timestamp) {
+                local = format_timestamp!(.timestamp, "%Y-%m-%dT%H:%M:%S")
+                .timestamp = parse_timestamp(local, "%Y-%m-%dT%H:%M:%S", timezone: "America/Chicago") ?? .timestamp
+              }
               cef_parts = split(msg_str, "|")
               if length(cef_parts) >= 6 {
                 .app = cef_parts[1]

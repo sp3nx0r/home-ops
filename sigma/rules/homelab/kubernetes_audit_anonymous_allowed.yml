@@ -1,0 +1,28 @@
+title: Kubernetes Anonymous Request Allowed
+id: 07b702c5-6e00-4543-9f74-28c31153e41c
+status: experimental
+description: >-
+  Detects an audited request by system:anonymous that the apiserver did not reject, other than the
+  health and version endpoints that system:public-info-viewer grants by default (the audit policy
+  drops those too; the filter keeps the rule correct if it ever stops). Any match means RBAC grants
+  something to unauthenticated clients.
+references:
+  - https://kubernetes.io/docs/reference/access-authn-authz/authentication/#anonymous-requests
+author: securimancer
+date: 2026-09-30
+tags:
+  - attack.initial-access
+  - attack.t1190
+logsource:
+  product: kubernetes
+  service: audit
+detection:
+  selection:
+    user.username: system:anonymous
+    responseStatus.code|lt: 400
+  filter_public_info:
+    requestURI|re: ^/(healthz|livez|readyz|version)(/|\?|$)
+  condition: selection and not filter_public_info
+falsepositives:
+  - None expected
+level: high

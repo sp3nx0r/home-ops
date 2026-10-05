@@ -45,18 +45,44 @@ spec:
                 --worker-tmp-dir=/dev/shm
                 --log-level=warning
             probes:
-              liveness: &probes
+              # Liveness verifies the B2 collection thread is actually producing
+              # metrics, not just that the Flask server answers. Upstream's
+              # collection_loop() calls init_b2() once *outside* its while loop
+              # and init_b2() re-raises B2ConnectionError, so a transient DNS or
+              # connection error at startup kills the collector thread for good
+              # while gunicorn keeps serving an empty /metrics. A plain httpGet
+              # probe can't see that, so the pod ran 6h+ with no B2 metrics after
+              # the 2026-08-30 reboot. Failing liveness on missing metrics forces
+              # a restart so the exporter re-authorizes.
+              # STOPGAP: track fixing this at the source (make the upstream
+              # collector re-init/retry inside the loop) and drop this exec probe.
+              liveness:
+                enabled: true
+                custom: true
+                spec:
+                  exec:
+                    command:
+                      - python3
+                      - -c
+                      - |
+                        import sys, urllib.request
+                        body = urllib.request.urlopen("http://localhost:52000/metrics", timeout=4).read()
+                        sys.exit(0 if b"backblaze_b2_scrape_success" in body else 1)
+                  initialDelaySeconds: 60
+                  periodSeconds: 30
+                  timeoutSeconds: 10
+                  failureThreshold: 3
+              readiness:
                 enabled: true
                 custom: true
                 spec:
                   httpGet:
                     path: /
                     port: &port 52000
-                  initialDelaySeconds: 30
+                  initialDelaySeconds: 15
                   periodSeconds: 30
                   timeoutSeconds: 5
                   failureThreshold: 3
-              readiness: *probes
             securityContext:
               allowPrivilegeEscalation: false
               readOnlyRootFilesystem: true

@@ -1,0 +1,58 @@
+# Control-plane half of the host ingress firewall (default action and shared
+# rules are in all/80-firewall.yaml). The etcd metrics listener and the
+# controller-manager/scheduler secure ports stay bound to 0.0.0.0
+# (control-plane/00-cluster.yaml) because Prometheus scrapes them on the node
+# IP; binding them to the node IP instead would not reduce LAN exposure, so
+# these rules are what restrict them to Prometheus (pod CIDR).
+---
+# kube-apiserver: LAN clients (workstation, nodes, the 192.168.5.254 VIP) and
+# pods (the kubernetes Service resolves to node IPs).
+apiVersion: v1alpha1
+kind: NetworkRuleConfig
+name: kube-apiserver-ingress
+portSelector:
+  ports:
+    - 6443
+  protocol: tcp
+ingress:
+  - subnet: 192.168.5.0/24
+  - subnet: 10.42.0.0/16
+---
+apiVersion: v1alpha1
+kind: NetworkRuleConfig
+name: trustd-ingress
+portSelector:
+  ports:
+    - 50001
+  protocol: tcp
+ingress:
+  - subnet: 192.168.5.50/32
+  - subnet: 192.168.5.51/32
+  - subnet: 192.168.5.52/32
+---
+# etcd client, peer, and the client HTTP listener Talos adds on 2383.
+apiVersion: v1alpha1
+kind: NetworkRuleConfig
+name: etcd-ingress
+portSelector:
+  ports:
+    - 2379-2380
+    - 2383
+  protocol: tcp
+ingress:
+  - subnet: 192.168.5.50/32
+  - subnet: 192.168.5.51/32
+  - subnet: 192.168.5.52/32
+---
+# etcd plaintext metrics, kube-controller-manager and kube-scheduler: Prometheus.
+apiVersion: v1alpha1
+kind: NetworkRuleConfig
+name: control-plane-metrics-ingress
+portSelector:
+  ports:
+    - 2381
+    - 10257
+    - 10259
+  protocol: tcp
+ingress:
+  - subnet: 10.42.0.0/16

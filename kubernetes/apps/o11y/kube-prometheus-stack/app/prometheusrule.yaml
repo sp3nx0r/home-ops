@@ -291,3 +291,26 @@ spec:
               (alarm NOSPACE); defrag/compact or raise quota-backend-bytes.
           labels:
             severity: critical
+    - name: service-exposure.rules
+      rules:
+        # Every LoadBalancer IP (Cilium L2) or NodePort is a new LAN-facing entry
+        # point. The Service type is not in the audit log (Services are audited
+        # at Metadata level), so this watches kube-state-metrics instead: fire for
+        # a Service whose (namespace, service, type) was not exposed at any point
+        # in the preceding day. Robust to kube-state-metrics restarts (the join
+        # ignores pod/instance labels) and to short scrape gaps (1d lookback).
+        - alert: KubeServiceExposureAdded
+          expr: |-
+            kube_service_spec_type{type=~"LoadBalancer|NodePort"}
+              unless on (namespace, service, type)
+            max_over_time(kube_service_spec_type{type=~"LoadBalancer|NodePort"}[1d] offset 15m)
+          annotations:
+            summary: >-
+              {{ $labels.namespace }}/{{ $labels.service }} is now exposed as {{ $labels.type }}
+            description: >-
+              Service {{ $labels.namespace }}/{{ $labels.service }} became type
+              {{ $labels.type }} in the last 15 minutes. Confirm it came from Git and
+              that exposing it on the LAN is intended.
+          labels:
+            severity: warning
+            category: security

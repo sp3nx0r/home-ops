@@ -44,7 +44,7 @@ kubectl -n <namespace> wait pod \
 
 ### 2. Trigger the restore
 
-The `ReplicationDestination` created by the volsync component has `trigger.manual: restore-once`. Patch it with a new value to trigger a restore:
+The `ReplicationDestination` created by the volsync component has `trigger.manual: restore-once`. Patch it with a new value to trigger a restore. Any change to `trigger.manual` starts a restore, including setting it back to `restore-once` afterwards, so leave the new value in place.
 
 ```bash
 kubectl -n <namespace> patch replicationdestination <app-name>-dst \
