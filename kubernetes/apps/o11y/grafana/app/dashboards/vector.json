@@ -82,8 +82,8 @@
     },
     {
       "datasource": {
-        "type": "loki",
-        "uid": "${DS_LOKI}"
+        "type": "prometheus",
+        "uid": "${DS_MIMIR}"
       },
       "fieldConfig": {
         "defaults": {
@@ -106,7 +106,7 @@
       },
       "gridPos": {
         "h": 7,
-        "w": 5,
+        "w": 24,
         "x": 0,
         "y": 1
       },
@@ -127,55 +127,18 @@
       "targets": [
         {
           "datasource": {
-            "type": "loki",
-            "uid": "${DS_LOKI}"
+            "type": "prometheus",
+            "uid": "${DS_MIMIR}"
           },
-          "editorMode": "builder",
-          "expr": "sum(rate({namespace=\"o11y\", container=\"vector\"} | json | level = `error` [$__interval]))",
-          "legendFormat": "{{metadata_dropped_component_id}}",
-          "queryType": "range",
+          "editorMode": "code",
+          "expr": "sum(rate(vector_component_errors_total { component_id =~ \"$component_id\", component_type =~ \"$component_type\", component_kind =~ \"$component_kind\", host =~ \"$host\", pid =~ \"$pid\", job =~ \"$job\", instance =~ \"$instance\" }[$__rate_interval])) or vector(0)",
+          "legendFormat": "errors",
+          "range": true,
           "refId": "A"
         }
       ],
-      "title": "Vector errors ($__interval)",
+      "title": "Vector component errors ($__rate_interval)",
       "type": "stat"
-    },
-    {
-      "datasource": {
-        "type": "loki",
-        "uid": "${DS_LOKI}"
-      },
-      "gridPos": {
-        "h": 7,
-        "w": 19,
-        "x": 5,
-        "y": 1
-      },
-      "id": 301,
-      "options": {
-        "dedupStrategy": "none",
-        "enableLogDetails": true,
-        "prettifyLogMessage": true,
-        "showCommonLabels": true,
-        "showLabels": true,
-        "showTime": true,
-        "sortOrder": "Descending",
-        "wrapLogMessage": false
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "loki",
-            "uid": "${DS_LOKI}"
-          },
-          "editorMode": "builder",
-          "expr": "{namespace=\"o11y\", container=\"vector\"} | json | level = `error`",
-          "queryType": "range",
-          "refId": "A"
-        }
-      ],
-      "title": "Vector Logs (ERROR)",
-      "type": "logs"
     },
     {
       "collapsed": false,
