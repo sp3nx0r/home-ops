@@ -82,7 +82,11 @@ spec:
             }
             if !exists(.level) {
               msg = to_string(.message) ?? ""
-              if starts_with(msg, "E") || contains(msg, " [error]") || contains(msg, "\"level\":\"error\"") || contains(msg, "level=error") {
+              # Plex: "Oct 07, 2026 10:33:21.920 [140338274802488] DEBUG - ..."
+              plex, plex_err = parse_regex(msg, r'^\w{3} \d{2}, \d{4} \d{2}:\d{2}:\d{2}\.\d{3} \[\d+\] (?P<level>[A-Z]+) - ')
+              if plex_err == null {
+                .level = plex.level
+              } else if starts_with(msg, "E") || contains(msg, " [error]") || contains(msg, "\"level\":\"error\"") || contains(msg, "level=error") {
                 .level = "error"
               } else if starts_with(msg, "W") || contains(msg, " [warn") || contains(msg, "\"level\":\"warn") || contains(msg, "level=warn") {
                 .level = "warn"

@@ -14,6 +14,32 @@ spec:
       plex:
         annotations:
           reloader.stakater.com/auto: "true"
+        initContainers:
+          # Plex logs to files on the config PVC, not stdout; stream the
+          # server log so Vector ships it to Loki. Native sidecar so it
+          # captures Plex startup/shutdown. The trap is needed because
+          # tail as PID 1 ignores SIGTERM.
+          logs:
+            image:
+              repository: docker.io/library/busybox
+              tag: 1.38.0@sha256:f97baa533a26513c453a362be331a43eb60214302f449c16571b23cea141dce4
+            restartPolicy: Always
+            command:
+              - sh
+              - -c
+              - 'trap "exit 0" TERM; tail -n 0 -F "$1" & wait'
+              - tail
+              - /config/Library/Application Support/Plex Media Server/Logs/Plex Media Server.log
+            securityContext:
+              allowPrivilegeEscalation: false
+              readOnlyRootFilesystem: true
+              capabilities: { drop: ["ALL"] }
+            resources:
+              requests:
+                cpu: 10m
+                memory: 16Mi
+              limits:
+                memory: 64Mi
         containers:
           app:
             image:
@@ -32,7 +58,7 @@ spec:
                 custom: true
                 spec:
                   httpGet:
-                    path: /identity
+                    path: /identity?kube-probe=1
                     port: &port 32400
                   periodSeconds: 60
                   timeoutSeconds: 10
@@ -42,7 +68,7 @@ spec:
                 custom: true
                 spec:
                   httpGet:
-                    path: /identity
+                    path: /identity?kube-probe=1
                     port: *port
                   periodSeconds: 10
                   timeoutSeconds: 10
@@ -111,14 +137,31 @@ spec:
     persistence:
       config:
         existingClaim: plex
+        advancedMounts:
+          plex:
+            app:
+              - path: /config
+            logs:
+              - path: /config
+                readOnly: true
       media:
         type: nfs
         server: 192.168.5.40
         path: /mnt/tank/media
-        globalMounts:
-          - path: /media
-            readOnly: true
+        advancedMounts:
+          plex:
+            app:
+              - path: /media
+                readOnly: true
       tmp:
         type: emptyDir
+        advancedMounts:
+          plex:
+            app:
+              - path: /tmp
       transcode:
         type: emptyDir
+        advancedMounts:
+          plex:
+            app:
+              - path: /transcode
