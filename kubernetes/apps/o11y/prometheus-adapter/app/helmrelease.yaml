@@ -11,6 +11,10 @@ spec:
   interval: 1h
   values:
     fullnameOverride: prometheus-adapter
+    logLevel: 2
+    metricsRelistInterval: 5m
+    rules:
+      default: false
     prometheus:
       url: http://kube-prometheus-stack-prometheus.o11y.svc.cluster.local
       port: 9090
