@@ -58,7 +58,7 @@ spec:
                 custom: true
                 spec:
                   httpGet:
-                    path: /identity
+                    path: /identity?kube-probe=1
                     port: &port 32400
                   periodSeconds: 60
                   timeoutSeconds: 10
@@ -68,7 +68,7 @@ spec:
                 custom: true
                 spec:
                   httpGet:
-                    path: /identity
+                    path: /identity?kube-probe=1
                     port: *port
                   periodSeconds: 10
                   timeoutSeconds: 10
