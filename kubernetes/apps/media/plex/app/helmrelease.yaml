@@ -65,6 +65,28 @@ spec:
                 memory: 2Gi
               limits:
                 memory: 8Gi
+          # Plex logs to files on the config PVC, not stdout; stream the
+          # server log so Vector ships it to Loki.
+          logs:
+            image:
+              repository: docker.io/library/busybox
+              tag: 1.38.0@sha256:f97baa533a26513c453a362be331a43eb60214302f449c16571b23cea141dce4
+            command:
+              - tail
+              - -n
+              - "0"
+              - -F
+              - /config/Library/Application Support/Plex Media Server/Logs/Plex Media Server.log
+            securityContext:
+              allowPrivilegeEscalation: false
+              readOnlyRootFilesystem: true
+              capabilities: { drop: ["ALL"] }
+            resources:
+              requests:
+                cpu: 10m
+                memory: 16Mi
+              limits:
+                memory: 64Mi
     defaultPodOptions:
       securityContext:
         runAsNonRoot: true
@@ -111,6 +133,13 @@ spec:
     persistence:
       config:
         existingClaim: plex
+        advancedMounts:
+          plex:
+            app:
+              - path: /config
+            logs:
+              - path: /config
+                readOnly: true
       media:
         type: nfs
         server: 192.168.5.40
