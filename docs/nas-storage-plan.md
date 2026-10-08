@@ -88,11 +88,18 @@ Target configuration once drives are purchased. Wipe the temporary pool and rebu
 | 20TB     | ~$16–20/TB     | ~20–36+ hrs    | Best density, longest rebuilds     |
 | 22TB     | ~$18–22/TB     | ~24–48 hrs     | What onedr0p runs (mirrored, HL15) |
 
-Recommended models:
+Recommended models (noise is a selection factor — see
+[`thermal-and-noise-tuning.md`](thermal-and-noise-tuning.md) § Phase 2 drive selection):
 
-- **Seagate Exos X18 18TB** — enterprise, best cost efficiency, louder
-- **Seagate Exos X20 20TB** — max density, enterprise
-- **WD Red Pro 20TB** — NAS-grade, quieter, more expensive
+- **WD Red Pro 20TB** — NAS-grade helium, **quietest option, preferred** given the
+  existing corner-placement hum. More expensive per TB.
+- **Toshiba N300 / MG-series (helium)** — low-hum alternative, softer seek noise.
+- **Seagate Exos X18 18TB** — enterprise, best cost efficiency, but **loud seek
+  clatter**; only if noise is fully mitigated by isolation/relocation.
+- **Seagate Exos X20 20TB** — max density, enterprise, same noise caveat as the X18.
+
+Note: Phase 2 populates all 8 bays (vs 3 noisy 7200 RPM drives today), so even quiet
+drives sum louder unless the physical isolation steps in the noise doc are done.
 
 ### Pool Layout: 2× 4-Drive RAIDZ2
 
