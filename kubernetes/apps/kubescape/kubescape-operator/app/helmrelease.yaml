@@ -8,7 +8,7 @@ spec:
   chart:
     spec:
       chart: kubescape-operator
-      version: 1.40.4
+      version: 1.40.5
       sourceRef:
         kind: HelmRepository
         name: kubescape
@@ -115,7 +115,7 @@ spec:
     kubevuln:
       image:
         repository: quay.io/kubescape/kubevuln
-        tag: v0.3.501@sha256:8b810f2598861f7120047e2d6a090125200d628ba8e50e2b9b94a8dd5031d098
+        tag: v0.3.546@sha256:d12fff856040469e33e4a8aea97a76dfee3ab0f29aa83dd924bad385bbc83da2
       config:
         grypeDbPersistence: true
       resources:
@@ -144,7 +144,7 @@ spec:
     nodeAgent:
       image:
         repository: quay.io/kubescape/node-agent
-        tag: v0.3.251@sha256:59e4ebfe3576beca7379f5fc185f25c9bbfc244afc1801ab2d3362299a249c6f
+        tag: v0.3.258@sha256:e3017006d8f52d5a065195a65cbdc251e88d9c78e891f4a0fa9099667df4be27
       resources:
         requests:
           cpu: 100m
