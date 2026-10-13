@@ -8,7 +8,7 @@ spec:
   chart:
     spec:
       chart: kubescape-operator
-      version: 1.40.4
+      version: 1.40.5
       sourceRef:
         kind: HelmRepository
         name: kubescape
@@ -111,11 +111,11 @@ spec:
     operator:
       image:
         repository: quay.io/kubescape/operator
-        tag: v0.2.172@sha256:1ddcd2788e1ef1ce4c688920b48b4b9be35af549db19391bdb9be71bd42d1e26
+        tag: v0.2.181@sha256:6aee02b07198d9e35c9e7ed5a5f30ec6d29572954029a0fff37bd189f9fd39e7
     kubevuln:
       image:
         repository: quay.io/kubescape/kubevuln
-        tag: v0.3.501@sha256:8b810f2598861f7120047e2d6a090125200d628ba8e50e2b9b94a8dd5031d098
+        tag: v0.3.546@sha256:d12fff856040469e33e4a8aea97a76dfee3ab0f29aa83dd924bad385bbc83da2
       config:
         grypeDbPersistence: true
       resources:
@@ -129,7 +129,7 @@ spec:
     storage:
       image:
         repository: quay.io/kubescape/storage
-        tag: v0.0.348@sha256:6333d78455896ae3f32d6a8a6a743b2c976ec1253dc6049187943d22363367bd
+        tag: v0.0.352@sha256:15b6405082f5e712abbdd06762188a3fd4aa30a4f18385a74186eada8d42918c
       resources:
         requests:
           cpu: 200m
@@ -144,7 +144,7 @@ spec:
     nodeAgent:
       image:
         repository: quay.io/kubescape/node-agent
-        tag: v0.3.251@sha256:59e4ebfe3576beca7379f5fc185f25c9bbfc244afc1801ab2d3362299a249c6f
+        tag: v0.3.275@sha256:f1f4aa3d03db555eeee9a17719867730682817d0dc7ba609246aef969e5bc4c5
       resources:
         requests:
           cpu: 100m
@@ -161,7 +161,7 @@ spec:
     prometheusExporter:
       image:
         repository: quay.io/kubescape/prometheus-exporter
-        tag: v0.2.23@sha256:dddc28ca3d46918cb6e68097f76f6af20a8c05e401118692d06041b401903c7f
+        tag: v0.2.26@sha256:0d23cde12496ebeaa1d784f92fa09d975a8e95d4d0ee12fe9c5d3906deb1e2ad
       enableWorkloadMetrics: true
       serviceMonitor:
         enabled: true
