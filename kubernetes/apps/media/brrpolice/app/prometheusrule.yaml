@@ -22,20 +22,26 @@ spec:
               for more than 5 minutes.
 
         - alert: BrrpolicePollLoopStale
+          # for=10m, not 5m: the hourly retention prune holds the single SQLite
+          # writer for ~8m (unindexed peer_offences dedup self-join), pausing the
+          # control loop and pushing staleness past 120s for ~5m. That excursion
+          # straddled for=5m and flapped. 10m clears the prune window while still
+          # catching a genuinely wedged loop. Upstream fix tracked in Zariel/brrpolice.
           expr: |-
             (
               time() - max(brrpolice_last_successful_poll_timestamp{namespace="media"})
             ) > 120
-          for: 5m
+          for: 10m
           labels:
             severity: warning
           annotations:
             summary: >-
               brrpolice control loop has not completed successfully
             description: >-
-              The last successful poll cycle was more than 2 minutes ago. The app is
-              likely failing runtime_healthy (SQLite I/O errors, qBittorrent failures,
-              or recovery issues) even if the pod is still running.
+              The last successful poll cycle was more than 10 minutes ago, beyond the
+              hourly retention-prune pause. The app is likely failing runtime_healthy
+              (SQLite I/O errors, qBittorrent failures, or recovery issues) even if the
+              pod is still running.
             runbook_url: >-
               https://github.com/sp3nx0r/home-ops/blob/main/docs/runbooks/runbook-iscsi-readonly.md
 
