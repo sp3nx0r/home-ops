@@ -27,6 +27,9 @@ rules:
       - volsync-src-${APP}
     verbs:
       - get
+      # delete: reap a stale/failed mover job so its pods stop pinning the
+      # cache PVC via pvc-protection (see the scrub script for the deadlock).
+      - delete
   - apiGroups:
       - ""
     resources:
@@ -131,7 +134,9 @@ spec:
                   }
 
                   mover_active=""
+                  mover_job_present=""
                   if job="$(raw get "/apis/batch/v1/namespaces/$POD_NAMESPACE/jobs/$mover_job")"; then
+                    mover_job_present=1
                     mover_active="$(printf '%s' "$job" | grep -o '"active":[0-9]*' | cut -d: -f2 || true)"
                   elif [ -s /tmp/raw.err ] && ! grep -q '(NotFound)' /tmp/raw.err; then
                     exit 1
@@ -139,6 +144,27 @@ spec:
                   if [ -n "$mover_active" ] && [ "$mover_active" != "0" ]; then
                     echo "VolSync mover $mover_job is active; skipping cache scrub"
                     exit 0
+                  fi
+
+                  # A mover job still present here is idle (active=0): failed, or a
+                  # leftover VolSync has not reaped. Its Failed pods keep
+                  # kubernetes.io/pvc-protection on the cache PVC, so deleting the
+                  # PVC while they linger wedges it in Terminating and the next
+                  # mover pod cannot bind a same-named cache PVC (FailedScheduling,
+                  # indefinitely). Reap the stale job first; a background cascade
+                  # takes its pods with it and VolSync recreates a fresh mover on
+                  # the next sync. kubectl (not raw) for the Background DeleteOptions;
+                  # NotFound is tolerated, any other error surfaces.
+                  if [ -n "$mover_job_present" ]; then
+                    if kubectl delete job "$mover_job" -n "$POD_NAMESPACE" \
+                        --propagation-policy=Background --wait=false 2>/tmp/del.err; then
+                      echo "reaped stale mover job $mover_job so its pods release $cache_pvc"
+                    elif grep -q 'NotFound' /tmp/del.err; then
+                      echo "stale mover job $mover_job already gone"
+                    else
+                      cat /tmp/del.err >&2
+                      exit 1
+                    fi
                   fi
 
                   if raw delete "/api/v1/namespaces/$POD_NAMESPACE/persistentvolumeclaims/$cache_pvc" >/dev/null; then
