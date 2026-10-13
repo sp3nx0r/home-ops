@@ -23,6 +23,14 @@ spec:
         secretKey: objstore.yml
       thanosRules:
         enabled: true
+        # Upload-recency mixin alert: fires whenever the compactor has not
+        # uploaded a block in 24h, which on this low-churn single-Prometheus
+        # cluster happens routinely once it has compacted everything ready (it
+        # was idle ~4d with todo=0, not halted). ThanosCompactNoProgress
+        # (iteration-based) and ThanosCompactPersistentFailures cover a genuinely
+        # stuck or failing compactor; ThanosCompactHalted stays critical.
+        disabledAlerts:
+          - ThanosCompactHasNotRun
         alertOverrides:
           ThanosCompactHalted:
             severity: critical
