@@ -71,7 +71,7 @@ role_has_exact_least_privilege() {
       return counts[rule_number, field_name] == expected_count && values[rule_number, field_name, first] && (!second || values[rule_number, field_name, second])
     }
     function job_rule(rule_number) {
-      return has_exact(rule_number, "apiGroups", "batch", "", 1) && has_exact(rule_number, "resourceNames", "volsync-src-volsync-test", "", 1) && has_exact(rule_number, "resources", "jobs", "", 1) && has_exact(rule_number, "verbs", "get", "", 1)
+      return has_exact(rule_number, "apiGroups", "batch", "", 1) && has_exact(rule_number, "resourceNames", "volsync-src-volsync-test", "", 1) && has_exact(rule_number, "resources", "jobs", "", 1) && has_exact(rule_number, "verbs", "get", "delete", 2)
     }
     function pvc_rule(rule_number) {
       return has_exact(rule_number, "apiGroups", "", "", 1) && has_exact(rule_number, "resourceNames", "volsync-src-volsync-test-cache", "", 1) && has_exact(rule_number, "resources", "persistentvolumeclaims", "", 1) && has_exact(rule_number, "verbs", "delete", "", 1)
@@ -312,6 +312,13 @@ require_pattern "$scrub" 'cache_pvc="volsync-src-volsync-test-cache"' 'cache PVC
 require_pattern "$scrub" 'raw get "/apis/batch/v1/namespaces/\$POD_NAMESPACE/jobs/\$mover_job"' 'reads mover job via its own namespace'
 require_pattern "$scrub" "grep -o '\"active\":\[0-9\]\*'" 'reads mover job active status'
 require_pattern "$scrub" 'if \[ -n "\$mover_active" \] && \[ "\$mover_active" != "0" \]; then' 'skips while mover is active'
+# An idle (active=0) mover job still present here is stale/failed; its Failed
+# pods pin the cache PVC via pvc-protection. Reap it before deleting the PVC so
+# the PVC can finalize and VolSync can rebind a fresh same-named cache PVC.
+require_pattern "$scrub" 'mover_job_present=1' 'tracks whether the mover job exists'
+require_pattern "$scrub" 'if \[ -n "\$mover_job_present" \]; then' 'reaps only when a mover job remains'
+require_pattern "$scrub" 'kubectl delete job "\$mover_job" -n "\$POD_NAMESPACE"' 'reaps the stale mover job'
+require_pattern "$scrub" 'propagation-policy=Background' 'background cascade takes the mover pods'
 require_pattern "$scrub" 'raw delete "/api/v1/namespaces/\$POD_NAMESPACE/persistentvolumeclaims/\$cache_pvc"' 'deletes only the cache PVC in its own namespace'
 # --ignore-not-found makes kubectl GET the cluster-scoped Namespace on a 404,
 # which the namespaced Role cannot grant (403s); requests must stay raw.
