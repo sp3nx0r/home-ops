@@ -709,7 +709,7 @@
           Environment="OLLAMA_LOAD_TIMEOUT={{ ollama_load_timeout }}"
           Environment="OLLAMA_FLASH_ATTENTION={{ ollama_flash_attention }}"
           Environment="HSA_ENABLE_SDMA=0"
-          Environment="GPU_MAX_HW_QUEUES=1"
+          Environment="GPU_MAX_HW_QUEUES={{ ollama_gpu_max_hw_queues | default(4) }}"
       notify: restart ollama
       tags: [ollama]
 
