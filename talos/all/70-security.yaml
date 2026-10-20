@@ -1,8 +1,12 @@
-# Talos 1.14 defaults to running kubelet and pods in a sandboxed PID/mount
-# namespace, which breaks workloads that rely on hostPID or host mounts
-# (node-exporter, democratic-csi / in-tree iSCSI). Opt out to preserve the
-# behaviour the cluster runs on today.
+# Enable Talos 1.14 workload isolation (sandboxd) — runs CRI/kubelet/pods in a
+# dedicated PID/mount namespace. New 1.14 clusters default to this; our upgraded
+# cluster is opted out.
+#
+# BLOCKED: enabling this breaks democratic-csi iSCSI mounts — the CSI node plugin
+# nsenters into the host iscsid, which runs outside the sandbox and is unreachable
+# from the isolated container plane. See docs/talos-workload-isolation-sandboxd-iscsi.md.
+# Parked until upstream (Talos / democratic-csi) documents a sandbox-compatible setup.
 ---
 apiVersion: v1alpha1
 kind: SecurityProfileConfig
-workloadIsolation: false
+workloadIsolation: true
