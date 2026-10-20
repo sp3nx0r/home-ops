@@ -17,14 +17,17 @@ subjects:
     kind: Group
     name: "oidc:k8s_viewers"
 ---
+# Deliberately not cluster-admin: an IdP compromise or a Pocket ID group edit
+# must not yield the cluster. cluster-admin is only reachable via the
+# talosctl-generated kubeconfig (docs/runbooks/runbook-break-glass-access.md).
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: headlamp-oidc-admins
+  name: headlamp-oidc-operators
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: cluster-admin
+  name: homelab-operator
 subjects:
   - apiGroup: rbac.authorization.k8s.io
     kind: Group
