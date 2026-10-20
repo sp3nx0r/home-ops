@@ -1,0 +1,19 @@
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/kustomize.toolkit.fluxcd.io/kustomization_v1.json
+# Decoy credentials + their Loki detections. See docs/runbooks/runbook-canarytokens.md.
+# The bland name is deliberate: Flux stamps it onto every object as the
+# kustomize.toolkit.fluxcd.io/name label, which an intruder reading the decoys
+# would see. No targetNamespace: each resource pins its own namespace.
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: shared-credentials
+spec:
+  interval: 1h
+  path: ./kubernetes/apps/security/shared-credentials/app
+  prune: true
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+    namespace: flux-system
+  wait: false

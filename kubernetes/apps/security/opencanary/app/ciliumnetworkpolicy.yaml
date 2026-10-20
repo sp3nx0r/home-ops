@@ -1,0 +1,49 @@
+---
+# yaml-language-server: $schema=https://k8s-schemas.home-operations.com/cilium.io/ciliumnetworkpolicy_v2.json
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: opencanary
+  namespace: security
+spec:
+  # LAN honeypot (Cilium L2 LoadBalancer 192.168.5.27; 22 -> 2222 SSH,
+  # 80 -> 8080 HTTP). externalTrafficPolicy=Local keeps client IPs, so LAN
+  # sources arrive as CIDR identities. fromCIDR never matches in-cluster pods;
+  # those are already blocked by the default-deny egress floor. No egress
+  # beyond DNS: a honeypot must not become a pivot.
+  endpointSelector:
+    matchLabels:
+      io.kubernetes.pod.namespace: security
+      app.kubernetes.io/name: opencanary
+  ingress:
+    - fromCIDRSet:
+        - cidr: 10.0.0.0/8
+        - cidr: 172.16.0.0/12
+        - cidr: 192.168.0.0/16
+      toPorts:
+        - ports:
+            - port: "2222"
+              protocol: TCP
+            - port: "8080"
+              protocol: TCP
+    # kubelet tcpSocket probe
+    - fromEntities:
+        - host
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
