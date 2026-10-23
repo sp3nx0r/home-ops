@@ -42,7 +42,7 @@ ollama_host: 127.0.0.1
 ollama_port: 11434
 ollama_keep_alive: "-1"
 ollama_num_parallel: 8
-ollama_context_length: 32768
+ollama_context_length: 131072
 ollama_load_timeout: 30m
 ollama_flash_attention: true
 ollama_gpu_max_hw_queues: 4
