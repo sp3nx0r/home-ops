@@ -5,7 +5,7 @@
   // annotated + OCI custom managers, semantic-commit scoping, mise packageName
   // normalization, registry aliases, and zer0ver handling. Only overrides the
   // preset does NOT cover are kept below.
-  extends: ["github>home-operations/renovate-presets#8.1.0"],
+  extends: ["github>home-operations/renovate-presets#10.0.1"],
   schedule: ["every weekend"],
   ignorePaths: ["**/*.sops.*"],
   suppressNotifications: ["prEditedNotification", "prIgnoreNotification"],
