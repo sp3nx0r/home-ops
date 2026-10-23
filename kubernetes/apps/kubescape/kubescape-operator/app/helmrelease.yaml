@@ -77,7 +77,7 @@ spec:
     kubescape:
       image:
         repository: quay.io/kubescape/kubescape
-        tag: v4.0.15@sha256:40bb0ace10b8f33fc187a45232d047d6765ed508778b55a52a683145f7c9c3dd
+        tag: v4.0.16@sha256:dc06b6c668e65f2c93ea01b306cc84fc2889d70919272a4bd7555d54b7187ff3
       skipUpdateCheck: true
     kubescapeScheduler:
       image:
@@ -111,11 +111,11 @@ spec:
     operator:
       image:
         repository: quay.io/kubescape/operator
-        tag: v0.2.181@sha256:6aee02b07198d9e35c9e7ed5a5f30ec6d29572954029a0fff37bd189f9fd39e7
+        tag: v0.2.197@sha256:ac357f5094fdff59fff22c29f488c6b2467b0d980b6f72946f8c0a994f1c02e4
     kubevuln:
       image:
         repository: quay.io/kubescape/kubevuln
-        tag: v0.3.546@sha256:d12fff856040469e33e4a8aea97a76dfee3ab0f29aa83dd924bad385bbc83da2
+        tag: v0.3.566@sha256:7fce339ce129227da00d32d7deb4dc2fa35284acf48cc3db433d853fa75ee97d
       config:
         grypeDbPersistence: true
       resources:
@@ -129,7 +129,7 @@ spec:
     storage:
       image:
         repository: quay.io/kubescape/storage
-        tag: v0.0.352@sha256:15b6405082f5e712abbdd06762188a3fd4aa30a4f18385a74186eada8d42918c
+        tag: v0.0.365@sha256:46abaa07216356db00624efa0a87fa4a3ebd41c524646c8882713b43ecdf2505
       resources:
         requests:
           cpu: 200m
@@ -144,7 +144,7 @@ spec:
     nodeAgent:
       image:
         repository: quay.io/kubescape/node-agent
-        tag: v0.3.275@sha256:f1f4aa3d03db555eeee9a17719867730682817d0dc7ba609246aef969e5bc4c5
+        tag: v0.3.285@sha256:d3a194834a71e7e6eb42500312726d778b63d181413cc194a49ac69d63595b95
       resources:
         requests:
           cpu: 100m
@@ -161,7 +161,7 @@ spec:
     prometheusExporter:
       image:
         repository: quay.io/kubescape/prometheus-exporter
-        tag: v0.2.26@sha256:0d23cde12496ebeaa1d784f92fa09d975a8e95d4d0ee12fe9c5d3906deb1e2ad
+        tag: v0.2.27@sha256:3ffd2ba9d9a0bb5d82a50215b8271735ba1adee4e415e864f66941813355ede3
       enableWorkloadMetrics: true
       serviceMonitor:
         enabled: true
