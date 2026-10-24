@@ -129,7 +129,7 @@ spec:
     storage:
       image:
         repository: quay.io/kubescape/storage
-        tag: v0.0.365@sha256:46abaa07216356db00624efa0a87fa4a3ebd41c524646c8882713b43ecdf2505
+        tag: v0.0.368@sha256:143c7b505196af68df599b7c65706aafe4d1cbee8d9a219076033cf0091985e3
       resources:
         requests:
           cpu: 200m
