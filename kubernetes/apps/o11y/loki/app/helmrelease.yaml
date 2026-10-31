@@ -119,7 +119,7 @@ spec:
         image:
           registry: ghcr.io
           repository: jkroepke/access-log-exporter
-          tag: 0.5.2@sha256:a1448056c0081f067ecb48096a81cea9abc418b1405e49eac8a29d2b31302576
+          tag: 1.0.1@sha256:3ab797dd3f48070c2086468a3769bda2e61869a925e3e4bb5c832c54c5926178
         resources:
           requests:
             cpu: 10m
