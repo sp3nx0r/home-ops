@@ -69,7 +69,7 @@ spec:
           app:
             image:
               repository: thetorproject/obfs4-bridge
-              tag: v0.25@sha256:3e5a9cd194e889181b3e172e0fd3d3f956eac9c943a284d039ffaf60fe8530e1
+              tag: 0.26@sha256:154072785c6759f8524368f0dcc2f38e4fc5b5a327f1d0b901ff4f11d5fb282c
             command: ["/bin/sh", "-c"]
             args:
               - |
