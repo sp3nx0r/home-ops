@@ -44,7 +44,7 @@ spec:
     # egress is needed (the bundle is baked into the image).
     initContainers:
       - name: cilium-plugin
-        image: gsoci.azurecr.io/giantswarm/headlamp-cilium:0.1.23@sha256:a4fc73db64ab5ba8f6a8ba8ac3f03a88ceb303af8c80377db4a0ce39b4aa020a
+        image: gsoci.azurecr.io/giantswarm/headlamp-cilium:0.1.25@sha256:f87e364d246bc55851752cf570abf1c0179bfb2b2928e78968d0d136d10a5a2a
         command:
           - /bin/sh
           - -c
