@@ -134,9 +134,6 @@ spec:
     write:
       replicas: 0
 
-    minio:
-      enabled: false
-
     lokiCanary:
       enabled: false
 
