@@ -68,6 +68,18 @@
       },
     },
     {
+      // The HelmRelease pins image.tag, so a chart bump alone only moves the
+      // version label (#714 vs #710). Land chart and image together; Garage
+      // can't be downgraded, so keep the image pin for a deliberate upgrade.
+      description: "Garage Group",
+      groupName: "garage",
+      matchPackageNames: ["garage", "dxflrs/garage"],
+      separateMajorMinor: false,
+      group: {
+        commitMessageTopic: "{{{groupName}}} group",
+      },
+    },
+    {
       // Group tool bumps and keep .mise/mise.lock fresh. We don't re-lock on
       // pre-commit, so lockFileMaintenance catches drift for tools that aren't
       // otherwise updated (version bumps re-lock in their own PRs).
