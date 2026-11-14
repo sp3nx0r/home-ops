@@ -5,26 +5,14 @@ kind: CiliumNetworkPolicy
 metadata:
   name: kubescape-operator
 spec:
-  # Scan orchestrator. Ingress: scan triggers from the scheduler CronJobs on
-  # :4002. Egress: the apiserver (watches workloads, reads/writes results via
-  # the aggregated storage API) and the scanner/kubevuln HTTP APIs on :8080.
+  # Scan orchestrator. Egress: the apiserver (watches workloads and the
+  # OperatorCommand CRs that trigger scans, reads/writes results via the
+  # aggregated storage API) and the scanner/kubevuln HTTP APIs on :8080.
   endpointSelector:
     matchLabels:
       io.kubernetes.pod.namespace: kubescape
       app.kubernetes.io/component: operator
   ingress:
-    # Scheduler CronJobs POST scan triggers to :4002
-    - fromEndpoints:
-        - matchLabels:
-            io.kubernetes.pod.namespace: kubescape
-            app.kubernetes.io/component: kubescape-scheduler
-        - matchLabels:
-            io.kubernetes.pod.namespace: kubescape
-            app.kubernetes.io/component: kubevuln-scheduler
-      toPorts:
-        - ports:
-            - port: "4002"
-              protocol: TCP
     # kubelet httpGet probes :8000
     - fromEntities:
         - host
@@ -342,8 +330,8 @@ kind: CiliumNetworkPolicy
 metadata:
   name: kubescape-schedulers
 spec:
-  # Weekly posture/vulnerability scan CronJobs: a one-shot HTTP POST to the
-  # operator. Nothing connects to them (the cluster floor denies ingress).
+  # Weekly posture/vulnerability scan CronJobs: create one OperatorCommand CR
+  # via the apiserver. Nothing connects to them (the cluster floor denies ingress).
   endpointSelector:
     matchExpressions:
       - key: io.kubernetes.pod.namespace
@@ -370,11 +358,9 @@ spec:
           rules:
             dns:
               - matchPattern: "*"
-    - toEndpoints:
-        - matchLabels:
-            io.kubernetes.pod.namespace: kubescape
-            app.kubernetes.io/component: operator
+    - toEntities:
+        - kube-apiserver
       toPorts:
         - ports:
-            - port: "4002"
+            - port: "6443"
               protocol: TCP
