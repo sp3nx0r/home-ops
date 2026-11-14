@@ -67,10 +67,6 @@ spec:
       # Generates the storage mTLS certs at runtime and reuses the CA Secret, so
       # Flux upgrades don't rotate them.
       strategy: initContainer
-      certgen:
-        image:
-          repository: quay.io/kubescape/kubectl
-          tag: 1.37.2@sha256:8919c149c2e3d6860e0143c117900e64d71395172aaef0e01e604bb98c8e7ce0
     global:
       # Node-agent SBOMs remove the need to read image pull secrets cluster-wide.
       enableClusterWideSecretAccess: false
@@ -79,10 +75,12 @@ spec:
         repository: quay.io/kubescape/kubescape
         tag: v4.0.21@sha256:f7961c65df9c51ae7720fed0596b9a5c831103a4efa68aea4c3f372b3b83ed33
       skipUpdateCheck: true
-    kubescapeScheduler:
+    # Runs the scan-scheduler CronJobs and the storage/admission certgen init containers.
+    kubescapeOpsTool:
       image:
-        repository: quay.io/kubescape/http-request
-        tag: v0.2.23@sha256:4ff502a33423cd362b7fd70e98b0ac2121799fb7df22d7def326e528cbec5685
+        repository: quay.io/kubescape/kubescape-ops-tool
+        tag: 0.2.0-r1@sha256:2f1d8c9a76f05049f73ebefa292d4b65ce3ef3811317c4cc023b4df792a592e4
+    kubescapeScheduler:
       # Weekly, and staggered after the vulnerability scan: both write heavily to
       # the storage component's single-writer SQLite database on HDD-backed iSCSI.
       scanSchedule: "0 5 * * 0"
@@ -99,15 +97,7 @@ spec:
                   - cis-v1.12.0
                   - security
     kubevulnScheduler:
-      image:
-        repository: quay.io/kubescape/http-request
-        tag: v0.2.23@sha256:4ff502a33423cd362b7fd70e98b0ac2121799fb7df22d7def326e528cbec5685
       scanSchedule: "0 1 * * 0"
-    # Template for operator-created registry-scan CronJobs (unused, pinned anyway).
-    registryScanScheduler:
-      image:
-        repository: quay.io/kubescape/http-request
-        tag: v0.2.23@sha256:4ff502a33423cd362b7fd70e98b0ac2121799fb7df22d7def326e528cbec5685
     operator:
       image:
         repository: quay.io/kubescape/operator
