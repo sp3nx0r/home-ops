@@ -1,0 +1,42 @@
+---
+# yaml-language-server: $schema=https://raw.githubusercontent.com/yannh/kubernetes-json-schema/master/master-standalone-strict/configmap-v1.json
+# Picked up by the Loki chart's rules sidecar (label loki_rule), which only
+# watches the o11y namespace.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: loki-rules-honeypot
+  namespace: o11y
+  labels:
+    loki_rule: "true"
+data:
+  honeypot.yaml: |
+    groups:
+      - name: honeypot
+        rules:
+          # OpenCanary logtypes < 2000 are its own lifecycle messages; >= 2000
+          # are interactions (3000 HTTP GET, 3001 HTTP login, 4000 SSH connect,
+          # 4002 SSH login attempt, ...). Nothing legitimate talks to it.
+          - alert: HoneypotTouched
+            expr: |
+              sum by (src_host, service) (
+                count_over_time(
+                  {namespace="security", container="app", pod=~"opencanary-.+"} |= `"logtype"`
+                    | json logtype="logtype", src_host="src_host", dst_port="dst_port"
+                    | logtype >= 2000
+                    | label_format service=`{{ if eq .dst_port "2222" }}ssh{{ else if eq .dst_port "8080" }}http{{ else }}{{ .dst_port }}{{ end }}`
+                  [5m]
+                )
+              ) > 0
+            for: 0m
+            labels:
+              severity: critical
+              category: security
+              source: loki-ruler
+            annotations:
+              summary: "Honeypot 192.168.5.27 touched over {{ $labels.service }} by {{ $labels.src_host }}"
+              description: >-
+                {{ $labels.src_host }} connected to the OpenCanary honeypot
+                (192.168.5.27, {{ $labels.service }}). Nothing legitimate talks to
+                it; identify the device and check it for compromise.
+                Runbook: docs/runbooks/runbook-canarytokens.md#honeypottouched
