@@ -12,7 +12,7 @@ SOPS_AGE_KEY_FILE = "{{config_root}}/age.key"
 TALOSCONFIG = "{{config_root}}/talos/clusterconfig/talosconfig"
 
 [tools]
-"aqua:max-sixty/worktrunk" = "0.81.0"
+"aqua:max-sixty/worktrunk" = "0.82.0"
 "aqua:prometheus/alertmanager" = "0.35.0"
 "github:Backblaze/B2_Command_Line_Tool" = "v5.0.3"
 "github:postfinance/topf" = "v0.6.2"
