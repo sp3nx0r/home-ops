@@ -60,31 +60,6 @@ url = "https://github.com/FiloSottile/age/releases/download/v1.3.2/age-v1.3.2-da
 url_api = "https://api.github.com/repos/FiloSottile/age/releases/assets/535541887"
 provenance = "github-attestations"
 
-[[tools."aqua:cilium/hubble"]]
-version = "1.19.4"
-backend = "aqua:cilium/hubble"
-specifiers = ["latest"]
-
-[tools."aqua:cilium/hubble"."platforms.linux-arm64"]
-checksum = "sha256:ba7f521458147de327cdb0f4bf73abea5bb6c29c1fb8a1e0e16d9bfb50951b31"
-url = "https://github.com/cilium/hubble/releases/download/v1.19.4/hubble-linux-arm64.tar.gz"
-url_api = "https://api.github.com/repos/cilium/hubble/releases/assets/439544287"
-
-[tools."aqua:cilium/hubble"."platforms.linux-x64"]
-checksum = "sha256:c7c37a5f27ed2ae2d5495c6ddbecc61cebbb841508e77af3c131e96f005ed247"
-url = "https://github.com/cilium/hubble/releases/download/v1.19.4/hubble-linux-amd64.tar.gz"
-url_api = "https://api.github.com/repos/cilium/hubble/releases/assets/439544269"
-
-[tools."aqua:cilium/hubble"."platforms.macos-arm64"]
-checksum = "sha256:7634532a50bae27e83dfaa8a2a8b1971024cd1e778aa15dc59e288daa3af4978"
-url = "https://github.com/cilium/hubble/releases/download/v1.19.4/hubble-darwin-arm64.tar.gz"
-url_api = "https://api.github.com/repos/cilium/hubble/releases/assets/439544254"
-
-[tools."aqua:cilium/hubble"."platforms.macos-x64"]
-checksum = "sha256:a7da3a17132b3ae97b59e6f8a58d2751a414779421de8c0596bc0f1e464166a4"
-url = "https://github.com/cilium/hubble/releases/download/v1.19.4/hubble-darwin-amd64.tar.gz"
-url_api = "https://api.github.com/repos/cilium/hubble/releases/assets/439544237"
-
 [[tools."aqua:max-sixty/worktrunk"]]
 version = "0.81.0"
 backend = "aqua:max-sixty/worktrunk"
@@ -115,33 +90,32 @@ url_api = "https://api.github.com/repos/max-sixty/worktrunk/releases/assets/6605
 provenance = "cosign"
 
 [[tools."aqua:prometheus/alertmanager"]]
-version = "0.34.2"
+version = "0.35.0"
 backend = "aqua:prometheus/alertmanager"
-specifiers = ["0.34.2"]
+specifiers = ["0.35.0"]
 
 [tools."aqua:prometheus/alertmanager"."platforms.linux-arm64"]
-checksum = "sha256:5aaad82e3d167c30c06ce7d38677d2892a6f66f4c3613ea17af7481750fdd0b0"
+checksum = "sha256:b7a8a69f849c6f837348b05476195862152f9de8eae338eb36ab29801d341654"
 checksum_source = "mise-versions"
-url = "https://github.com/prometheus/alertmanager/releases/download/v0.34.2/alertmanager-0.34.2.linux-arm64.tar.gz"
-url_api = "https://api.github.com/repos/prometheus/alertmanager/releases/assets/688093133"
+url = "https://github.com/prometheus/alertmanager/releases/download/v0.35.0/alertmanager-0.35.0.linux-arm64.tar.gz"
+url_api = "https://api.github.com/repos/prometheus/alertmanager/releases/assets/728226217"
 
 [tools."aqua:prometheus/alertmanager"."platforms.linux-x64"]
-checksum = "sha256:17ee14acd0f6ba6e25a436ff223d9c17ddd5cf484f543ad12f0932eaa89ba186"
-checksum_source = "mise-versions"
-url = "https://github.com/prometheus/alertmanager/releases/download/v0.34.2/alertmanager-0.34.2.linux-amd64.tar.gz"
-url_api = "https://api.github.com/repos/prometheus/alertmanager/releases/assets/688093043"
+checksum = "sha256:6c7752a903c40c8a749e0b29df9240437e4fbb8228068d0af8807377db32addd"
+url = "https://github.com/prometheus/alertmanager/releases/download/v0.35.0/alertmanager-0.35.0.linux-amd64.tar.gz"
+url_api = "https://api.github.com/repos/prometheus/alertmanager/releases/assets/728226148"
 
 [tools."aqua:prometheus/alertmanager"."platforms.macos-arm64"]
-checksum = "sha256:dc1fcd4ad3e8bef111683eaf385aa5b2b02493277bca9126c129e0a39fc68a4f"
+checksum = "sha256:06c0700ebdee77688eddc12e1c71c52e88efbb348f832ecb7a9ff699f9106fba"
 checksum_source = "mise-versions"
-url = "https://github.com/prometheus/alertmanager/releases/download/v0.34.2/alertmanager-0.34.2.darwin-arm64.tar.gz"
-url_api = "https://api.github.com/repos/prometheus/alertmanager/releases/assets/688092041"
+url = "https://github.com/prometheus/alertmanager/releases/download/v0.35.0/alertmanager-0.35.0.darwin-arm64.tar.gz"
+url_api = "https://api.github.com/repos/prometheus/alertmanager/releases/assets/728225410"
 
 [tools."aqua:prometheus/alertmanager"."platforms.macos-x64"]
-checksum = "sha256:fa5a50303c58771c261fcbed4cf5f9a852cf2c6064942adbd92c6859c65c5f93"
+checksum = "sha256:7b39d9f48640186e7af4cb92bcc071fecfad54f90b43d8cd7dac92f20f511df9"
 checksum_source = "mise-versions"
-url = "https://github.com/prometheus/alertmanager/releases/download/v0.34.2/alertmanager-0.34.2.darwin-amd64.tar.gz"
-url_api = "https://api.github.com/repos/prometheus/alertmanager/releases/assets/688091947"
+url = "https://github.com/prometheus/alertmanager/releases/download/v0.35.0/alertmanager-0.35.0.darwin-amd64.tar.gz"
+url_api = "https://api.github.com/repos/prometheus/alertmanager/releases/assets/728225317"
 
 [[tools.cilium-cli]]
 version = "0.20.3"
@@ -630,30 +604,30 @@ url = "https://github.com/grafana/loki/releases/download/v3.7.10/logcli-darwin-a
 url_api = "https://api.github.com/repos/grafana/loki/releases/assets/742748594"
 
 [[tools.node]]
-version = "24.22.3"
+version = "26.13.1"
 backend = "core:node"
-specifiers = ["24.22.3"]
+specifiers = ["26.13.1"]
 
 [tools.node."platforms.linux-arm64"]
-checksum = "sha256:261af2af250dfd7e9f25cf151d1b2713a0adf8f10a9ad116c4947f68627affe8"
-url = "https://nodejs.org/dist/v24.22.3/node-v24.22.3-linux-arm64.tar.gz"
+checksum = "sha256:80a330b35415382878df18d41afbd106ea89bfb3be0087d6608e289a14c5cc7d"
+url = "https://nodejs.org/dist/v26.13.1/node-v26.13.1-linux-arm64.tar.gz"
 
 [tools.node."platforms.linux-x64"]
-checksum = "sha256:061ec3e3062115705b56b51fa9cc330ab50d34b6969387d4e4b1a50c6809acc2"
-url = "https://nodejs.org/dist/v24.22.3/node-v24.22.3-linux-x64.tar.gz"
+checksum = "sha256:518674de2b621728a5e4486f5fb3b7d2900bb3cc4aa97969edaa463db99f9778"
+url = "https://nodejs.org/dist/v26.13.1/node-v26.13.1-linux-x64.tar.gz"
 
 [tools.node."platforms.macos-arm64"]
-checksum = "sha256:ff6e17d4874b76d272212b908cc020d6e815fba5a6c7eaaa06add725840307fd"
-url = "https://nodejs.org/dist/v24.22.3/node-v24.22.3-darwin-arm64.tar.gz"
+checksum = "sha256:aec2514ea1ceb2ba52455e9ec65986f6749a06dd759e5db2a72e6889668c9735"
+url = "https://nodejs.org/dist/v26.13.1/node-v26.13.1-darwin-arm64.tar.gz"
 
 [tools.node."platforms.macos-x64"]
-checksum = "sha256:977614af0504c81045e7fd85596dbca0e5f951b96681516dadafedcca8c447f7"
-url = "https://nodejs.org/dist/v24.22.3/node-v24.22.3-darwin-x64.tar.gz"
+checksum = "sha256:82bb96078a24ca50b9c9a38f2379e6be6d87171fcd400fc14c8934b3bce96e2f"
+url = "https://nodejs.org/dist/v26.13.1/node-v26.13.1-darwin-x64.tar.gz"
 
 [[tools.oxfmt]]
-version = "0.74.0"
+version = "0.78.0"
 backend = "npm:oxfmt"
-specifiers = ["0.74.0"]
+specifiers = ["0.78.0"]
 
 [[tools.promtool]]
 version = "3.16.0"
