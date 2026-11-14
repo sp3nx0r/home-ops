@@ -189,18 +189,39 @@ enabled: false
 ---
 # Trust Pocket ID (OIDC) tokens forwarded by Headlamp. Native Talos 1.14
 # structured authentication; additive to cert / service-account auth.
+# `configuration` replaces Talos's default document wholesale, so its
+# anonymous scoping (health endpoints only) must be restated here.
 apiVersion: v1alpha1
 kind: KubeAuthenticationConfig
 configuration:
+  anonymous:
+    enabled: true
+    conditions:
+      - path: /livez
+      - path: /readyz
+      - path: /healthz
   jwt:
     - issuer:
         url: "https://id.securimancy.com"
         audiences:
           - "d08cc81f-49e2-4815-be35-437ff02a8403"
+      claimValidationRules:
+        - expression: "claims.?email_verified.orValue(false) == true"
+          message: email_verified must be true
+        # Pocket ID stamps ID tokens with type=id-token; rejects JWT access
+        # tokens for the same client.
+        - expression: 'claims.?type.orValue("") == "id-token"'
+          message: only Pocket ID ID tokens are accepted
       claimMappings:
         username:
           claim: email
           prefix: "oidc:"
+        # Only k8s_* Pocket ID groups are meaningful to RBAC; drop the rest
+        # (grafana_admin, qui_admin, ...) so they can never be bound.
         groups:
-          claim: groups
-          prefix: "oidc:"
+          expression: 'dyn(claims.?groups.orValue([])).filter(g, g.startsWith("k8s_")).map(g, "oidc:" + g)'
+      userValidationRules:
+        - expression: "!user.username.startsWith('system:')"
+          message: username must not use the reserved system prefix
+        - expression: "user.groups.all(g, !g.startsWith('system:'))"
+          message: groups must not use the reserved system prefix
