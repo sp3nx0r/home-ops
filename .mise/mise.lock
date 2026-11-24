@@ -61,32 +61,32 @@ url_api = "https://api.github.com/repos/FiloSottile/age/releases/assets/53554188
 provenance = "github-attestations"
 
 [[tools."aqua:max-sixty/worktrunk"]]
-version = "0.81.0"
+version = "0.83.0"
 backend = "aqua:max-sixty/worktrunk"
-specifiers = ["0.81.0"]
+specifiers = ["0.83.0"]
 
 [tools."aqua:max-sixty/worktrunk"."platforms.linux-arm64"]
-checksum = "sha256:7a334d2e64c577afd0247e2411eff673360ab1f18897564f2d2e5d5374fbd74b"
-url = "https://github.com/max-sixty/worktrunk/releases/download/v0.81.0/worktrunk-aarch64-unknown-linux-musl.tar.xz"
-url_api = "https://api.github.com/repos/max-sixty/worktrunk/releases/assets/660537049"
+checksum = "sha256:92c68827a18b037c608b7728bcf7ce1d594771ac814bec7412a35129f276d4ae"
+url = "https://github.com/max-sixty/worktrunk/releases/download/v0.83.0/worktrunk-aarch64-unknown-linux-musl.tar.xz"
+url_api = "https://api.github.com/repos/max-sixty/worktrunk/releases/assets/776207072"
 provenance = "cosign"
 
 [tools."aqua:max-sixty/worktrunk"."platforms.linux-x64"]
-checksum = "sha256:0c253f216985ce9cd7b202a11606b5ce6aa934b1019fd1fbb9b7ce2b47b1c74a"
-url = "https://github.com/max-sixty/worktrunk/releases/download/v0.81.0/worktrunk-x86_64-unknown-linux-musl.tar.xz"
-url_api = "https://api.github.com/repos/max-sixty/worktrunk/releases/assets/660537115"
+checksum = "sha256:e0dd5e5eb365890ddc7b255183c227e441fbb7da04cab5b72e54fa80fd21818b"
+url = "https://github.com/max-sixty/worktrunk/releases/download/v0.83.0/worktrunk-x86_64-unknown-linux-musl.tar.xz"
+url_api = "https://api.github.com/repos/max-sixty/worktrunk/releases/assets/776207130"
 provenance = "cosign"
 
 [tools."aqua:max-sixty/worktrunk"."platforms.macos-arm64"]
-checksum = "sha256:b9c3f2f8071554cf88500466d65d35e18ad5edad5762479a1f14bcddd5ab7882"
-url = "https://github.com/max-sixty/worktrunk/releases/download/v0.81.0/worktrunk-aarch64-apple-darwin.tar.xz"
-url_api = "https://api.github.com/repos/max-sixty/worktrunk/releases/assets/660537046"
+checksum = "sha256:5e489089672b553b6277595875ef3479df011755153021c84def90eddaeef7b8"
+url = "https://github.com/max-sixty/worktrunk/releases/download/v0.83.0/worktrunk-aarch64-apple-darwin.tar.xz"
+url_api = "https://api.github.com/repos/max-sixty/worktrunk/releases/assets/776207071"
 provenance = "cosign"
 
 [tools."aqua:max-sixty/worktrunk"."platforms.macos-x64"]
-checksum = "sha256:211fa3585afa0ce243de0f007fbe2d8b86c5c88c85eda17d09311b32e8533714"
-url = "https://github.com/max-sixty/worktrunk/releases/download/v0.81.0/worktrunk-x86_64-apple-darwin.tar.xz"
-url_api = "https://api.github.com/repos/max-sixty/worktrunk/releases/assets/660537085"
+checksum = "sha256:9e7f92a037b7dc8cb216a0f323ece11d7ee813572a7762d62fb36c88f33ba917"
+url = "https://github.com/max-sixty/worktrunk/releases/download/v0.83.0/worktrunk-x86_64-apple-darwin.tar.xz"
+url_api = "https://api.github.com/repos/max-sixty/worktrunk/releases/assets/776207096"
 provenance = "cosign"
 
 [[tools."aqua:prometheus/alertmanager"]]
@@ -205,29 +205,33 @@ url = "https://github.com/cloudflare/cloudflared/releases/download/2026.11.0/clo
 url_api = "https://api.github.com/repos/cloudflare/cloudflared/releases/assets/739393352"
 
 [[tools.cue]]
-version = "0.17.1"
+version = "0.18.0"
 backend = "aqua:cue-lang/cue"
-specifiers = ["0.17.1"]
+specifiers = ["0.18.0"]
 
 [tools.cue."platforms.linux-arm64"]
-checksum = "sha256:0d729be30d52c952ca38fc9dcb692caa09d8463fa0b64df5781312779183fbcd"
-url = "https://github.com/cue-lang/cue/releases/download/v0.17.1/cue_v0.17.1_linux_arm64.tar.gz"
-url_api = "https://api.github.com/repos/cue-lang/cue/releases/assets/479014345"
+checksum = "sha256:20b99a70821f358413318d80c956d36214aa98f61307af19130d31c3490b8451"
+checksum_source = "mise-versions"
+url = "https://github.com/cue-lang/cue/releases/download/v0.18.0/cue_v0.18.0_linux_arm64.tar.gz"
+url_api = "https://api.github.com/repos/cue-lang/cue/releases/assets/786930834"
 
 [tools.cue."platforms.linux-x64"]
-checksum = "sha256:a39b0c97695069d95d276d99be0f5dbabb081d801bfdc9ba49b76efaf94e2369"
-url = "https://github.com/cue-lang/cue/releases/download/v0.17.1/cue_v0.17.1_linux_amd64.tar.gz"
-url_api = "https://api.github.com/repos/cue-lang/cue/releases/assets/479014346"
+checksum = "sha256:6f763cc20c42174344fbead70737714d63a50c3fa7ec71179e67974c4f9c5f81"
+checksum_source = "mise-versions"
+url = "https://github.com/cue-lang/cue/releases/download/v0.18.0/cue_v0.18.0_linux_amd64.tar.gz"
+url_api = "https://api.github.com/repos/cue-lang/cue/releases/assets/786930835"
 
 [tools.cue."platforms.macos-arm64"]
-checksum = "sha256:64921403f012a97f89494c03605db2fbf7d9daa77dc2631819ac4406cb2e8074"
-url = "https://github.com/cue-lang/cue/releases/download/v0.17.1/cue_v0.17.1_darwin_arm64.tar.gz"
-url_api = "https://api.github.com/repos/cue-lang/cue/releases/assets/479014347"
+checksum = "sha256:9f8959a8a8bee82db08facd890b138f285c0b850b8b18125086761c0fded58a5"
+checksum_source = "mise-versions"
+url = "https://github.com/cue-lang/cue/releases/download/v0.18.0/cue_v0.18.0_darwin_arm64.tar.gz"
+url_api = "https://api.github.com/repos/cue-lang/cue/releases/assets/786930830"
 
 [tools.cue."platforms.macos-x64"]
-checksum = "sha256:80aa026c3f47400c7bfc228b3422fd56b7c6c5ea4d70686f8d8f01ced716d3de"
-url = "https://github.com/cue-lang/cue/releases/download/v0.17.1/cue_v0.17.1_darwin_amd64.tar.gz"
-url_api = "https://api.github.com/repos/cue-lang/cue/releases/assets/479014348"
+checksum = "sha256:d122cb6717bc6b80240882a3a85ae5d364e5483e57829c185d58214bd93206e9"
+checksum_source = "mise-versions"
+url = "https://github.com/cue-lang/cue/releases/download/v0.18.0/cue_v0.18.0_darwin_amd64.tar.gz"
+url_api = "https://api.github.com/repos/cue-lang/cue/releases/assets/786930833"
 
 [[tools.flux2]]
 version = "2.10.0"
